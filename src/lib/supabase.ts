@@ -149,18 +149,23 @@ const postSupabaseTable = async (
   cleanUrl: string,
   table: string,
   headers: Record<string, string>,
-  rows: unknown[]
+  rows: unknown[],
+  chunkSize = 100
 ): Promise<void> => {
   if (!rows.length) return;
   const query = table === 'app_users' ? '?on_conflict=username' : '';
-  const res = await fetch(`${cleanUrl}/rest/v1/${table}${query}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(rows)
-  });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Tabel ${table} (${res.status}): ${errText.slice(0, 180) || res.statusText}`);
+
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const res = await fetch(`${cleanUrl}/rest/v1/${table}${query}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(chunk)
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Tabel ${table} (${res.status}): ${errText.slice(0, 180) || res.statusText}`);
+    }
   }
 };
 

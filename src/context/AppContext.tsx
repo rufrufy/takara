@@ -1148,29 +1148,110 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const importExcelFile = async (file: File): Promise<{ success: boolean; summary?: ExcelImportSummary; error?: string }> => {
     try {
       const buffer = await file.arrayBuffer();
-      const result = parseFinancialExcel(buffer);
+      const targetHouseholdId = state.activeHouseholdId;
+      const targetHouseholdName = activeHousehold.name;
+      const result = parseFinancialExcel(buffer, targetHouseholdId, targetHouseholdName);
 
       if (!result.success) {
         return { success: false, error: result.error || 'Gagal memproses berkas Excel' };
       }
 
-      setState(prev => {
-        const currentHousehold = result.household;
-        const otherHouseholds = prev.households.filter(h => h.id !== currentHousehold.id);
+      // Gabungkan dompet: simpan dompet yang sudah ada dan tambahkan dompet baru dari Excel
+      const existingWalletMap = new Map(state.wallets.map(w => [w.name.toLowerCase().trim(), w]));
+      const resolvedWallets: Wallet[] = [...state.wallets];
+
+      for (const rw of result.wallets) {
+        const key = rw.name.toLowerCase().trim();
+        if (!existingWalletMap.has(key)) {
+          existingWalletMap.set(key, rw);
+          resolvedWallets.push(rw);
+        }
+      }
+
+      // Gabungkan kategori: simpan kategori yang sudah ada dan tambahkan kategori baru dari Excel
+      const existingCatMap = new Map(state.categories.map(c => [c.name.toLowerCase().trim(), c]));
+      const resolvedCats: Category[] = [...state.categories];
+
+      for (const rc of result.categories) {
+        const key = rc.name.toLowerCase().trim();
+        if (!existingCatMap.has(key)) {
+          existingCatMap.set(key, rc);
+          resolvedCats.push(rc);
+        }
+      }
+
+      // Petakan transaksi & ledger agar sesuai dengan ID dompet & kategori rumah tangga aktif
+      const remappedTxs = result.transactions.map(tx => {
+        let srcWalletId = tx.sourceWalletId;
+        let dstWalletId = tx.destinationWalletId;
+        let catId = tx.categoryId;
+
+        if (tx.sourceAsset) {
+          const match = existingWalletMap.get(tx.sourceAsset.toLowerCase().trim());
+          if (match) srcWalletId = match.id;
+        }
+        if (tx.destinationAsset) {
+          const match = existingWalletMap.get(tx.destinationAsset.toLowerCase().trim());
+          if (match) dstWalletId = match.id;
+        }
+        if (tx.categoryName) {
+          const match = existingCatMap.get(tx.categoryName.toLowerCase().trim());
+          if (match) catId = match.id;
+        }
 
         return {
-          ...prev,
-          households: [...otherHouseholds, currentHousehold],
-          activeHouseholdId: currentHousehold.id,
-          wallets: result.wallets,
-          categories: result.categories,
-          labels: result.labels,
-          members: result.members,
-          transactions: result.transactions,
-          ledgerEntries: result.ledgerEntries,
-          importHistory: [result.summary, ...(prev.importHistory || [])]
+          ...tx,
+          householdId: targetHouseholdId,
+          sourceWalletId: srcWalletId,
+          destinationWalletId: dstWalletId,
+          categoryId: catId
         };
       });
+
+      const remappedLedgers = result.ledgerEntries.map(le => {
+        const parentTx = remappedTxs.find(t => t.id === le.transactionId);
+        let walletId = le.walletId;
+        if (parentTx) {
+          if (le.entryType === 'INCOME' || le.entryType === 'TRANSFER_IN') {
+            walletId = parentTx.destinationWalletId || parentTx.sourceWalletId || walletId;
+          } else if (le.entryType === 'EXPENSE' || le.entryType === 'TRANSFER_OUT' || le.entryType === 'FEE') {
+            walletId = parentTx.sourceWalletId || walletId;
+          }
+        }
+        return {
+          ...le,
+          householdId: targetHouseholdId,
+          walletId
+        };
+      });
+
+      const mergedLabels = Array.from(new Set([...state.labels, ...result.labels]));
+      const otherTxs = state.transactions.filter(t => t.householdId !== targetHouseholdId);
+      const otherLedgers = state.ledgerEntries.filter(le => le.householdId !== targetHouseholdId);
+
+      const updatedState: AppState = {
+        ...state,
+        wallets: resolvedWallets,
+        categories: resolvedCats,
+        labels: mergedLabels,
+        transactions: [...remappedTxs, ...otherTxs],
+        ledgerEntries: [...remappedLedgers, ...otherLedgers],
+        importHistory: [result.summary, ...(state.importHistory || [])]
+      };
+
+      setState(updatedState);
+
+      const userKey = getUserStorageKey(state.currentUser.username);
+      localStorage.setItem(userKey, JSON.stringify(updatedState));
+
+      // Simpan langsung seluruh data transaksi impor ke Supabase Cloud
+      pushAllDataToSupabase(updatedState, updatedState.supabaseConfig)
+        .then(res => {
+          if (!res.success) {
+            enqueueStateSync(updatedState);
+          }
+        })
+        .catch(() => enqueueStateSync(updatedState));
 
       return { success: true, summary: result.summary };
     } catch (err: unknown) {

@@ -14,7 +14,11 @@ export interface ParseExcelResult {
   ledgerEntries: LedgerEntry[];
 }
 
-export function parseFinancialExcel(data: ArrayBuffer | Uint8Array): ParseExcelResult {
+export function parseFinancialExcel(
+  data: ArrayBuffer | Uint8Array,
+  targetHouseholdId: string = 'household-default',
+  targetHouseholdName?: string
+): ParseExcelResult {
   try {
     const workbook = XLSX.read(data, { type: 'array' });
     
@@ -75,18 +79,18 @@ export function parseFinancialExcel(data: ArrayBuffer | Uint8Array): ParseExcelR
 
     const rawTxs = XLSX.utils.sheet_to_json<Record<string, unknown>>(txSheet);
 
-    const householdId = 'household-maruf';
+    const householdId = targetHouseholdId;
     const household: Household = {
       id: householdId,
-      name: householdName || 'Keuangan Maruf',
+      name: targetHouseholdName || householdName || 'Keuangan Keluarga',
       baseCurrency: 'IDR',
-      createdById: 'user-maruf',
+      createdById: 'user-default',
       createdAt: '2026-11-01T00:00:00.000Z'
     };
 
     // Extract Assets/Wallets
     const walletMap = new Map<string, Wallet>();
-    const getWalletId = (name: string) => `w-${name.toLowerCase().replace(/\s+/g, '-')}`;
+    const getWalletId = (name: string) => `w-${householdId}-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
 
     const ensureWallet = (name: string, rawType?: string) => {
       const cleanName = name.trim();
@@ -129,7 +133,7 @@ export function parseFinancialExcel(data: ArrayBuffer | Uint8Array): ParseExcelR
 
     // Extract Categories
     const categoryMap = new Map<string, Category>();
-    const getCategoryId = (name: string) => `cat-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+    const getCategoryId = (name: string) => `cat-${householdId}-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
 
     const ensureCategory = (name: string, type: 'income' | 'expense' | 'transfer') => {
       const cleanName = name.trim();
@@ -180,17 +184,17 @@ export function parseFinancialExcel(data: ArrayBuffer | Uint8Array): ParseExcelR
     };
 
     // Extract Members
+    // Members dari Excel tidak harus di-link ke akun/user ID resmi (pencatat murni teks)
     const membersMap = new Map<string, HouseholdMember>();
     const ensureMember = (name: string) => {
       const cleanName = name.trim();
       if (!cleanName || membersMap.has(cleanName)) return;
-      const isMaruf = cleanName.toLowerCase().includes('maruf');
       membersMap.set(cleanName, {
-        id: `mem-${cleanName.toLowerCase().replace(/\s+/g, '-')}`,
+        id: `mem-${householdId}-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
         householdId,
-        userId: isMaruf ? 'user-maruf' : 'user-ulfa',
+        userId: `user-excel-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
         displayName: cleanName,
-        role: isMaruf ? 'OWNER' : 'ADMIN',
+        role: 'MEMBER',
         joinedAt: '2026-11-01T00:00:00.000Z'
       });
     };
@@ -215,7 +219,7 @@ export function parseFinancialExcel(data: ArrayBuffer | Uint8Array): ParseExcelR
       const sourceAsset = String(row['Source Asset'] || '').trim();
       const sourceAssetType = String(row['Source Asset Type'] || '').trim();
       const destAsset = String(row['Destination Asset'] || '').trim();
-      const addedBy = String(row['Added By'] || 'Maruf H').trim();
+      const addedBy = String(row['Added By'] || 'Import Excel').trim() || 'Import Excel';
       const description = String(row['Description'] || '').trim();
       const notes = String(row['Notes'] || '').trim();
       const dateStr = String(row['Date'] || '').trim();
@@ -237,7 +241,7 @@ export function parseFinancialExcel(data: ArrayBuffer | Uint8Array): ParseExcelR
 
       if (catName) ensureCategory(catName, txType);
 
-      const txId = `tx-${no}`;
+      const txId = `tx-${householdId}-${no}`;
       const effectiveAt = dateStr ? new Date(`${dateStr} ${timeStr || '12:00'}`).toISOString() : new Date().toISOString();
 
       const tx: FinancialTransaction = {
