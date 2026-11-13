@@ -26,7 +26,9 @@ import {
   syncDebtToSupabase,
   deleteDebtFromSupabase,
   pushAllDataToSupabase,
-  pullAllDataFromSupabase
+  pullAllDataFromSupabase,
+  syncUsersToSupabase,
+  fetchUsersFromSupabase
 } from '../lib/supabase';
 import { parseFinancialExcel } from '../lib/excelImporter';
 import {
@@ -174,11 +176,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     try {
       localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(registeredUsers));
-      fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registeredUsers)
-      }).catch(() => {});
+      syncUsersToSupabase(registeredUsers, DEFAULT_SUPABASE_CONFIG)
+        .then(res => {
+          if (!res.success && res.error) {
+            setSupabaseSyncStatus(prev => ({ ...prev, status: 'error', error: res.error }));
+          }
+        })
+        .catch(() => {});
     } catch {
       // ignore
     }
@@ -242,59 +246,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     startSyncLoopWorker(8000);
   }, []);
 
-  // 1. Sync daftar pengguna terdaftar dari server saat aplikasi dimuat
+  // 1. Sync daftar pengguna terdaftar langsung dari Supabase saat aplikasi dimuat
   useEffect(() => {
-    fetch('/api/users')
-      .then(res => res.json())
-      .then((serverUsers: unknown) => {
-        if (Array.isArray(serverUsers) && serverUsers.length > 0) {
+    fetchUsersFromSupabase(DEFAULT_SUPABASE_CONFIG)
+      .then(res => {
+        if (res.success && res.users.length > 0) {
           setRegisteredUsers(prev => {
             const merged = [...prev];
-            for (const su of serverUsers) {
-              if (su && typeof su === 'object' && 'username' in su) {
-                const u = su as User;
-                if (!merged.some(m => m.username.toLowerCase() === u.username.toLowerCase())) {
-                  merged.push(u);
-                }
+            for (const u of res.users) {
+              if (!merged.some(m => m.username.toLowerCase() === u.username.toLowerCase())) {
+                merged.push(u);
               }
             }
             return merged;
           });
+        } else if (!res.success && res.error) {
+          setSupabaseSyncStatus(prev => ({ ...prev, status: 'error', error: res.error }));
         }
       })
       .catch(() => {});
   }, []);
 
-  // 2. Sync data keuangan pengguna dari server (sinkronisasi multi-device PC & HP)
+  // 2. Sync data keuangan pengguna langsung dari Supabase saat aplikasi dimuat
   useEffect(() => {
     const activeUser = localStorage.getItem(CURRENT_USER_KEY);
-    if (activeUser && activeUser !== 'admin') {
-      fetch(`/api/user-data/${activeUser}`)
-        .then(res => res.json())
-        .then((resData: unknown) => {
-          if (resData && typeof resData === 'object' && 'success' in resData && (resData as { success: boolean }).success) {
-            const serverState = (resData as { data: Partial<AppState> }).data;
-            if (serverState && serverState.currentUser) {
+    if (activeUser && activeUser !== 'admin' && state.activeHouseholdId) {
+      pullAllDataFromSupabase(state.supabaseConfig || DEFAULT_SUPABASE_CONFIG, state.activeHouseholdId)
+        .then(supaRes => {
+          if (supaRes.success && supaRes.data) {
+            const supaTxCount = supaRes.data.transactions?.length || 0;
+            const supaWalletCount = supaRes.data.wallets?.length || 0;
+            if (supaTxCount > 0 || supaWalletCount > 0) {
               setState(prev => {
-                const serverTx = serverState.transactions?.length || 0;
-                const localTx = prev.transactions?.length || 0;
-                if (serverTx >= localTx) {
-                  const resolvedHouseholds = (serverState.households && serverState.households.length > 0)
-                    ? serverState.households
-                    : prev.households;
+                const localTxCount = prev.transactions?.length || 0;
+                if (supaTxCount >= localTxCount) {
                   return {
                     ...prev,
-                    ...serverState,
-                    currentUser: { ...prev.currentUser, ...(serverState.currentUser || {}) },
-                    households: resolvedHouseholds,
-                    activeHouseholdId: serverState.activeHouseholdId || resolvedHouseholds[0]?.id || prev.activeHouseholdId,
-                    members: serverState.members || prev.members,
-                    wallets: (serverState.wallets && serverState.wallets.length > 0) ? serverState.wallets : prev.wallets,
-                    categories: (serverState.categories && serverState.categories.length > 0) ? serverState.categories : prev.categories,
-                    labels: (serverState.labels && serverState.labels.length > 0) ? serverState.labels : prev.labels,
-                    transactions: serverState.transactions || prev.transactions,
-                    ledgerEntries: serverState.ledgerEntries || prev.ledgerEntries,
-                    debts: serverState.debts || prev.debts,
+                    transactions: supaRes.data!.transactions && supaRes.data!.transactions.length > 0 ? supaRes.data!.transactions : prev.transactions,
+                    wallets: supaRes.data!.wallets && supaRes.data!.wallets.length > 0 ? supaRes.data!.wallets : prev.wallets,
+                    categories: supaRes.data!.categories && supaRes.data!.categories.length > 0 ? supaRes.data!.categories : prev.categories,
+                    debts: supaRes.data!.debts && supaRes.data!.debts.length > 0 ? supaRes.data!.debts : prev.debts,
+                    members: supaRes.data!.members && supaRes.data!.members.length > 0 ? supaRes.data!.members : prev.members,
+                    ledgerEntries: supaRes.data!.ledgerEntries && supaRes.data!.ledgerEntries.length > 0 ? supaRes.data!.ledgerEntries : prev.ledgerEntries,
+                    households: supaRes.data!.households && supaRes.data!.households.length > 0 ? supaRes.data!.households : prev.households,
                     isLocked: false,
                     isAuthenticated: true
                   };
@@ -308,8 +302,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
-  // Sync state to LocalStorage (segregated per user)
-  // Sync state to LocalStorage and Server (segregated per user, shared across PC & HP)
+  // Sync state to LocalStorage cache (untuk sesi offline & PWA)
   useEffect(() => {
     try {
       if (state.currentUser?.username) {
@@ -320,15 +313,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (state.isAuthenticated && !state.isLocked) {
           localStorage.setItem(CURRENT_USER_KEY, username);
-        }
-
-        // Kirim ke server agar dapat diakses dari device lain (HP / PC)
-        if (username !== 'admin') {
-          fetch(`/api/user-data/${username}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(state)
-          }).catch(() => {});
         }
       }
     } catch {
@@ -1193,6 +1177,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             wallets: (parsed.wallets && parsed.wallets.length > 0) ? parsed.wallets : freshTemplate.wallets,
             categories: (parsed.categories && parsed.categories.length > 0) ? parsed.categories : freshTemplate.categories,
             labels: (parsed.labels && parsed.labels.length > 0) ? parsed.labels : freshTemplate.labels,
+            members: Array.isArray(parsed.members) && parsed.members.length > 0 ? parsed.members : freshTemplate.members,
+            sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
             transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
             ledgerEntries: Array.isArray(parsed.ledgerEntries) ? parsed.ledgerEntries : [],
             debts: Array.isArray(parsed.debts) ? parsed.debts : [],
@@ -1232,40 +1218,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem(userKey, JSON.stringify(updatedState));
     localStorage.setItem(CURRENT_USER_KEY, cleanUser);
     if (cleanUser !== 'admin') {
-      fetch(`/api/user-data/${cleanUser}`)
-        .then(res => res.json())
-        .then((resData: unknown) => {
-          if (resData && typeof resData === 'object' && 'success' in resData && (resData as { success: boolean }).success) {
-            const serverState = (resData as { data: Partial<AppState> }).data;
-            if (serverState && serverState.currentUser) {
+      // Pastikan user terdaftar di tabel app_users Supabase
+      if (userRecord) {
+        syncUsersToSupabase([userRecord], updatedState.supabaseConfig).catch(() => {});
+      }
+
+      // Sinkronkan langsung dengan Supabase Cloud (pull jika ada data, atau push state lokal jika kosong)
+      pullAllDataFromSupabase(updatedState.supabaseConfig, updatedState.activeHouseholdId)
+        .then(supaRes => {
+          if (supaRes.success && supaRes.data) {
+            const supaTxCount = supaRes.data.transactions?.length || 0;
+            const supaWalletCount = supaRes.data.wallets?.length || 0;
+            if (supaTxCount > 0 || supaWalletCount > 0) {
               setState(prev => {
-                const serverTx = serverState.transactions?.length || 0;
-                const localTx = prev.transactions?.length || 0;
-                if (serverTx >= localTx) {
-                  const resolvedHouseholds = (serverState.households && serverState.households.length > 0)
-                    ? serverState.households
-                    : prev.households;
+                const localTxCount = prev.transactions?.length || 0;
+                if (supaTxCount >= localTxCount) {
                   const merged = {
                     ...prev,
-                    ...serverState,
-                    currentUser: { ...prev.currentUser, ...(serverState.currentUser || {}) },
-                    households: resolvedHouseholds,
-                    activeHouseholdId: serverState.activeHouseholdId || resolvedHouseholds[0]?.id || prev.activeHouseholdId,
-                    members: serverState.members || prev.members,
-                    wallets: (serverState.wallets && serverState.wallets.length > 0) ? serverState.wallets : prev.wallets,
-                    categories: (serverState.categories && serverState.categories.length > 0) ? serverState.categories : prev.categories,
-                    labels: (serverState.labels && serverState.labels.length > 0) ? serverState.labels : prev.labels,
-                    transactions: serverState.transactions || prev.transactions,
-                    ledgerEntries: serverState.ledgerEntries || prev.ledgerEntries,
-                    debts: serverState.debts || prev.debts,
-                    isAuthenticated: true,
-                    isLocked: false
+                    transactions: supaRes.data!.transactions && supaRes.data!.transactions.length > 0 ? supaRes.data!.transactions : prev.transactions,
+                    wallets: supaRes.data!.wallets && supaRes.data!.wallets.length > 0 ? supaRes.data!.wallets : prev.wallets,
+                    categories: supaRes.data!.categories && supaRes.data!.categories.length > 0 ? supaRes.data!.categories : prev.categories,
+                    debts: supaRes.data!.debts && supaRes.data!.debts.length > 0 ? supaRes.data!.debts : prev.debts,
+                    members: supaRes.data!.members && supaRes.data!.members.length > 0 ? supaRes.data!.members : prev.members,
+                    ledgerEntries: supaRes.data!.ledgerEntries && supaRes.data!.ledgerEntries.length > 0 ? supaRes.data!.ledgerEntries : prev.ledgerEntries,
+                    households: supaRes.data!.households && supaRes.data!.households.length > 0 ? supaRes.data!.households : prev.households
                   };
                   localStorage.setItem(userKey, JSON.stringify(merged));
                   return merged;
                 }
                 return prev;
               });
+            } else {
+              pushAllDataToSupabase(updatedState, updatedState.supabaseConfig)
+                .then(res => {
+                  if (!res.success) enqueueStateSync(updatedState);
+                })
+                .catch(() => enqueueStateSync(updatedState));
             }
           }
         })
@@ -1364,8 +1352,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setState(freshState);
     localStorage.setItem(CURRENT_USER_KEY, cleanUser);
 
-    // Masukkan state ke antrean sinkronisasi Supabase & server
-    enqueueStateSync(freshState);
+    // Langsung kirim ke Supabase (dan masukkan antrean jika offline)
+    syncUsersToSupabase([newUser], freshState.supabaseConfig).catch(() => {});
+    pushAllDataToSupabase(freshState, freshState.supabaseConfig)
+      .then(res => {
+        if (!res.success) enqueueStateSync(freshState);
+      })
+      .catch(() => {
+        enqueueStateSync(freshState);
+      });
 
     return { success: true };
   };
@@ -1457,6 +1452,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem(userKey, JSON.stringify(freshState));
 
     setRegisteredUsers(prev => [...prev, newUser]);
+
+    // Langsung kirim user & household baru ke Supabase
+    syncUsersToSupabase([newUser], freshState.supabaseConfig).catch(() => {});
+    pushAllDataToSupabase(freshState, freshState.supabaseConfig)
+      .then(res => {
+        if (!res.success) enqueueStateSync(freshState);
+      })
+      .catch(() => {
+        enqueueStateSync(freshState);
+      });
+
     return { success: true };
   };
 
@@ -1810,6 +1816,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         registerUser,
         joinHouseholdByCode,
         updateRegisteredUser,
+        adminCreateUser,
         deleteUser,
         addMemberToHousehold,
         removeMemberFromHousehold,

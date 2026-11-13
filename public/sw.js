@@ -1,5 +1,5 @@
 // Service Worker untuk Takara Keuangan Keluarga (PWA offline shell & homescreen install)
-const CACHE_NAME = 'takara-pwa-v1';
+const CACHE_NAME = 'takara-pwa-v3';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -37,6 +37,16 @@ self.addEventListener('fetch', (event) => {
 
   // Jangan cache request ke external API (AI proxy, Supabase REST, dll)
   if (url.origin !== self.location.origin) return;
+
+  // Jangan cache API lokal atau modul Vite dev server (/src/, /@vite/, /node_modules/)
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules/')
+  ) {
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {

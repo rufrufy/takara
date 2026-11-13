@@ -5,6 +5,9 @@ import type {
   Category,
   DebtItem,
   Household,
+  HouseholdMember,
+  LedgerEntry,
+  User,
   AppState
 } from '../types';
 
@@ -98,14 +101,136 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   bucket: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_BUCKET) as string) || 'receipts'
 };
 
-const getHeaders = (config: SupabaseConfig) => {
-  const key = config.secretKey && config.secretKey.trim() ? config.secretKey : config.anonKey;
+export const resolveClientKey = (config: SupabaseConfig): string => {
+  const anon = (config.anonKey || '').trim();
+  const secret = (config.secretKey || '').trim();
+
+  // 1. If anonKey starts with sb_publishable_ or standard JWT (eyJ...), always use it
+  if (anon.startsWith('sb_publishable_') || anon.startsWith('eyJ')) {
+    return anon;
+  }
+
+  // 2. If user accidentally placed publishable key into secretKey field, use it
+  if (secret.startsWith('sb_publishable_') || secret.startsWith('eyJ')) {
+    return secret;
+  }
+
+  // 3. If anonKey starts with sb_secret_, Supabase strictly forbids secret keys in browser
+  if (anon.startsWith('sb_secret_')) {
+    return '';
+  }
+
+  return anon;
+};
+
+const buildAuthHeaders = (key: string): Record<string, string> => {
+  if (!key) return {};
+  const headers: Record<string, string> = {
+    apikey: key
+  };
+  // Only attach Bearer header for JWT keys (eyJ...); sb_publishable_ keys use apikey only
+  if (key.split('.').length === 3) {
+    headers.Authorization = `Bearer ${key}`;
+  }
+  return headers;
+};
+
+const getHeaders = (config: SupabaseConfig): Record<string, string> => {
+  const key = resolveClientKey(config);
   return {
-    apikey: config.anonKey,
-    Authorization: `Bearer ${key}`,
+    ...buildAuthHeaders(key),
     'Content-Type': 'application/json',
     Prefer: 'resolution=merge-duplicates'
   };
+};
+
+const postSupabaseTable = async (
+  cleanUrl: string,
+  table: string,
+  headers: Record<string, string>,
+  rows: unknown[]
+): Promise<void> => {
+  if (!rows.length) return;
+  const query = table === 'app_users' ? '?on_conflict=username' : '';
+  const res = await fetch(`${cleanUrl}/rest/v1/${table}${query}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(rows)
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Tabel ${table} (${res.status}): ${errText.slice(0, 180) || res.statusText}`);
+  }
+};
+
+export const syncUsersToSupabase = async (
+  users: User[],
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean; error?: string }> => {
+  if (!config.url || !config.anonKey || !users.length) {
+    return { success: false, error: 'Config missing or empty users' };
+  }
+  const cleanUrl = config.url.replace(/\/+$/, '');
+  try {
+    await postSupabaseTable(
+      cleanUrl,
+      'app_users',
+      getHeaders(config),
+      users
+        .filter(u => u.username && u.username !== 'admin')
+        .map(u => ({
+          id: u.id,
+          username: u.username.toLowerCase(),
+          display_name: u.displayName,
+          pin_hash: u.pinHash || '12345',
+          role: u.role || 'MEMBER',
+          avatar_url: u.avatarUrl || null,
+          created_at: u.createdAt || new Date().toISOString()
+        }))
+    );
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'User sync failed' };
+  }
+};
+
+export const fetchUsersFromSupabase = async (
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean; users: User[]; error?: string }> => {
+  if (!config.url || !config.anonKey) {
+    return { success: false, users: [], error: 'Config missing' };
+  }
+  const cleanUrl = config.url.replace(/\/+$/, '');
+  try {
+    const res = await fetch(`${cleanUrl}/rest/v1/app_users?select=*`, {
+      headers: getHeaders(config)
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      return { success: false, users: [], error: `HTTP ${res.status}: ${errText.slice(0, 150)}` };
+    }
+    const raw = (await res.json()) as Array<{
+      id: string;
+      username: string;
+      display_name: string;
+      pin_hash?: string;
+      role?: User['role'];
+      avatar_url?: string;
+      created_at: string;
+    }>;
+    const users: User[] = raw.map(r => ({
+      id: r.id,
+      username: r.username,
+      displayName: r.display_name,
+      pinHash: r.pin_hash || '12345',
+      role: r.role || 'MEMBER',
+      avatarUrl: r.avatar_url || undefined,
+      createdAt: r.created_at
+    }));
+    return { success: true, users };
+  } catch (err: unknown) {
+    return { success: false, users: [], error: err instanceof Error ? err.message : 'Fetch users failed' };
+  }
 };
 
 /**
@@ -114,20 +239,30 @@ const getHeaders = (config: SupabaseConfig) => {
 export const testSupabaseConnection = async (
   config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
 ): Promise<{ success: boolean; latencyMs: number; error?: string; message?: string }> => {
-  if (!config.url || !config.anonKey) {
-    return { success: false, latencyMs: 0, error: 'URL dan Anon Key Supabase wajib diisi.' };
+  const cleanUrl = (config.url || '').trim().replace(/\/+$/, '');
+  const clientKey = resolveClientKey(config);
+
+  if (!cleanUrl) {
+    return { success: false, latencyMs: 0, error: 'URL Supabase belum diisi.' };
+  }
+
+  if (!clientKey) {
+    if (config.anonKey?.trim().startsWith('sb_secret_') || config.secretKey?.trim().startsWith('sb_secret_')) {
+      return {
+        success: false,
+        latencyMs: 0,
+        error: 'Kunci Secret (sb_secret_...) dilarang di browser oleh Supabase. Masukkan Publishable/Anon Key (sb_publishable_... atau eyJ...).'
+      };
+    }
+    return { success: false, latencyMs: 0, error: 'URL dan Publishable/Anon Key Supabase wajib diisi.' };
   }
 
   const startTime = performance.now();
-  const cleanUrl = config.url.replace(/\/+$/, '');
 
   try {
     const res = await fetch(`${cleanUrl}/rest/v1/`, {
       method: 'GET',
-      headers: {
-        apikey: config.anonKey,
-        Authorization: `Bearer ${config.anonKey}`
-      }
+      headers: buildAuthHeaders(clientKey)
     });
 
     const latencyMs = Math.round(performance.now() - startTime);
@@ -362,178 +497,188 @@ export const pushAllDataToSupabase = async (
   state: AppState,
   config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
 ): Promise<{ success: boolean; count: number; error?: string; message: string }> => {
-  if (!config.url || !config.anonKey) {
-    return { success: false, count: 0, error: 'URL dan Anon Key Supabase belum dikonfigurasi.', message: 'Konfigurasi belum lengkap.' };
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) {
+    if (config.anonKey?.trim().startsWith('sb_secret_') || config.secretKey?.trim().startsWith('sb_secret_')) {
+      return { success: false, count: 0, error: 'Supabase menolak Secret Key (sb_secret_) di browser. Gunakan Publishable Key (sb_publishable_).', message: 'Kunci Secret dilarang di browser.' };
+    }
+    return { success: false, count: 0, error: 'URL dan Publishable/Anon Key Supabase belum dikonfigurasi.', message: 'Konfigurasi belum lengkap.' };
   }
 
   const cleanUrl = config.url.replace(/\/+$/, '');
   const headers = getHeaders(config);
 
   try {
+    // 0. App Users
+    if (state.currentUser?.username && state.currentUser.username !== 'admin') {
+      await postSupabaseTable(cleanUrl, 'app_users', headers, [{
+        id: state.currentUser.id,
+        username: state.currentUser.username.toLowerCase(),
+        display_name: state.currentUser.displayName,
+        pin_hash: state.currentUser.pinHash || '12345',
+        role: state.currentUser.role || 'OWNER',
+        avatar_url: state.currentUser.avatarUrl || null,
+        created_at: state.currentUser.createdAt || new Date().toISOString()
+      }]);
+    }
+
     // 1. Households
     if (state.households?.length) {
-      await fetch(`${cleanUrl}/rest/v1/households`, {
-        method: 'POST',
+      await postSupabaseTable(
+        cleanUrl,
+        'households',
         headers,
-        body: JSON.stringify(
-          state.households.map(h => ({
-            id: h.id,
-            name: h.name,
-            base_currency: h.baseCurrency || 'IDR',
-            created_by_id: h.createdById || null,
-            invite_code: h.inviteCode || null,
-            created_at: h.createdAt || new Date().toISOString()
-          }))
-        )
-      });
+        state.households.map(h => ({
+          id: h.id,
+          name: h.name,
+          base_currency: h.baseCurrency || 'IDR',
+          created_by_id: h.createdById || null,
+          invite_code: h.inviteCode || null,
+          created_at: h.createdAt || new Date().toISOString()
+        }))
+      );
     }
 
     // 2. Members
     if (state.members?.length) {
-      await fetch(`${cleanUrl}/rest/v1/household_members`, {
-        method: 'POST',
+      await postSupabaseTable(
+        cleanUrl,
+        'household_members',
         headers,
-        body: JSON.stringify(
-          state.members.map(m => ({
-            id: m.id,
-            household_id: m.householdId,
-            user_id: m.userId,
-            display_name: m.displayName,
-            role: m.role || 'MEMBER',
-            joined_at: m.joinedAt || new Date().toISOString()
-          }))
-        )
-      });
+        state.members.map(m => ({
+          id: m.id,
+          household_id: m.householdId,
+          user_id: m.userId,
+          display_name: m.displayName,
+          role: m.role || 'MEMBER',
+          joined_at: m.joinedAt || new Date().toISOString()
+        }))
+      );
     }
 
     // 3. Wallets
     if (state.wallets?.length) {
-      await fetch(`${cleanUrl}/rest/v1/wallets`, {
-        method: 'POST',
+      await postSupabaseTable(
+        cleanUrl,
+        'wallets',
         headers,
-        body: JSON.stringify(
-          state.wallets.map(w => ({
-            id: w.id,
-            household_id: w.householdId,
-            name: w.name,
-            type: w.type,
-            institution_name: w.institutionName || null,
-            currency: w.currency || 'IDR',
-            balance: Math.round(w.balance || 0),
-            color: w.color || null,
-            icon: w.icon || null,
-            is_archived: w.isArchived || false,
-            created_at: w.createdAt || new Date().toISOString(),
-            updated_at: w.updatedAt || new Date().toISOString()
-          }))
-        )
-      });
+        state.wallets.map(w => ({
+          id: w.id,
+          household_id: w.householdId,
+          name: w.name,
+          type: w.type,
+          institution_name: w.institutionName || null,
+          currency: w.currency || 'IDR',
+          balance: Math.round(w.balance || 0),
+          color: w.color || null,
+          icon: w.icon || null,
+          is_archived: w.isArchived || false,
+          created_at: w.createdAt || new Date().toISOString(),
+          updated_at: w.updatedAt || new Date().toISOString()
+        }))
+      );
     }
 
     // 4. Categories
     if (state.categories?.length) {
-      await fetch(`${cleanUrl}/rest/v1/categories`, {
-        method: 'POST',
+      await postSupabaseTable(
+        cleanUrl,
+        'categories',
         headers,
-        body: JSON.stringify(
-          state.categories.map(c => ({
-            id: c.id,
-            household_id: c.householdId,
-            name: c.name,
-            type: c.type,
-            icon: c.icon || null,
-            color: c.color || null,
-            is_archived: c.isArchived || false
-          }))
-        )
-      });
+        state.categories.map(c => ({
+          id: c.id,
+          household_id: c.householdId,
+          name: c.name,
+          type: c.type,
+          icon: c.icon || null,
+          color: c.color || null,
+          is_archived: c.isArchived || false
+        }))
+      );
     }
 
     // 5. Transactions
     if (state.transactions?.length) {
-      await fetch(`${cleanUrl}/rest/v1/transactions`, {
-        method: 'POST',
+      await postSupabaseTable(
+        cleanUrl,
+        'transactions',
         headers,
-        body: JSON.stringify(
-          state.transactions.map(tx => ({
-            id: tx.id,
-            household_id: tx.householdId,
-            no: tx.no || null,
-            type: tx.type,
-            amount: Math.round(tx.amount),
-            fee: tx.fee ? Math.round(tx.fee) : 0,
-            source_wallet_id: tx.sourceWalletId || null,
-            destination_wallet_id: tx.destinationWalletId || null,
-            category_id: tx.categoryId || null,
-            category_name: tx.categoryName || null,
-            category_type: tx.categoryType || null,
-            label: tx.label || null,
-            description: tx.description || null,
-            notes: tx.notes || null,
-            image_url: tx.imageUrl || null,
-            effective_at: tx.effectiveAt,
-            date_str: tx.dateStr || null,
-            day: tx.day || null,
-            time: tx.time || null,
-            source_asset: tx.sourceAsset || null,
-            source_asset_type: tx.sourceAssetType || null,
-            destination_asset: tx.destinationAsset || null,
-            added_by: tx.addedBy,
-            auto_income: tx.autoIncome || false,
-            from_savings: tx.fromSavings || false,
-            from_investment: tx.fromInvestment || false,
-            status: tx.status || 'POSTED',
-            created_at: tx.createdAt,
-            updated_at: tx.updatedAt
-          }))
-        )
-      });
+        state.transactions.map(tx => ({
+          id: tx.id,
+          household_id: tx.householdId,
+          no: tx.no || null,
+          type: tx.type,
+          amount: Math.round(tx.amount),
+          fee: tx.fee ? Math.round(tx.fee) : 0,
+          source_wallet_id: tx.sourceWalletId || null,
+          destination_wallet_id: tx.destinationWalletId || null,
+          category_id: tx.categoryId || null,
+          category_name: tx.categoryName || null,
+          category_type: tx.categoryType || null,
+          label: tx.label || null,
+          description: tx.description || null,
+          notes: tx.notes || null,
+          image_url: tx.imageUrl || null,
+          effective_at: tx.effectiveAt,
+          date_str: tx.dateStr || null,
+          day: tx.day || null,
+          time: tx.time || null,
+          source_asset: tx.sourceAsset || null,
+          source_asset_type: tx.sourceAssetType || null,
+          destination_asset: tx.destinationAsset || null,
+          added_by: tx.addedBy,
+          auto_income: tx.autoIncome || false,
+          from_savings: tx.fromSavings || false,
+          from_investment: tx.fromInvestment || false,
+          status: tx.status || 'POSTED',
+          created_at: tx.createdAt,
+          updated_at: tx.updatedAt
+        }))
+      );
     }
 
     // 6. Ledger entries
     if (state.ledgerEntries?.length) {
-      await fetch(`${cleanUrl}/rest/v1/ledger_entries`, {
-        method: 'POST',
+      await postSupabaseTable(
+        cleanUrl,
+        'ledger_entries',
         headers,
-        body: JSON.stringify(
-          state.ledgerEntries.map(le => ({
-            id: le.id,
-            household_id: le.householdId,
-            transaction_id: le.transactionId,
-            wallet_id: le.walletId,
-            signed_amount: Math.round(le.signedAmount),
-            entry_type: le.entryType,
-            posted_at: le.postedAt,
-            created_at: le.createdAt
-          }))
-        )
-      });
+        state.ledgerEntries.map(le => ({
+          id: le.id,
+          household_id: le.householdId,
+          transaction_id: le.transactionId,
+          wallet_id: le.walletId,
+          signed_amount: Math.round(le.signedAmount),
+          entry_type: le.entryType,
+          posted_at: le.postedAt,
+          created_at: le.createdAt
+        }))
+      );
     }
 
     // 7. Debts
     if (state.debts?.length) {
-      await fetch(`${cleanUrl}/rest/v1/debts`, {
-        method: 'POST',
+      await postSupabaseTable(
+        cleanUrl,
+        'debts',
         headers,
-        body: JSON.stringify(
-          state.debts.map(d => ({
-            id: d.id,
-            household_id: d.householdId,
-            type: d.type,
-            person_or_entity: d.personOrEntity,
-            amount: Math.round(d.amount),
-            remaining_amount: Math.round(d.remainingAmount),
-            monthly_installment: d.monthlyInstallment ? Math.round(d.monthlyInstallment) : 0,
-            due_day: d.dueDay || null,
-            due_date: d.dueDate || null,
-            notes: d.notes || null,
-            is_settled: d.isSettled,
-            is_paid_this_month: d.isPaidThisMonth || false,
-            last_paid_month: d.lastPaidMonth || null,
-            created_at: d.createdAt
-          }))
-        )
-      });
+        state.debts.map(d => ({
+          id: d.id,
+          household_id: d.householdId,
+          type: d.type,
+          person_or_entity: d.personOrEntity,
+          amount: Math.round(d.amount),
+          remaining_amount: Math.round(d.remainingAmount),
+          monthly_installment: d.monthlyInstallment ? Math.round(d.monthlyInstallment) : 0,
+          due_day: d.dueDay || null,
+          due_date: d.dueDate || null,
+          notes: d.notes || null,
+          is_settled: d.isSettled,
+          is_paid_this_month: d.isPaidThisMonth || false,
+          last_paid_month: d.lastPaidMonth || null,
+          created_at: d.createdAt
+        }))
+      );
     }
 
     const totalCount =
@@ -564,22 +709,25 @@ export const pullAllDataFromSupabase = async (
   config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG,
   householdId?: string
 ): Promise<{ success: boolean; data?: Partial<AppState>; error?: string }> => {
-  if (!config.url || !config.anonKey) {
-    return { success: false, error: 'Config missing' };
+
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) {
+    if (config.anonKey?.trim().startsWith('sb_secret_') || config.secretKey?.trim().startsWith('sb_secret_')) {
+      return { success: false, error: 'Supabase menolak Secret Key (sb_secret_) di browser. Gunakan Publishable Key (sb_publishable_).' };
+    }
+    return { success: false, error: 'Config missing or invalid client key' };
   }
-
-  const cleanUrl = config.url.replace(/\/+$/, '');
-  const headers = getHeaders(config);
-
   try {
     const filterQuery = householdId ? `?household_id=eq.${encodeURIComponent(householdId)}` : '';
 
-    const [txRes, walletsRes, catRes, debtsRes, houseRes] = await Promise.all([
-      fetch(`${cleanUrl}/rest/v1/transactions${filterQuery}&order=effective_at.desc`, { headers }),
+    const [txRes, walletsRes, catRes, debtsRes, houseRes, membersRes, ledgerRes] = await Promise.all([
+      fetch(`${cleanUrl}/rest/v1/transactions${filterQuery}${filterQuery ? '&' : '?'}order=effective_at.desc`, { headers }),
       fetch(`${cleanUrl}/rest/v1/wallets${filterQuery}`, { headers }),
       fetch(`${cleanUrl}/rest/v1/categories${filterQuery}`, { headers }),
       fetch(`${cleanUrl}/rest/v1/debts${filterQuery}`, { headers }),
-      fetch(`${cleanUrl}/rest/v1/households`, { headers })
+      fetch(`${cleanUrl}/rest/v1/households`, { headers }),
+      fetch(`${cleanUrl}/rest/v1/household_members${filterQuery}`, { headers }),
+      fetch(`${cleanUrl}/rest/v1/ledger_entries${filterQuery}`, { headers })
     ]);
 
     if (!txRes.ok && !walletsRes.ok) {
@@ -591,6 +739,8 @@ export const pullAllDataFromSupabase = async (
     const rawCats = catRes.ok ? (await catRes.json() as RawSupabaseCategory[]) : [];
     const rawDebts = debtsRes.ok ? (await debtsRes.json() as RawSupabaseDebt[]) : [];
     const rawHouses = houseRes.ok ? (await houseRes.json() as RawSupabaseHousehold[]) : [];
+    const rawMembers = membersRes.ok ? (await membersRes.json() as Array<{ id: string; household_id: string; user_id: string; display_name: string; role: HouseholdMember['role']; joined_at: string }>) : [];
+    const rawLedgers = ledgerRes.ok ? (await ledgerRes.json() as Array<{ id: string; household_id: string; transaction_id: string; wallet_id: string; signed_amount: number | string; entry_type: LedgerEntry['entryType']; posted_at: string; created_at: string }>) : [];
 
     const transactions: FinancialTransaction[] = rawTxs.map((t: RawSupabaseTx) => ({
       id: t.id,
@@ -675,6 +825,26 @@ export const pullAllDataFromSupabase = async (
       createdAt: h.created_at
     }));
 
+    const members: HouseholdMember[] = rawMembers.map(m => ({
+      id: m.id,
+      householdId: m.household_id,
+      userId: m.user_id,
+      displayName: m.display_name,
+      role: m.role || 'MEMBER',
+      joinedAt: m.joined_at
+    }));
+
+    const ledgerEntries: LedgerEntry[] = rawLedgers.map(le => ({
+      id: le.id,
+      householdId: le.household_id,
+      transactionId: le.transaction_id,
+      walletId: le.wallet_id,
+      signedAmount: Number(le.signed_amount),
+      entryType: le.entry_type,
+      postedAt: le.posted_at,
+      createdAt: le.created_at
+    }));
+
     return {
       success: true,
       data: {
@@ -682,6 +852,8 @@ export const pullAllDataFromSupabase = async (
         wallets,
         categories,
         debts,
+        ...(members.length > 0 ? { members } : {}),
+        ...(ledgerEntries.length > 0 ? { ledgerEntries } : {}),
         ...(households.length > 0 ? { households } : {})
       }
     };

@@ -179,10 +179,22 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   };
 
   const handleSaveSupabase = () => {
+    let cleanAnon = supabaseAnonKey.trim();
+    let cleanSecret = supabaseSecretKey.trim();
+
+    // Auto-swap jika tertukar antara anon key dan secret key
+    if (cleanAnon.startsWith('sb_secret_') && cleanSecret.startsWith('sb_publishable_')) {
+      const temp = cleanAnon;
+      cleanAnon = cleanSecret;
+      cleanSecret = temp;
+      setSupabaseAnonKey(cleanAnon);
+      setSupabaseSecretKey(cleanSecret);
+    }
+
     updateSupabaseConfig({
       url: supabaseUrl.trim(),
-      anonKey: supabaseAnonKey.trim(),
-      secretKey: supabaseSecretKey.trim(),
+      anonKey: cleanAnon,
+      secretKey: cleanSecret,
       bucket: supabaseBucket.trim() || 'receipts'
     });
 
@@ -1086,9 +1098,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
 
               {/* Supabase Anon Key */}
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Supabase Publishable / Anon Key
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Supabase Publishable / Anon Key
+                  </label>
+                  <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                    Wajib untuk Browser (sb_publishable_... atau eyJ...)
+                  </span>
+                </div>
                 <div className="relative">
                   <input
                     type={showSupabaseKey ? 'text' : 'password'}
@@ -1105,13 +1122,25 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                     {showSupabaseKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {supabaseAnonKey.trim().startsWith('sb_secret_') && (
+                  <div className="text-[11px] text-red-700 font-semibold bg-red-50 p-2.5 rounded-xl border border-red-200 space-y-1">
+                    <p>⚠️ Anda memasukkan Secret Key (<code className="font-mono">sb_secret_...</code>). Supabase melarang Secret Key di browser:</p>
+                    <p className="text-[10px] text-red-600 font-normal italic">"Forbidden use of secret API key in browser"</p>
+                    <p className="text-[10px]">Silakan buka <strong>Supabase Dashboard &gt; Project Settings &gt; API</strong> lalu salin <strong>Publishable key</strong> (<code className="font-mono">sb_publishable_...</code> atau <code className="font-mono">anon public</code>) ke kolom ini.</p>
+                  </div>
+                )}
               </div>
 
               {/* Secret Key */}
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Supabase Secret Key (Admin Direct Bypass)
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Supabase Secret Key (Khusus Server/Backend)
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Opsional (Dilarang di Browser)
+                  </span>
+                </div>
                 <div className="relative">
                   <input
                     type={showSecretKey ? 'text' : 'password'}
