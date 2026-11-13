@@ -94,8 +94,9 @@ interface RawSupabaseHousehold {
   created_at: string;
 }
 
+const envUrl = ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) as string) || '';
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
-  url: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) as string) || 'https://gnjrysgmiqapbjroishz.supabase.co',
+  url: (envUrl && !envUrl.includes('gnjrysgmiqapbjroishz')) ? envUrl : 'https://xmtjesxmkcduirggmzam.supabase.co',
   anonKey: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) as string) || 'sb_publishable_3vfImmTVWfPlk9YsPQ64Mg_dAWg0jqT',
   secretKey: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_SECRET_KEY) as string) || '',
   bucket: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_BUCKET) as string) || 'receipts'
@@ -260,10 +261,19 @@ export const testSupabaseConnection = async (
   const startTime = performance.now();
 
   try {
-    const res = await fetch(`${cleanUrl}/rest/v1/`, {
+    // Supabase PostgREST memproteksi root /rest/v1/ dengan secret key,
+    // sedangkan akses tabel dengan publishable anon key dilakukan pada endpoint tabel
+    let res = await fetch(`${cleanUrl}/rest/v1/households?select=id&limit=1`, {
       method: 'GET',
       headers: buildAuthHeaders(clientKey)
     });
+
+    if (!res.ok && res.status !== 404) {
+      res = await fetch(`${cleanUrl}/rest/v1/app_users?select=id&limit=1`, {
+        method: 'GET',
+        headers: buildAuthHeaders(clientKey)
+      });
+    }
 
     const latencyMs = Math.round(performance.now() - startTime);
 
@@ -487,6 +497,61 @@ export const deleteDebtFromSupabase = async (
     return { success: res.ok };
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : 'Delete error' };
+  }
+};
+/**
+ * Sync Wallet item to Supabase
+ */
+export const syncWalletToSupabase = async (
+  wallet: Wallet,
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean; error?: string }> => {
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: false, error: 'Config missing' };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    const res = await fetch(`${cleanUrl}/rest/v1/wallets`, {
+      method: 'POST',
+      headers: getHeaders(config),
+      body: JSON.stringify({
+        id: wallet.id,
+        household_id: wallet.householdId,
+        name: wallet.name,
+        type: wallet.type,
+        institution_name: wallet.institutionName || null,
+        currency: wallet.currency || 'IDR',
+        balance: Math.round(wallet.balance || 0),
+        color: wallet.color || null,
+        icon: wallet.icon || null,
+        is_archived: wallet.isArchived || false,
+        created_at: wallet.createdAt,
+        updated_at: wallet.updatedAt || new Date().toISOString()
+      })
+    });
+    return { success: res.ok };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Wallet sync error' };
+  }
+};
+
+/**
+ * Delete / Archive wallet from Supabase
+ */
+export const deleteWalletFromSupabase = async (
+  walletId: string,
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean; error?: string }> => {
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: false, error: 'Config missing' };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    const res = await fetch(`${cleanUrl}/rest/v1/wallets?id=eq.${encodeURIComponent(walletId)}`, {
+      method: 'DELETE',
+      headers: getHeaders(config)
+    });
+    return { success: res.ok };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Delete wallet error' };
   }
 };
 
@@ -717,6 +782,9 @@ export const pullAllDataFromSupabase = async (
     }
     return { success: false, error: 'Config missing or invalid client key' };
   }
+  const cleanUrl = config.url.replace(/\/+$/, '');
+  const headers = getHeaders(config);
+
   try {
     const filterQuery = householdId ? `?household_id=eq.${encodeURIComponent(householdId)}` : '';
 

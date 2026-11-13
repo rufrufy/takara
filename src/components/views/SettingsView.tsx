@@ -630,7 +630,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
             <span className="text-[10px] text-slate-400 font-bold uppercase">Project URL</span>
             <div className="font-mono text-slate-800 text-[11px] truncate">
-              {state.supabaseConfig?.url || 'https://gnjrysgmiqapbjroishz.supabase.co'}
+              {state.supabaseConfig?.url || 'https://xmtjesxmkcduirggmzam.supabase.co'}
             </div>
           </div>
 

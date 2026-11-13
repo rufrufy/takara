@@ -30,7 +30,14 @@ export const getSyncQueue = (): SyncQueueItem[] => {
     const raw = localStorage.getItem(SYNC_QUEUE_KEY);
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as SyncQueueItem[];
+      if (Array.isArray(parsed)) {
+        return parsed.map((item: SyncQueueItem) => {
+          if (item.type === 'state' && (item.data as AppState).supabaseConfig?.url?.includes('gnjrysgmiqapbjroishz')) {
+            (item.data as AppState).supabaseConfig = DEFAULT_SUPABASE_CONFIG;
+          }
+          return item;
+        });
+      }
     }
   } catch {
     // ignore
@@ -131,13 +138,17 @@ export const processSyncQueue = async (
   let syncedCount = 0;
   let lastErrStr = '';
 
+  const effectiveConfig = (!supabaseConfig?.url || supabaseConfig.url.includes('gnjrysgmiqapbjroishz'))
+    ? DEFAULT_SUPABASE_CONFIG
+    : supabaseConfig;
+
   for (const item of queue) {
     let itemSuccess = false;
 
     if (item.type === 'transaction') {
       const tx = item.data as FinancialTransaction;
       try {
-        const res = await syncTransactionToSupabase(tx, supabaseConfig);
+        const res = await syncTransactionToSupabase(tx, effectiveConfig);
         if (res.success) {
           itemSuccess = true;
         } else {
@@ -148,8 +159,11 @@ export const processSyncQueue = async (
       }
     } else if (item.type === 'state') {
       const appState = item.data as AppState;
+      if (appState.supabaseConfig?.url?.includes('gnjrysgmiqapbjroishz')) {
+        appState.supabaseConfig = DEFAULT_SUPABASE_CONFIG;
+      }
       try {
-        const res = await pushAllDataToSupabase(appState, supabaseConfig);
+        const res = await pushAllDataToSupabase(appState, effectiveConfig);
         if (res.success) {
           itemSuccess = true;
         } else {
