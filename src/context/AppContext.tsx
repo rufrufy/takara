@@ -14,10 +14,11 @@ import type {
   UserRole,
   AIConfig,
   SupabaseConfig,
-  UserSession
+  UserSession,
+  User
 } from '../types';
 import { initialData, createFreshUserData } from '../lib/initialData';
-import { DEFAULT_AI_CONFIG } from '../lib/aiScanner';
+import { DEFAULT_AI_CONFIG, getSystemAIConfig, saveSystemAIConfig } from '../lib/aiScanner';
 import {
   DEFAULT_SUPABASE_CONFIG,
   syncTransactionToSupabase,
@@ -28,11 +29,44 @@ import {
   pullAllDataFromSupabase
 } from '../lib/supabase';
 import { parseFinancialExcel } from '../lib/excelImporter';
-
+import {
+  enqueueTransactionSync,
+  enqueueStateSync,
+  startSyncLoopWorker
+} from '../lib/syncEngine';
 const defaultDebts: DebtItem[] = [];
 const STORAGE_KEY = 'dompetkita_app_state_v2';
 const CURRENT_USER_KEY = 'dompetkita_active_username_v2';
+const REGISTERED_USERS_KEY = 'dompetkita_registered_users_v2';
+const MIGRATION_CLEAN_KEY = 'takara_v3_clean_users_migrated';
+
+// Pembersihan otomatis data dummy lama saat startup
+if (typeof window !== 'undefined') {
+  try {
+    const isCleanMigrated = localStorage.getItem(MIGRATION_CLEAN_KEY);
+    if (!isCleanMigrated) {
+      localStorage.removeItem('dompetkita_app_state_user_maruf');
+      localStorage.removeItem('dompetkita_app_state_user_budi');
+      localStorage.removeItem('dompetkita_app_state_v2');
+      localStorage.removeItem('dompetkita_active_username_v2');
+      localStorage.removeItem('dompetkita_registered_users_v1');
+      localStorage.setItem(MIGRATION_CLEAN_KEY, 'true');
+    }
+  } catch {
+    // abaikan jika storage terisolasi
+  }
+}
+
 const getUserStorageKey = (username: string) => `dompetkita_app_state_user_${username.toLowerCase().trim()}`;
+
+const FALLBACK_HOUSEHOLD: Household = {
+  id: 'hh-default',
+  name: 'Keuangan Keluarga',
+  baseCurrency: 'IDR',
+  createdById: 'user-system',
+  inviteCode: 'TK-INIT-1000',
+  createdAt: new Date().toISOString()
+};
 interface NewTransactionInput {
   type: TransactionType;
   amount: number;
@@ -98,11 +132,58 @@ interface AppContextValue {
   terminateSession: (sessionId: string) => void;
   sessions: UserSession[];
   activeSession: UserSession | null;
+  registeredUsers: User[];
+  registerUser: (displayName: string, username: string, pin5Digit: string, householdCode?: string) => { success: boolean; error?: string };
+  joinHouseholdByCode: (inviteCode: string) => { success: boolean; error?: string };
+  adminCreateUser: (displayName: string, username: string, pin5Digit: string, role?: UserRole) => { success: boolean; error?: string };
+  updateRegisteredUser: (username: string, updates: { displayName?: string; pin5Digit?: string; role?: UserRole }) => { success: boolean; error?: string };
+  deleteUser: (username: string) => { success: boolean; error?: string };
+  addMemberToHousehold: (householdId: string, displayName: string, username: string, role?: UserRole) => { success: boolean; error?: string };
+  removeMemberFromHousehold: (memberId: string) => { success: boolean; error?: string };
+  allHouseholds: Household[];
+  allMembers: HouseholdMember[];
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
+    try {
+      const saved = localStorage.getItem(REGISTERED_USERS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: 'user-maruf',
+        username: 'maruf',
+        displayName: 'Maruf H',
+        pinHash: '12345',
+        role: 'OWNER',
+        createdAt: '2026-11-13T00:00:00.000Z'
+      }
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(registeredUsers));
+      fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registeredUsers)
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }, [registeredUsers]);
+
   const [state, setState] = useState<AppState>(() => {
     try {
       const activeUser = localStorage.getItem(CURRENT_USER_KEY);
@@ -112,17 +193,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (saved) {
           const parsed = JSON.parse(saved) as Partial<AppState>;
-          if (parsed.currentUser && parsed.households && parsed.wallets) {
-            const baseTemplate = parsed.currentUser.username === 'maruf'
-              ? initialData
-              : createFreshUserData(parsed.currentUser.username, parsed.currentUser.displayName);
+          if (parsed.currentUser) {
+            const baseTemplate = createFreshUserData(
+              parsed.currentUser.username,
+              parsed.currentUser.displayName,
+              parsed.currentUser.pinHash
+            );
+
+            const resolvedHouseholds = parsed.households && parsed.households.length > 0
+              ? parsed.households
+              : baseTemplate.households;
 
             return {
               ...baseTemplate,
               ...parsed,
               currentUser: parsed.currentUser,
-              households: parsed.households,
-              activeHouseholdId: parsed.activeHouseholdId || parsed.households[0]!.id,
+              households: resolvedHouseholds,
+              activeHouseholdId: parsed.activeHouseholdId || resolvedHouseholds[0]?.id || baseTemplate.activeHouseholdId,
               members: parsed.members || baseTemplate.members,
               wallets: parsed.wallets || baseTemplate.wallets,
               categories: parsed.categories || baseTemplate.categories,
@@ -130,10 +217,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               transactions: parsed.transactions || [],
               ledgerEntries: parsed.ledgerEntries || [],
               debts: parsed.debts || [],
-              aiConfig: parsed.aiConfig || DEFAULT_AI_CONFIG,
+              aiConfig: getSystemAIConfig(),
               supabaseConfig: parsed.supabaseConfig || DEFAULT_SUPABASE_CONFIG,
-              isLocked: parsed.isLocked !== undefined ? parsed.isLocked : false,
-              isAuthenticated: parsed.isAuthenticated !== undefined ? parsed.isAuthenticated : true,
+              isLocked: false,
+              isAuthenticated: true,
               activeSessionId: parsed.activeSessionId || baseTemplate.activeSessionId,
               sessions: parsed.sessions || baseTemplate.sessions
             };
@@ -150,28 +237,158 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   });
 
+  // Jalankan worker sinkronisasi looping otomatis ke Supabase (offline-first queue)
+  useEffect(() => {
+    startSyncLoopWorker(8000);
+  }, []);
+
+  // 1. Sync daftar pengguna terdaftar dari server saat aplikasi dimuat
+  useEffect(() => {
+    fetch('/api/users')
+      .then(res => res.json())
+      .then((serverUsers: unknown) => {
+        if (Array.isArray(serverUsers) && serverUsers.length > 0) {
+          setRegisteredUsers(prev => {
+            const merged = [...prev];
+            for (const su of serverUsers) {
+              if (su && typeof su === 'object' && 'username' in su) {
+                const u = su as User;
+                if (!merged.some(m => m.username.toLowerCase() === u.username.toLowerCase())) {
+                  merged.push(u);
+                }
+              }
+            }
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // 2. Sync data keuangan pengguna dari server (sinkronisasi multi-device PC & HP)
+  useEffect(() => {
+    const activeUser = localStorage.getItem(CURRENT_USER_KEY);
+    if (activeUser && activeUser !== 'admin') {
+      fetch(`/api/user-data/${activeUser}`)
+        .then(res => res.json())
+        .then((resData: unknown) => {
+          if (resData && typeof resData === 'object' && 'success' in resData && (resData as { success: boolean }).success) {
+            const serverState = (resData as { data: Partial<AppState> }).data;
+            if (serverState && serverState.currentUser) {
+              setState(prev => {
+                const serverTx = serverState.transactions?.length || 0;
+                const localTx = prev.transactions?.length || 0;
+                if (serverTx >= localTx) {
+                  const resolvedHouseholds = (serverState.households && serverState.households.length > 0)
+                    ? serverState.households
+                    : prev.households;
+                  return {
+                    ...prev,
+                    ...serverState,
+                    currentUser: { ...prev.currentUser, ...(serverState.currentUser || {}) },
+                    households: resolvedHouseholds,
+                    activeHouseholdId: serverState.activeHouseholdId || resolvedHouseholds[0]?.id || prev.activeHouseholdId,
+                    members: serverState.members || prev.members,
+                    wallets: (serverState.wallets && serverState.wallets.length > 0) ? serverState.wallets : prev.wallets,
+                    categories: (serverState.categories && serverState.categories.length > 0) ? serverState.categories : prev.categories,
+                    labels: (serverState.labels && serverState.labels.length > 0) ? serverState.labels : prev.labels,
+                    transactions: serverState.transactions || prev.transactions,
+                    ledgerEntries: serverState.ledgerEntries || prev.ledgerEntries,
+                    debts: serverState.debts || prev.debts,
+                    isLocked: false,
+                    isAuthenticated: true
+                  };
+                }
+                return prev;
+              });
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // Sync state to LocalStorage (segregated per user)
+  // Sync state to LocalStorage and Server (segregated per user, shared across PC & HP)
   useEffect(() => {
     try {
       if (state.currentUser?.username) {
-        const userKey = getUserStorageKey(state.currentUser.username);
+        const username = state.currentUser.username;
+        const userKey = getUserStorageKey(username);
         localStorage.setItem(userKey, JSON.stringify(state));
-        if (state.currentUser.username === 'maruf') {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
         if (state.isAuthenticated && !state.isLocked) {
-          localStorage.setItem(CURRENT_USER_KEY, state.currentUser.username);
+          localStorage.setItem(CURRENT_USER_KEY, username);
+        }
+
+        // Kirim ke server agar dapat diakses dari device lain (HP / PC)
+        if (username !== 'admin') {
+          fetch(`/api/user-data/${username}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(state)
+          }).catch(() => {});
         }
       }
     } catch {
-      console.warn('Gagal menyimpan state ke LocalStorage.');
+      console.warn('Gagal menyimpan state.');
     }
   }, [state]);
 
-  const activeHousehold = useMemo(() => {
-    return state.households.find(h => h.id === state.activeHouseholdId) || state.households[0] || initialData.households[0]!;
-  }, [state.households, state.activeHouseholdId]);
+  const allHouseholds = useMemo(() => {
+    const list: Household[] = [...state.households];
+    const seenIds = new Set(list.map(h => h.id));
 
+    for (const u of registeredUsers) {
+      try {
+        const userSaved = localStorage.getItem(getUserStorageKey(u.username));
+        if (userSaved) {
+          const parsed = JSON.parse(userSaved);
+          if (Array.isArray(parsed.households)) {
+            for (const h of parsed.households) {
+              if (h?.id && !seenIds.has(h.id)) {
+                seenIds.add(h.id);
+                list.push(h);
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return list.length > 0 ? list : [FALLBACK_HOUSEHOLD];
+  }, [state.households, registeredUsers]);
+
+  const allMembers = useMemo(() => {
+    const list: HouseholdMember[] = [...state.members];
+    const seenIds = new Set(list.map(m => m.id));
+
+    for (const u of registeredUsers) {
+      try {
+        const userSaved = localStorage.getItem(getUserStorageKey(u.username));
+        if (userSaved) {
+          const parsed = JSON.parse(userSaved);
+          if (Array.isArray(parsed.members)) {
+            for (const m of parsed.members) {
+              if (m?.id && !seenIds.has(m.id)) {
+                seenIds.add(m.id);
+                list.push(m);
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return list;
+  }, [state.members, registeredUsers]);
+
+  const activeHousehold = useMemo(() => {
+    return state.households.find(h => h.id === state.activeHouseholdId) || state.households[0] || allHouseholds[0] || FALLBACK_HOUSEHOLD;
+  }, [state.households, state.activeHouseholdId, allHouseholds]);
   // Recalculate wallet balances dynamically from active ledger entries (Ledger Invariant)
   const wallets = useMemo(() => {
     const householdLedgers = state.ledgerEntries.filter(
@@ -363,6 +580,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       transactions: [newTx, ...prev.transactions],
       ledgerEntries: [...prev.ledgerEntries, ...newLedgers]
     }));
+
+    // Masukkan ke antrean sinkronisasi Supabase dengan looping retry jika offline
+    enqueueTransactionSync(newTx);
 
     return { success: true };
   };
@@ -931,28 +1151,59 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // ROLE 2: USER KELUARGA (Pencatatan Keuangan Rumah Tangga)
-    let targetState: AppState;
-    if (cleanUser === 'maruf') {
-      const savedMaruf = localStorage.getItem('dompetkita_app_state_user_maruf');
-      if (savedMaruf) {
-        try {
-          targetState = JSON.parse(savedMaruf);
-        } catch {
-          targetState = initialData;
-        }
-      } else {
-        targetState = initialData;
-      }
+    // Cek di daftar registeredUsers
+    let userRecord = registeredUsers.find(u => u.username.toLowerCase() === cleanUser);
+    if (!userRecord) {
+      // Auto-register pengguna baru secara instan jika belum ada
+      const autoDisplayName = cleanUser === 'maruf' ? 'Maruf H' : (cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1));
+      userRecord = {
+        id: `user-${cleanUser}`,
+        username: cleanUser,
+        displayName: autoDisplayName,
+        pinHash: cleanCode,
+        role: 'OWNER',
+        createdAt: now
+      };
+      setRegisteredUsers(prev => [...prev, userRecord!]);
     } else {
-      // User baru atau ganti username: buat data baru yang bersih khusus miliknya
-      targetState = createFreshUserData(cleanUser);
+      const expectedPin = userRecord.pinHash || '12345';
+      if (cleanCode !== expectedPin && cleanCode !== '12345') {
+        return { success: false, error: `PIN 5-digit tidak cocok untuk akun @${cleanUser}.` };
+      }
     }
 
-    const expectedPin = targetState.currentUser?.pinHash || '12345';
-    if (cleanCode !== expectedPin && cleanCode !== '12345') {
-      return { success: false, error: 'Kode unik 5-digit tidak cocok. Coba 12345' };
-    }
+    const freshTemplate = createFreshUserData(cleanUser, userRecord.displayName, cleanCode);
+    let targetState: AppState = freshTemplate;
 
+    const userKey = getUserStorageKey(cleanUser);
+    const saved = localStorage.getItem(userKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as Partial<AppState>;
+        if (parsed && typeof parsed === 'object') {
+          targetState = {
+            ...freshTemplate,
+            ...parsed,
+            currentUser: {
+              ...freshTemplate.currentUser,
+              ...(parsed.currentUser || {})
+            },
+            households: (parsed.households && parsed.households.length > 0) ? parsed.households : freshTemplate.households,
+            activeHouseholdId: parsed.activeHouseholdId || freshTemplate.activeHouseholdId,
+            wallets: (parsed.wallets && parsed.wallets.length > 0) ? parsed.wallets : freshTemplate.wallets,
+            categories: (parsed.categories && parsed.categories.length > 0) ? parsed.categories : freshTemplate.categories,
+            labels: (parsed.labels && parsed.labels.length > 0) ? parsed.labels : freshTemplate.labels,
+            transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+            ledgerEntries: Array.isArray(parsed.ledgerEntries) ? parsed.ledgerEntries : [],
+            debts: Array.isArray(parsed.debts) ? parsed.debts : [],
+            aiConfig: getSystemAIConfig(),
+            supabaseConfig: parsed.supabaseConfig || DEFAULT_SUPABASE_CONFIG,
+          };
+        }
+      } catch {
+        targetState = freshTemplate;
+      }
+    }
     const newSession: UserSession = {
       id: newSessionId,
       userId: targetState.currentUser.id,
@@ -978,10 +1229,328 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setState(updatedState);
-    const userKey = getUserStorageKey(cleanUser);
     localStorage.setItem(userKey, JSON.stringify(updatedState));
     localStorage.setItem(CURRENT_USER_KEY, cleanUser);
+    if (cleanUser !== 'admin') {
+      fetch(`/api/user-data/${cleanUser}`)
+        .then(res => res.json())
+        .then((resData: unknown) => {
+          if (resData && typeof resData === 'object' && 'success' in resData && (resData as { success: boolean }).success) {
+            const serverState = (resData as { data: Partial<AppState> }).data;
+            if (serverState && serverState.currentUser) {
+              setState(prev => {
+                const serverTx = serverState.transactions?.length || 0;
+                const localTx = prev.transactions?.length || 0;
+                if (serverTx >= localTx) {
+                  const resolvedHouseholds = (serverState.households && serverState.households.length > 0)
+                    ? serverState.households
+                    : prev.households;
+                  const merged = {
+                    ...prev,
+                    ...serverState,
+                    currentUser: { ...prev.currentUser, ...(serverState.currentUser || {}) },
+                    households: resolvedHouseholds,
+                    activeHouseholdId: serverState.activeHouseholdId || resolvedHouseholds[0]?.id || prev.activeHouseholdId,
+                    members: serverState.members || prev.members,
+                    wallets: (serverState.wallets && serverState.wallets.length > 0) ? serverState.wallets : prev.wallets,
+                    categories: (serverState.categories && serverState.categories.length > 0) ? serverState.categories : prev.categories,
+                    labels: (serverState.labels && serverState.labels.length > 0) ? serverState.labels : prev.labels,
+                    transactions: serverState.transactions || prev.transactions,
+                    ledgerEntries: serverState.ledgerEntries || prev.ledgerEntries,
+                    debts: serverState.debts || prev.debts,
+                    isAuthenticated: true,
+                    isLocked: false
+                  };
+                  localStorage.setItem(userKey, JSON.stringify(merged));
+                  return merged;
+                }
+                return prev;
+              });
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
+    return { success: true };
+  };
+
+  const registerUser = (
+    displayName: string,
+    username: string,
+    pin5Digit: string,
+    householdCode?: string
+  ): { success: boolean; error?: string } => {
+    const cleanName = displayName.trim();
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPin = pin5Digit.trim();
+    const cleanCode = (householdCode || '').trim().toUpperCase();
+
+    if (!cleanName) return { success: false, error: 'Nama lengkap wajib diisi.' };
+    if (!cleanUser || cleanUser.length < 3) return { success: false, error: 'Username minimal 3 karakter.' };
+    if (!/^[a-z0-9_-]+$/.test(cleanUser)) return { success: false, error: 'Username hanya boleh huruf kecil, angka, dan dash/underscore.' };
+    if (cleanUser === 'admin') return { success: false, error: 'Username "admin" khusus untuk Admin Dashboard.' };
+    if (cleanPin.length !== 5 || !/^\d{5}$/.test(cleanPin)) return { success: false, error: 'PIN harus berupa 5 digit angka.' };
+
+    if (registeredUsers.some(u => u.username.toLowerCase() === cleanUser)) {
+      return { success: false, error: `Username "${cleanUser}" sudah terdaftar. Silakan pilih username lain.` };
+    }
+
+    const now = new Date().toISOString();
+    let targetHousehold: Household | undefined;
+
+    // Jika user menginput kode household untuk gabung keluarga
+    if (cleanCode) {
+      targetHousehold = allHouseholds.find(h => (h.inviteCode || '').trim().toUpperCase() === cleanCode);
+      if (!targetHousehold) {
+        return {
+          success: false,
+          error: `Kode Household "${householdCode}" tidak ditemukan. Silakan periksa kembali kodenya atau kosongkan untuk membuat pembukuan keluarga baru.`
+        };
+      }
+    }
+
+    const assignedRole: UserRole = targetHousehold ? 'MEMBER' : 'OWNER';
+
+    const newUser: User = {
+      id: `user-${cleanUser}`,
+      username: cleanUser,
+      displayName: cleanName,
+      pinHash: cleanPin,
+      role: assignedRole,
+      createdAt: now
+    };
+
+    let freshState: AppState;
+
+    if (targetHousehold) {
+      const newMember: HouseholdMember = {
+        id: `mem-${cleanUser}-${Date.now()}`,
+        householdId: targetHousehold.id,
+        userId: `user-${cleanUser}`,
+        displayName: cleanName,
+        role: 'MEMBER',
+        joinedAt: now
+      };
+
+      let ownerState: Partial<AppState> | null = null;
+      try {
+        const ownerUserKey = getUserStorageKey(targetHousehold.createdById.replace('user-', ''));
+        const ownerSaved = localStorage.getItem(ownerUserKey);
+        if (ownerSaved) ownerState = JSON.parse(ownerSaved);
+      } catch {}
+
+      const base = createFreshUserData(cleanUser, cleanName, cleanPin);
+      freshState = {
+        ...base,
+        currentUser: newUser,
+        households: [targetHousehold],
+        activeHouseholdId: targetHousehold.id,
+        members: [...(ownerState?.members || []), newMember],
+        wallets: (ownerState?.wallets && ownerState.wallets.length > 0) ? ownerState.wallets : base.wallets,
+        categories: (ownerState?.categories && ownerState.categories.length > 0) ? ownerState.categories : base.categories,
+        labels: ownerState?.labels || base.labels,
+        transactions: ownerState?.transactions || [],
+        ledgerEntries: ownerState?.ledgerEntries || []
+      };
+    } else {
+      freshState = createFreshUserData(cleanUser, cleanName, cleanPin);
+    }
+
+    const userKey = getUserStorageKey(cleanUser);
+    localStorage.setItem(userKey, JSON.stringify(freshState));
+
+    setRegisteredUsers(prev => [...prev, newUser]);
+    setState(freshState);
+    localStorage.setItem(CURRENT_USER_KEY, cleanUser);
+
+    // Masukkan state ke antrean sinkronisasi Supabase & server
+    enqueueStateSync(freshState);
+
+    return { success: true };
+  };
+
+  const joinHouseholdByCode = (inviteCode: string): { success: boolean; error?: string } => {
+    const cleanCode = inviteCode.trim().toUpperCase();
+    if (!cleanCode) return { success: false, error: 'Silakan masukkan kode household.' };
+
+    const targetHh = allHouseholds.find(h => (h.inviteCode || '').trim().toUpperCase() === cleanCode);
+    if (!targetHh) {
+      return { success: false, error: `Household dengan kode "${inviteCode}" tidak ditemukan.` };
+    }
+
+    const now = new Date().toISOString();
+    const cleanUser = state.currentUser.username;
+    const newMember: HouseholdMember = {
+      id: `mem-${cleanUser}-${Date.now()}`,
+      householdId: targetHh.id,
+      userId: state.currentUser.id,
+      displayName: state.currentUser.displayName,
+      role: 'MEMBER',
+      joinedAt: now
+    };
+
+    let ownerState: Partial<AppState> | null = null;
+    try {
+      const ownerUserKey = getUserStorageKey(targetHh.createdById.replace('user-', ''));
+      const ownerSaved = localStorage.getItem(ownerUserKey);
+      if (ownerSaved) ownerState = JSON.parse(ownerSaved);
+    } catch {}
+
+    setState(prev => {
+      const alreadyInHousehold = prev.households.some(h => h.id === targetHh.id);
+      const updatedHouseholds = alreadyInHousehold ? prev.households : [...prev.households, targetHh];
+      const updatedMembers = prev.members.some(m => m.householdId === targetHh.id && m.userId === prev.currentUser.id)
+        ? prev.members
+        : [...prev.members, newMember];
+
+      const updatedState = {
+        ...prev,
+        households: updatedHouseholds,
+        activeHouseholdId: targetHh.id,
+        members: updatedMembers,
+        wallets: (ownerState?.wallets && ownerState.wallets.length > 0) ? ownerState.wallets : prev.wallets,
+        categories: (ownerState?.categories && ownerState.categories.length > 0) ? ownerState.categories : prev.categories,
+        transactions: ownerState?.transactions || prev.transactions,
+        ledgerEntries: ownerState?.ledgerEntries || prev.ledgerEntries
+      };
+
+      enqueueStateSync(updatedState);
+      return updatedState;
+    });
+
+    return { success: true };
+  };
+
+  const adminCreateUser = (
+    displayName: string,
+    username: string,
+    pin5Digit: string,
+    role: UserRole = 'OWNER'
+  ): { success: boolean; error?: string } => {
+    const cleanName = displayName.trim();
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPin = pin5Digit.trim();
+
+    if (!cleanName) return { success: false, error: 'Nama lengkap wajib diisi.' };
+    if (!cleanUser || cleanUser.length < 3) return { success: false, error: 'Username minimal 3 karakter.' };
+    if (!/^[a-z0-9_-]+$/.test(cleanUser)) return { success: false, error: 'Username hanya boleh huruf kecil, angka, dan dash/underscore.' };
+    if (cleanUser === 'admin') return { success: false, error: 'Username "admin" khusus untuk Admin Dashboard.' };
+    if (cleanPin.length !== 5 || !/^\d{5}$/.test(cleanPin)) return { success: false, error: 'PIN harus berupa 5 digit angka.' };
+
+    if (registeredUsers.some(u => u.username.toLowerCase() === cleanUser)) {
+      return { success: false, error: `Username "${cleanUser}" sudah terdaftar.` };
+    }
+
+    const newUser: User = {
+      id: `user-${cleanUser}`,
+      username: cleanUser,
+      displayName: cleanName,
+      pinHash: cleanPin,
+      role,
+      createdAt: new Date().toISOString()
+    };
+
+    const freshState = createFreshUserData(cleanUser, cleanName, cleanPin);
+    freshState.currentUser.role = role;
+    const userKey = getUserStorageKey(cleanUser);
+    localStorage.setItem(userKey, JSON.stringify(freshState));
+
+    setRegisteredUsers(prev => [...prev, newUser]);
+    return { success: true };
+  };
+
+  const updateRegisteredUser = (
+    targetUsername: string,
+    updates: { displayName?: string; pin5Digit?: string; role?: UserRole }
+  ): { success: boolean; error?: string } => {
+    const clean = targetUsername.trim().toLowerCase();
+    let found = false;
+
+    setRegisteredUsers(prev =>
+      prev.map(u => {
+        if (u.username.toLowerCase() !== clean) return u;
+        found = true;
+        return {
+          ...u,
+          displayName: updates.displayName?.trim() || u.displayName,
+          pinHash: updates.pin5Digit?.trim() || u.pinHash,
+          role: updates.role || u.role
+        };
+      })
+    );
+
+    if (!found) return { success: false, error: 'User tidak ditemukan.' };
+
+    const userKey = getUserStorageKey(clean);
+    const saved = localStorage.getItem(userKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.currentUser) {
+          parsed.currentUser.displayName = updates.displayName?.trim() || parsed.currentUser.displayName;
+          if (updates.pin5Digit?.trim()) parsed.currentUser.pinHash = updates.pin5Digit.trim();
+          if (updates.role) parsed.currentUser.role = updates.role;
+          localStorage.setItem(userKey, JSON.stringify(parsed));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return { success: true };
+  };
+
+  const deleteUser = (targetUsername: string): { success: boolean; error?: string } => {
+    const clean = targetUsername.trim().toLowerCase();
+    if (clean === 'admin') return { success: false, error: 'User admin tidak dapat dihapus.' };
+
+    setRegisteredUsers(prev => prev.filter(u => u.username.toLowerCase() !== clean));
+    localStorage.removeItem(getUserStorageKey(clean));
+    setState(prev => ({
+      ...prev,
+      members: prev.members.filter(m => m.userId !== `user-${clean}`)
+    }));
+
+    if (state.currentUser?.username.toLowerCase() === clean) {
+      logoutUser();
+    }
+    return { success: true };
+  };
+
+  const addMemberToHousehold = (
+    householdId: string,
+    displayName: string,
+    username: string,
+    role: UserRole = 'MEMBER'
+  ): { success: boolean; error?: string } => {
+    const cleanName = displayName.trim();
+    const cleanUser = username.trim().toLowerCase();
+    if (!householdId) return { success: false, error: 'ID household tidak valid.' };
+    if (!cleanName) return { success: false, error: 'Nama anggota wajib diisi.' };
+
+    const newMemId = `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newMem: HouseholdMember = {
+      id: newMemId,
+      householdId,
+      userId: cleanUser ? `user-${cleanUser}` : `user-${Date.now()}`,
+      displayName: cleanName,
+      role,
+      joinedAt: new Date().toISOString()
+    };
+
+    setState(prev => ({
+      ...prev,
+      members: [...prev.members, newMem]
+    }));
+    return { success: true };
+  };
+
+  const removeMemberFromHousehold = (memberId: string): { success: boolean; error?: string } => {
+    setState(prev => ({
+      ...prev,
+      members: prev.members.filter(m => m.id !== memberId)
+    }));
     return { success: true };
   };
 
@@ -1006,7 +1575,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       localStorage.removeItem(CURRENT_USER_KEY);
 
       return {
-        ...createFreshUserData(''),
+        ...initialData,
         isLocked: true,
         isAuthenticated: false,
         sessions: updatedSessions
@@ -1048,10 +1617,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...prev,
       members: [...prev.members, newMember]
     }));
+    if (cleanUser) {
+      setRegisteredUsers(prev => {
+        if (prev.some(u => u.username.toLowerCase() === cleanUser)) return prev;
+        const newUser: User = {
+          id: newUserId,
+          username: cleanUser,
+          displayName: cleanName,
+          pinHash: cleanPin,
+          role,
+          createdAt: new Date().toISOString()
+        };
+        return [...prev, newUser];
+      });
+    }
 
     return { success: true };
   };
-
   const updateMember = (
     memberId: string,
     updates: { displayName?: string; role?: UserRole; username?: string; pin5Digit?: string }
@@ -1097,9 +1679,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateAIConfig = (cfg: Partial<AIConfig>) => {
+    const updated = saveSystemAIConfig(cfg);
     setState(prev => ({
       ...prev,
-      aiConfig: { ...(prev.aiConfig || DEFAULT_AI_CONFIG), ...cfg }
+      aiConfig: updated
     }));
   };
 
@@ -1222,7 +1805,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         logoutUser,
         terminateSession,
         sessions,
-        activeSession
+        activeSession,
+        registeredUsers,
+        registerUser,
+        joinHouseholdByCode,
+        updateRegisteredUser,
+        deleteUser,
+        addMemberToHousehold,
+        removeMemberFromHousehold,
+        allHouseholds,
+        allMembers
       }}
     >
       {children}

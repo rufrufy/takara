@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { DEFAULT_AI_CONFIG, testRealAIConnection } from '../../lib/aiScanner';
+import { DEFAULT_AI_CONFIG, testRealAIConnection, detectAIProvider, resolveGeminiEndpoint, normalizeAIEndpoint, getSystemAIConfig } from '../../lib/aiScanner';
 import { DEFAULT_SUPABASE_CONFIG, testSupabaseConnection } from '../../lib/supabase';
 import {
   Shield,
@@ -27,9 +27,10 @@ import {
   Edit2,
   X,
   Code,
-  ArrowRightLeft
+  ArrowRightLeft,
+  UserPlus
 } from 'lucide-react';
-import type { UserRole, HouseholdMember, Household } from '../../types';
+import type { UserRole, HouseholdMember, Household, User } from '../../types';
 
 interface AdminDashboardViewProps {
   onBack?: () => void;
@@ -54,10 +55,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     supabaseSyncStatus,
     logoutUser,
     terminateSession,
-    sessions
+    sessions,
+    addMemberToHousehold,
+    removeMemberFromHousehold,
+    registeredUsers,
+    adminCreateUser,
+    updateRegisteredUser,
+    deleteUser,
+    allHouseholds,
+    allMembers
   } = useApp();
 
-  const currentAI = state.aiConfig || DEFAULT_AI_CONFIG;
+  const currentAI = getSystemAIConfig();
   const currentSupabase = state.supabaseConfig || DEFAULT_SUPABASE_CONFIG;
 
   const [activeTab, setActiveTab] = useState<'members' | 'households' | 'ai' | 'supabase' | 'sessions'>('members');
@@ -79,28 +88,31 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   const [showSecretKey, setShowSecretKey] = useState(false);
   const [showSqlSchema, setShowSqlSchema] = useState(false);
 
-  // New Member Modal State
+  // New User State
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberUsername, setNewMemberUsername] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState<UserRole>('MEMBER');
+  const [newMemberRole, setNewMemberRole] = useState<UserRole>('OWNER');
   const [newMemberPin, setNewMemberPin] = useState('12345');
   const [memberError, setMemberError] = useState('');
+  const [memberSuccess, setMemberSuccess] = useState('');
 
-  // Edit Member Modal State
-  const [editingMember, setEditingMember] = useState<HouseholdMember | null>(null);
+  // Edit User State
+  const [editingRegisteredUser, setEditingRegisteredUser] = useState<User | null>(null);
   const [editMemberName, setEditMemberName] = useState('');
   const [editMemberUsername, setEditMemberUsername] = useState('');
-  const [editMemberRole, setEditMemberRole] = useState<UserRole>('MEMBER');
+  const [editMemberRole, setEditMemberRole] = useState<UserRole>('OWNER');
   const [editMemberPin, setEditMemberPin] = useState('12345');
   const [editMemberError, setEditMemberError] = useState('');
-
   // Household Management State
   const [newHouseholdName, setNewHouseholdName] = useState('');
   const [editingHousehold, setEditingHousehold] = useState<Household | null>(null);
   const [editHouseholdName, setEditHouseholdName] = useState('');
   const [householdError, setHouseholdError] = useState('');
   const [householdSuccess, setHouseholdSuccess] = useState('');
-
+  const [hhNewMemberName, setHhNewMemberName] = useState('');
+  const [hhNewMemberUsername, setHhNewMemberUsername] = useState('');
+  const [hhNewMemberRole, setHhNewMemberRole] = useState<UserRole>('MEMBER');
+  const [hhMemberError, setHhMemberError] = useState('');
   // Status & Feedback
   const [saveToast, setSaveToast] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -119,13 +131,44 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     } else if (selectedPreset === 'gemini') {
       setApiUrl('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent');
       setModel('gemini-1.5-flash');
+    } else if (selectedPreset === 'custom') {
+      setApiUrl('https://9r.bkpp.web.id/v1');
+      setModel('ag/gemini-3.8-flash');
+      if (!apiKey || apiKey.startsWith('AIza')) {
+        setApiKey('sk-915bde2d5d0f619a-u6ajkz-0330dedf');
+      }
+    }
+  };
+
+  const handleApiKeyChange = (val: string) => {
+    setApiKey(val);
+    // Auto-detect hanya bila apiUrl masih default/kosong
+    const isDefaultUrl = !apiUrl || apiUrl.includes('api.openai.com') || apiUrl.includes('googleapis.com');
+    if (isDefaultUrl) {
+      const detected = detectAIProvider(val);
+      if (detected) {
+        setProvider(detected.provider);
+        setModel(detected.model);
+        setApiUrl(detected.apiUrl);
+      }
+    }
+  };
+
+  const handleModelChange = (val: string) => {
+    setModel(val);
+    if (provider === 'gemini') {
+      setApiUrl(resolveGeminiEndpoint(apiUrl, val));
     }
   };
 
   const handleSaveAI = () => {
+    const normalizedUrl = provider === 'gemini'
+      ? resolveGeminiEndpoint(apiUrl, model)
+      : normalizeAIEndpoint(apiUrl, provider);
+
     updateAIConfig({
       provider,
-      apiUrl: apiUrl.trim(),
+      apiUrl: normalizedUrl,
       apiKey: apiKey.trim(),
       model: model.trim(),
       systemPrompt: systemPrompt.trim()
@@ -153,9 +196,13 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     setTestResult(null);
 
     try {
+      const normalizedUrl = provider === 'gemini'
+        ? resolveGeminiEndpoint(apiUrl, model)
+        : normalizeAIEndpoint(apiUrl, provider);
+
       const res = await testRealAIConnection({
         provider,
-        apiUrl: apiUrl.trim(),
+        apiUrl: normalizedUrl,
         apiKey: apiKey.trim(),
         model: model.trim(),
         systemPrompt: systemPrompt.trim()
@@ -238,37 +285,45 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
     setMemberError('');
+    setMemberSuccess('');
     if (!newMemberName.trim()) {
-      setMemberError('Nama anggota wajib diisi');
+      setMemberError('Nama pengguna wajib diisi');
+      return;
+    }
+    const cleanUser = (newMemberUsername || newMemberName).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!cleanUser || cleanUser.length < 3) {
+      setMemberError('Username minimal 3 karakter');
       return;
     }
     if (newMemberPin.trim().length !== 5) {
-      setMemberError('Kode unik harus tepat 5 digit angka');
+      setMemberError('Kode PIN harus tepat 5 digit angka');
       return;
     }
 
-    const res = inviteMember(
-      newMemberName,
-      newMemberUsername || newMemberName.toLowerCase().replace(/\s+/g, ''),
-      newMemberRole,
-      newMemberPin
+    const res = adminCreateUser(
+      newMemberName.trim(),
+      cleanUser,
+      newMemberPin.trim(),
+      newMemberRole
     );
     if (res.success) {
+      setMemberSuccess(`✓ Pengguna "${newMemberName}" (@${cleanUser}) berhasil didaftarkan!`);
       setNewMemberName('');
       setNewMemberUsername('');
       setNewMemberPin('12345');
+      setTimeout(() => setMemberSuccess(''), 4000);
     } else {
-      setMemberError(res.error || 'Gagal menambahkan anggota');
+      setMemberError(res.error || 'Gagal menambahkan pengguna');
     }
   };
 
   const handleSaveEditMember = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMember) return;
+    if (!editingRegisteredUser) return;
     setEditMemberError('');
 
     if (!editMemberName.trim()) {
-      setEditMemberError('Nama anggota wajib diisi');
+      setEditMemberError('Nama pengguna wajib diisi');
       return;
     }
     if (editMemberPin.trim().length !== 5) {
@@ -276,15 +331,16 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       return;
     }
 
-    const res = updateMember(editingMember.id, {
+    const res = updateRegisteredUser(editingRegisteredUser.username, {
       displayName: editMemberName.trim(),
       role: editMemberRole,
-      username: editMemberUsername.trim(),
       pin5Digit: editMemberPin.trim()
     });
 
     if (res.success) {
-      setEditingMember(null);
+      setEditingRegisteredUser(null);
+      setMemberSuccess(`✓ Data pengguna @${editingRegisteredUser.username} berhasil diperbarui!`);
+      setTimeout(() => setMemberSuccess(''), 4000);
     } else {
       setEditMemberError(res.error || 'Gagal memperbarui pengguna');
     }
@@ -312,9 +368,33 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     if (!clean) return;
 
     updateHousehold(editingHousehold.id, clean);
-    setEditingHousehold(null);
     setHouseholdSuccess(`✓ Nama household berhasil diubah menjadi "${clean}"`);
     setTimeout(() => setHouseholdSuccess(''), 3000);
+  };
+
+  const handleAddMemberToEditingHousehold = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingHousehold) return;
+    setHhMemberError('');
+    if (!hhNewMemberName.trim()) {
+      setHhMemberError('Nama anggota keluarga wajib diisi.');
+      return;
+    }
+    const res = addMemberToHousehold(
+      editingHousehold.id,
+      hhNewMemberName.trim(),
+      hhNewMemberUsername.trim(),
+      hhNewMemberRole
+    );
+    if (!res.success) {
+      setHhMemberError(res.error || 'Gagal menambahkan anggota.');
+    } else {
+      setHhNewMemberName('');
+      setHhNewMemberUsername('');
+      setHhNewMemberRole('MEMBER');
+      setHouseholdSuccess(`✓ Anggota "${hhNewMemberName}" berhasil ditambahkan ke ${editingHousehold.name}`);
+      setTimeout(() => setHouseholdSuccess(''), 3000);
+    }
   };
 
   return (
@@ -350,14 +430,24 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
           </div>
         </div>
 
-        {saveToast && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-semibold animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Pengaturan Berhasil Disimpan</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {saveToast && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-semibold animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Pengaturan Berhasil Disimpan</span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={logoutUser}
+            className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+            title="Keluar dari Admin Portal"
+          >
+            <LogOut className="w-3.5 h-3.5 text-red-600" />
+            <span>Keluar Admin</span>
+          </button>
+        </div>
       </div>
-
       {/* Tabs Navigation */}
       <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 overflow-x-auto no-scrollbar">
         <button
@@ -370,7 +460,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
           }`}
         >
           <Users className="w-3.5 h-3.5 text-blue-600" />
-          <span>Pengguna ({state.members.length})</span>
+          <span>Pengguna ({registeredUsers.length})</span>
         </button>
 
         <button
@@ -383,9 +473,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
           }`}
         >
           <Home className="w-3.5 h-3.5 text-teal-700" />
-          <span>Household View ({households.length})</span>
+          <span>Household View ({allHouseholds.length})</span>
         </button>
-
         <button
           type="button"
           onClick={() => setActiveTab('ai')}
@@ -426,89 +515,120 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
         </button>
       </div>
 
-      {/* TAB 1: MEMBERS MANAGEMENT (EDIT USER INCLUDED) */}
+      {/* TAB 1: MEMBERS / REGISTERED USERS MANAGEMENT */}
       {activeTab === 'members' && (
         <div className="space-y-4">
           <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold text-slate-900">Daftar Pengguna & Hak Akses</h2>
+                <h2 className="text-sm font-bold text-slate-900">Daftar Pengguna Aplikasi (Superadmin)</h2>
                 <p className="text-xs text-slate-500">
-                  Kelola nama anggota, peranan, username, dan PIN 5-digit
+                  Kelola seluruh pengguna terdaftar, hak akses peran, dan PIN 5-digit login
                 </p>
               </div>
               <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
-                Household: {activeHousehold.name}
+                Total: {registeredUsers.length} Pengguna
               </span>
             </div>
 
-            {/* Members Table */}
+            {memberSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold animate-in fade-in">
+                {memberSuccess}
+              </div>
+            )}
+
+            {/* Registered Users Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border border-slate-200 rounded-2xl overflow-hidden">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
-                    <th className="py-2.5 px-3">Nama Anggota</th>
+                    <th className="py-2.5 px-3">Nama Pengguna</th>
                     <th className="py-2.5 px-3">Username</th>
-                    <th className="py-2.5 px-3">Peran (Role)</th>
+                    <th className="py-2.5 px-3">Peran Akses</th>
                     <th className="py-2.5 px-3">PIN 5-Digit</th>
+                    <th className="py-2.5 px-3">Terdaftar</th>
                     <th className="py-2.5 px-3 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {state.members.map(m => (
-                    <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3 font-bold text-slate-900">{m.displayName}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600">
-                        {m.userId.replace('user-', '')}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-bold text-teal-800 border border-teal-200">
-                          {m.role}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
-                        ••••• (12345)
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingMember(m);
-                              setEditMemberName(m.displayName);
-                              setEditMemberUsername(m.userId.replace('user-', ''));
-                              setEditMemberRole(m.role);
-                              setEditMemberPin('12345');
-                              setEditMemberError('');
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
-                            title="Edit Pengguna"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          {state.members.length > 1 && (
+                  {registeredUsers.length > 0 ? (
+                    registeredUsers.map(u => (
+                      <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-slate-900 flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-xl bg-teal-100 text-teal-900 font-bold flex items-center justify-center text-xs shrink-0 border border-teal-200">
+                            {u.displayName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <span>{u.displayName}</span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">
+                          @{u.username}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                            u.role === 'ADMIN'
+                              ? 'bg-amber-50 text-amber-900 border-amber-200'
+                              : u.role === 'OWNER'
+                              ? 'bg-teal-50 text-teal-800 border-teal-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}>
+                            {u.role === 'ADMIN' ? 'Superadmin' : u.role === 'OWNER' ? 'Kepala Keluarga (Owner)' : u.role}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                          {u.pinHash || '12345'}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
-                              onClick={() => removeMember(m.id)}
+                              onClick={() => {
+                                setEditingRegisteredUser(u);
+                                setEditMemberName(u.displayName);
+                                setEditMemberUsername(u.username);
+                                setEditMemberRole(u.role || 'OWNER');
+                                setEditMemberPin(u.pinHash || '12345');
+                                setEditMemberError('');
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
+                              title="Edit Pengguna"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`Yakin ingin menghapus pengguna @${u.username}?`)) {
+                                  deleteUser(u.username);
+                                }
+                              }}
                               className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                               title="Hapus Pengguna"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
+                        Belum ada pengguna terdaftar. Daftarkan pengguna baru di form bawah.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
 
-            {/* Add New Member Form */}
+            {/* Add New User Form */}
             <form onSubmit={handleAddMember} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
               <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <Plus className="w-3.5 h-3.5 text-teal-700" />
-                <span>Daftarkan Anggota Baru</span>
+                <span>Daftarkan Pengguna Baru ke Aplikasi</span>
               </div>
 
               {memberError && (
@@ -520,34 +640,38 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                 <input
                   type="text"
-                  placeholder="Nama Lengkap (misal: Budi Santoso)"
+                  placeholder="Nama Lengkap (misal: Maruf H)"
                   value={newMemberName}
                   onChange={e => setNewMemberName(e.target.value)}
                   className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  required
                 />
                 <input
                   type="text"
-                  placeholder="Username (misal: budi)"
+                  placeholder="Username (misal: maruf)"
                   value={newMemberUsername}
-                  onChange={e => setNewMemberUsername(e.target.value)}
-                  className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  onChange={e => setNewMemberUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  required
                 />
                 <select
                   value={newMemberRole}
                   onChange={e => setNewMemberRole(e.target.value as UserRole)}
                   className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
                 >
-                  <option value="ADMIN">Co-Admin (Pasangan)</option>
-                  <option value="MEMBER">Member (Keluarga)</option>
-                  <option value="VIEWER">Viewer (Anak)</option>
+                  <option value="OWNER">Pengguna / Kepala Keluarga</option>
+                  <option value="ADMIN">Superadmin</option>
+                  <option value="MEMBER">Anggota Keluarga</option>
+                  <option value="VIEWER">Viewer (Hanya Lihat)</option>
                 </select>
                 <input
                   type="text"
                   maxLength={5}
-                  placeholder="PIN 5 Digit (12345)"
+                  placeholder="PIN 5-Digit (12345)"
                   value={newMemberPin}
                   onChange={e => setNewMemberPin(e.target.value.replace(/[^0-9]/g, ''))}
                   className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  required
                 />
               </div>
 
@@ -556,7 +680,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                   type="submit"
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
                 >
-                  + Daftarkan Anggota
+                  + Daftarkan Pengguna
                 </button>
               </div>
             </form>
@@ -589,10 +713,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
 
             {/* List of Households */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {households.map(h => {
+              {allHouseholds.map(h => {
                 const isActive = h.id === activeHousehold.id;
-                const hMembers = state.members.filter(m => m.householdId === h.id);
-
+                const hMembers = allMembers.filter(m => m.householdId === h.id);
                 return (
                   <div
                     key={h.id}
@@ -618,9 +741,33 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                         <div className="text-[11px] text-slate-500">
                           Kode Undangan: <span className="font-mono font-bold text-teal-800">{h.inviteCode || 'DK-KLRG-8921'}</span>
                         </div>
-                        <div className="text-[11px] text-slate-600 font-medium">
-                          👥 {hMembers.length > 0 ? hMembers.length : state.members.length} Anggota Terdaftar
+                        <div className="text-[11px] text-slate-700 font-semibold flex items-center gap-1.5 pt-0.5">
+                          <Users className="w-3.5 h-3.5 text-teal-700" />
+                          <span>{hMembers.length} Anggota Terdaftar:</span>
                         </div>
+                        {hMembers.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                            {hMembers.slice(0, 5).map(m => (
+                              <span
+                                key={m.id}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-100/70 text-[10px] font-bold text-teal-900 border border-teal-200/60"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                                <span>{m.displayName}</span>
+                                <span className="text-[9px] text-teal-700 font-normal">({m.role})</span>
+                              </span>
+                            ))}
+                            {hMembers.length > 5 && (
+                              <span className="text-[10px] text-slate-500 font-semibold px-1">
+                                +{hMembers.length - 5} lainnya
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-amber-700 font-medium italic pt-0.5">
+                            Belum ada anggota (klik edit untuk tambah)
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1">
@@ -787,8 +934,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                 <input
                   type={showApiKey ? 'text' : 'password'}
                   value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="sk-..."
+                  onChange={e => handleApiKeyChange(e.target.value)}
+                  placeholder="Tempel API Key (AIzaSy... untuk Gemini, atau sk-... untuk OpenAI)"
                   className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
                 />
                 <button
@@ -809,8 +956,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               <input
                 type="text"
                 value={model}
-                onChange={e => setModel(e.target.value)}
-                placeholder="gpt-4o-mini"
+                onChange={e => handleModelChange(e.target.value)}
+                placeholder="gemini-1.5-flash / gpt-4o-mini"
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
               />
             </div>
@@ -1126,18 +1273,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
         </div>
       )}
 
-      {/* EDIT MEMBER MODAL */}
-      {editingMember && (
+      {/* EDIT REGISTERED USER MODAL */}
+      {editingRegisteredUser && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-bold text-slate-900 text-base">Edit Pengguna</h2>
-                <p className="text-xs text-slate-500">Perbarui nama, peran, dan PIN pengguna</p>
+                <p className="text-xs text-slate-500">Perbarui nama lengkap, peran, dan PIN pengguna</p>
               </div>
               <button
                 type="button"
-                onClick={() => setEditingMember(null)}
+                onClick={() => setEditingRegisteredUser(null)}
                 className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
               >
                 <X className="w-4 h-4" />
@@ -1163,26 +1310,26 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Username</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Username (ID Akun)</label>
                 <input
                   type="text"
                   value={editMemberUsername}
-                  onChange={e => setEditMemberUsername(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  required
+                  disabled
+                  className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono text-slate-500 cursor-not-allowed"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Peran (Role)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Peran Akses</label>
                 <select
                   value={editMemberRole}
                   onChange={e => setEditMemberRole(e.target.value as UserRole)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
                 >
-                  <option value="ADMIN">Co-Admin (Pasangan / Akses Penuh)</option>
-                  <option value="MEMBER">Member (Keluarga / Pencatat)</option>
-                  <option value="VIEWER">Viewer (Hanya Melihat)</option>
+                  <option value="OWNER">Pengguna / Kepala Keluarga</option>
+                  <option value="ADMIN">Superadmin</option>
+                  <option value="MEMBER">Anggota Keluarga</option>
+                  <option value="VIEWER">Viewer (Hanya Lihat)</option>
                 </select>
               </div>
 
@@ -1201,7 +1348,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditingMember(null)}
+                  onClick={() => setEditingRegisteredUser(null)}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Batal
@@ -1218,53 +1365,200 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
         </div>
       )}
 
-      {/* EDIT HOUSEHOLD MODAL */}
-      {editingHousehold && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-slate-900 text-base">Ubah Nama Household</h2>
-              <button
-                type="button"
-                onClick={() => setEditingHousehold(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* EDIT HOUSEHOLD & MEMBERS MODAL */}
+      {editingHousehold && (() => {
+        const householdMembers = allMembers.filter(m => m.householdId === editingHousehold.id);
 
-            <form onSubmit={handleSaveEditHousehold} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Household Baru</label>
-                <input
-                  type="text"
-                  value={editHouseholdName}
-                  onChange={e => setEditHouseholdName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  required
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+            <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-5 shadow-2xl border border-slate-200">
+              {/* Modal Header */}
+              <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-800">
+                    <Home className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-extrabold text-slate-900 text-base leading-tight">
+                      {editingHousehold.name}
+                    </h2>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      ID: <span className="font-mono">{editingHousehold.id}</span> • Kode: <strong className="text-teal-800">{editingHousehold.inviteCode || 'DK-KLRG-8921'}</strong>
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setEditingHousehold(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"
                 >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 rounded-xl shadow-xs"
-                >
-                  Simpan Nama
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-            </form>
+
+              {/* SECTION 1: UBAH NAMA HOUSEHOLD */}
+              <form onSubmit={handleSaveEditHousehold} className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-2.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  Nama Household
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editHouseholdName}
+                    onChange={e => setEditHouseholdName(e.target.value)}
+                    placeholder="Nama household..."
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-teal-700"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 rounded-xl shadow-xs transition-colors shrink-0"
+                  >
+                    Simpan Nama
+                  </button>
+                </div>
+              </form>
+
+              {/* SECTION 2: DAFTAR ANGGOTA HOUSEHOLD */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-teal-700" />
+                    <h3 className="text-xs font-bold text-slate-900">
+                      Anggota Terdaftar di Household Ini
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                    {householdMembers.length} Anggota
+                  </span>
+                </div>
+
+                {householdMembers.length > 0 ? (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
+                    {householdMembers.map(m => (
+                      <div key={m.id} className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-900 font-bold flex items-center justify-center text-xs shrink-0 border border-teal-200">
+                            {m.displayName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 text-xs truncate">
+                              {m.displayName}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono truncate">
+                              @{m.userId.replace('user-', '')}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            m.role === 'OWNER'
+                              ? 'bg-teal-50 text-teal-800 border-teal-200'
+                              : m.role === 'ADMIN'
+                              ? 'bg-blue-50 text-blue-800 border-blue-200'
+                              : m.role === 'VIEWER'
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}>
+                            {m.role}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => removeMemberFromHousehold(m.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Hapus / Keluarkan dari Household ini"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
+                    Belum ada anggota yang terhubung ke household ini.
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 3: TAMBAH ANGGOTA LANGSUNG KE HOUSEHOLD */}
+              <form onSubmit={handleAddMemberToEditingHousehold} className="p-4 bg-teal-50/40 rounded-2xl border border-teal-200/80 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-teal-900">
+                  <UserPlus className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Tambah Anggota ke Household Ini</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                    <input
+                      type="text"
+                      value={hhNewMemberName}
+                      onChange={e => setHhNewMemberName(e.target.value)}
+                      placeholder="Nama anggota..."
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-teal-700"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Username (Opsional)</label>
+                    <input
+                      type="text"
+                      value={hhNewMemberUsername}
+                      onChange={e => setHhNewMemberUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                      placeholder="username unik..."
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-teal-700 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Peran Akses</label>
+                    <select
+                      value={hhNewMemberRole}
+                      onChange={e => setHhNewMemberRole(e.target.value as UserRole)}
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-teal-700"
+                    >
+                      <option value="MEMBER">MEMBER (Pencatat Transaksi)</option>
+                      <option value="ADMIN">ADMIN (Pengelola Anggaran)</option>
+                      <option value="OWNER">OWNER (Pemilik Penuh)</option>
+                      <option value="VIEWER">VIEWER (Hanya Lihat)</option>
+                    </select>
+                  </div>
+
+                  <div className="pt-4">
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-xs transition-colors shrink-0"
+                    >
+                      + Tambahkan
+                    </button>
+                  </div>
+                </div>
+
+                {hhMemberError && (
+                  <p className="text-[11px] font-semibold text-red-600">{hhMemberError}</p>
+                )}
+              </form>
+
+              {/* Modal Footer Close */}
+              <div className="pt-2 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingHousehold(null)}
+                  className="px-5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl shadow-xs transition-colors"
+                >
+                  Selesai
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

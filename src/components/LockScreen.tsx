@@ -1,81 +1,107 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  Lock,
   User as UserIcon,
   Delete,
   Shield,
-  ShieldCheck,
-  KeyRound,
-  Sparkles,
   AlertCircle,
   ArrowRight,
-  Cpu,
-  Users
+  ArrowLeft,
+  Users,
+  UserPlus,
+  CheckCircle2
 } from 'lucide-react';
 
-export const LockScreen: React.FC = () => {
-  const { loginUser } = useApp();
-  const [loginRole, setLoginRole] = useState<'admin' | 'user'>('user');
-  const [username, setUsername] = useState('maruf');
+interface LockScreenProps {
+  onBackToLanding?: () => void;
+  initialTab?: 'login' | 'register' | 'admin';
+}
+
+export const LockScreen: React.FC<LockScreenProps> = ({
+  onBackToLanding,
+  initialTab = 'login'
+}) => {
+  const { loginUser, registerUser, registeredUsers } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'login' | 'register' | 'admin'>(initialTab);
+
+  // Login form state
+  const [username, setUsername] = useState('');
   const [code, setCode] = useState('');
+
+  // Register form state
+  const [regFullName, setRegFullName] = useState('');
+  const [regUsername, setRegUsername] = useState('');
+  const [regPin, setRegPin] = useState('');
+  const [regConfirmPin, setRegConfirmPin] = useState('');
+  const [regHouseholdCode, setRegHouseholdCode] = useState('');
+
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const pinInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto focus PIN input when role or username is selected
+  // Sync tab change
   useEffect(() => {
-    if (username.trim()) {
-      pinInputRef.current?.focus();
-    }
-  }, [loginRole, username]);
+    setActiveTab(initialTab);
+    setErrorMsg('');
+    setSuccessMsg('');
+    setCode('');
+  }, [initialTab]);
+
 
   // Global PC keyboard listener for PIN input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
-      const isUsernameFocused = activeEl?.id === 'username-input';
+      const tagName = activeEl?.tagName.toLowerCase();
+      const isInput = tagName === 'input' || tagName === 'textarea';
 
-      if (isUsernameFocused) {
+      // If typing in normal text input (like username or register fields), let normal typing happen
+      if (isInput && activeEl?.id !== 'pin-hidden-input') {
         if (e.key === 'Enter') {
           e.preventDefault();
-          const targetUser = loginRole === 'admin' ? 'admin' : username.trim();
-          if (!targetUser) {
-            setErrorMsg('Silakan pilih akun atau ketik username terlebih dahulu.');
-            return;
-          }
-          if (code.length === 5) {
-            handleExecuteLogin(targetUser, code);
-          } else {
-            pinInputRef.current?.focus();
+          if (activeTab === 'login') {
+            const targetUser = username.trim();
+            if (targetUser && code.length === 5) {
+              handleExecuteLogin(targetUser, code);
+            } else {
+              pinInputRef.current?.focus();
+            }
+          } else if (activeTab === 'register') {
+            handleExecuteRegister();
           }
         }
         return;
       }
 
-      if (e.key >= '0' && e.key <= '9') {
-        e.preventDefault();
-        handleKeyPress(e.key);
-      } else if (e.key === 'Backspace') {
-        e.preventDefault();
-        handleDelete();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        handleClear();
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const targetUser = loginRole === 'admin' ? 'admin' : username.trim();
-        if (!targetUser) {
-          setErrorMsg('Silakan pilih akun atau ketik username terlebih dahulu.');
-          return;
+      // PIN entry keyboard capture
+      if (activeTab === 'login' || activeTab === 'admin') {
+        if (e.key >= '0' && e.key <= '9') {
+          e.preventDefault();
+          handleKeyPress(e.key);
+        } else if (e.key === 'Backspace') {
+          e.preventDefault();
+          handleDelete();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleClear();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const targetUser = activeTab === 'admin' ? 'admin' : username.trim();
+          if (!targetUser) {
+            setErrorMsg('Silakan pilih akun atau ketik username terlebih dahulu.');
+            return;
+          }
+          handleExecuteLogin(targetUser, code.trim() || '12345');
         }
-        handleExecuteLogin(targetUser, code.trim() || '12345');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [code, username, loginRole, isLoading]);
+  }, [code, username, activeTab, isLoading, regFullName, regUsername, regPin, regConfirmPin]);
+
   const handleKeyPress = (digit: string) => {
     if (code.length < 5) {
       const nextCode = code + digit;
@@ -84,10 +110,9 @@ export const LockScreen: React.FC = () => {
 
       // Auto submit on 5 digits
       if (nextCode.length === 5) {
-        const targetUser = loginRole === 'admin' ? 'admin' : username.trim();
-        if (!targetUser) {
-          setErrorMsg('Silakan pilih akun atau ketik username terlebih dahulu.');
-          return;
+        const targetUser = activeTab === 'admin' ? 'admin' : (username.trim() || 'maruf');
+        if (!username && targetUser === 'maruf') {
+          setUsername('maruf');
         }
         handleExecuteLogin(targetUser, nextCode);
       }
@@ -111,300 +136,425 @@ export const LockScreen: React.FC = () => {
     setTimeout(() => {
       const res = loginUser(userToLogin, codeToVerify);
       if (!res.success) {
-        setErrorMsg(res.error || 'Kode unik 5-digit salah.');
+        setErrorMsg(res.error || 'Kode unik 5-digit tidak cocok.');
         setCode('');
       }
       setIsLoading(false);
-    }, 200);
+    }, 150);
   };
 
-  const handleSwitchRole = (role: 'admin' | 'user') => {
-    setLoginRole(role);
-    setCode('');
+  const handleExecuteRegister = () => {
     setErrorMsg('');
-    if (role === 'admin') {
-      setUsername('admin');
-    } else {
-      setUsername('maruf');
+    setSuccessMsg('');
+
+    if (!regFullName.trim()) {
+      setErrorMsg('Nama lengkap wajib diisi.');
+      return;
     }
+    const cleanU = regUsername.trim().toLowerCase();
+    if (!cleanU || cleanU.length < 3) {
+      setErrorMsg('Username minimal 3 karakter (huruf kecil dan angka).');
+      return;
+    }
+    if (regPin.length !== 5 || !/^\d{5}$/.test(regPin)) {
+      setErrorMsg('PIN harus terdiri dari 5 digit angka.');
+      return;
+    }
+    if (regPin !== regConfirmPin) {
+      setErrorMsg('Konfirmasi PIN tidak cocok dengan PIN yang dibuat.');
+      return;
+    }
+
+    setIsLoading(true);
+    setTimeout(() => {
+      const res = registerUser(regFullName.trim(), cleanU, regPin, regHouseholdCode.trim());
+      if (!res.success) {
+        setErrorMsg(res.error || 'Gagal mendaftarkan pengguna baru.');
+        setIsLoading(false);
+      } else {
+        setSuccessMsg(`Akun "${regFullName}" berhasil dibuat! Membuka aplikasi...`);
+      }
+    }, 200);
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-gradient-to-b from-[#0F766E] via-[#115E59] to-[#042F2E] text-white flex flex-col justify-between items-center p-4 sm:p-6 select-none animate-in fade-in duration-200 overflow-y-auto">
-      {/* Top Branding */}
-      <div className="w-full max-w-sm flex flex-col items-center pt-3 sm:pt-4 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-teal-800/80 border border-teal-500/30 flex items-center justify-center mb-2 shadow-xl shadow-teal-950/40 p-2 overflow-hidden">
-          <img src="/Takara_logo_original_transparan.png" alt="Takara" className="w-full h-full object-contain" />
-        </div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Takara</h1>
-        <p className="text-teal-200/90 text-xs mt-0.5">
-          Sistem Keuangan Keluarga & Admin Dashboard
-        </p>
-
-        {/* 2 DISTINCT ROLES SELECTOR */}
-        <div className="mt-4 w-full bg-teal-950/60 p-1 rounded-2xl border border-teal-700/60 flex">
+      {/* Top Header Bar */}
+      <div className="w-full max-w-md flex items-center justify-between pt-1">
+        {onBackToLanding ? (
           <button
             type="button"
-            onClick={() => handleSwitchRole('user')}
+            onClick={onBackToLanding}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-900/60 hover:bg-teal-900 text-teal-200 hover:text-white border border-teal-700/50 text-xs font-semibold transition-all active:scale-95"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Beranda</span>
+          </button>
+        ) : (
+          <div />
+        )}
+
+        <div className="text-[11px] text-teal-300 font-semibold px-2.5 py-1 rounded-full bg-teal-950/40 border border-teal-700/40">
+          Takara Security v3.0
+        </div>
+      </div>
+
+      {/* Main Container */}
+      <div className="w-full max-w-md flex flex-col items-center my-auto py-4 text-center">
+        {/* Brand Icon */}
+        <div className="w-14 h-14 rounded-2xl bg-teal-800/90 border border-teal-500/40 flex items-center justify-center mb-2 shadow-xl shadow-teal-950/50 p-2 overflow-hidden">
+          <img
+            src="/Takara_logo_original_transparan.png"
+            alt="Takara"
+            className="w-full h-full object-contain"
+          />
+        </div>
+        <h1 className="text-2xl font-extrabold tracking-tight">Takara Keuangan</h1>
+        <p className="text-teal-200/90 text-xs mt-0.5">
+          Akses Masuk & Pendaftaran Pengguna
+        </p>
+
+        {/* 3 MODE TABS */}
+        <div className="mt-4 w-full bg-teal-950/70 p-1 rounded-2xl border border-teal-700/60 flex gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('login');
+              setErrorMsg('');
+              setCode('');
+            }}
             className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              loginRole === 'user'
+              activeTab === 'login'
                 ? 'bg-white text-teal-950 shadow-md ring-2 ring-teal-300'
                 : 'text-teal-200 hover:text-white'
             }`}
           >
             <Users className="w-3.5 h-3.5 text-teal-700" />
-            <span>Role 1: User Keuangan</span>
+            <span>Masuk</span>
           </button>
 
           <button
             type="button"
-            onClick={() => handleSwitchRole('admin')}
+            onClick={() => {
+              setActiveTab('register');
+              setErrorMsg('');
+              setCode('');
+            }}
             className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              loginRole === 'admin'
+              activeTab === 'register'
+                ? 'bg-emerald-400 text-slate-950 shadow-md ring-2 ring-emerald-200'
+                : 'text-emerald-200/90 hover:text-white'
+            }`}
+          >
+            <UserPlus className="w-3.5 h-3.5 text-emerald-950" />
+            <span>Daftar Baru</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('admin');
+              setErrorMsg('');
+              setCode('');
+            }}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'admin'
                 ? 'bg-amber-300 text-slate-950 shadow-md ring-2 ring-amber-200'
                 : 'text-amber-300/80 hover:text-amber-200'
             }`}
           >
-            <Shield className="w-3.5 h-3.5 text-amber-500" />
-            <span>Role 2: Admin Dashboard</span>
+            <Shield className="w-3.5 h-3.5 text-amber-600" />
+            <span>Admin</span>
           </button>
         </div>
 
-        {/* Role Description Note */}
-        <div className="mt-2 text-[11px] text-teal-200/80 text-center leading-relaxed">
-          {loginRole === 'admin' ? (
-            <span className="text-amber-200 bg-amber-950/50 px-2.5 py-1 rounded-lg border border-amber-500/30 inline-block">
-              🛡️ <strong>Khusus Admin:</strong> Kelola akun user, AI, dan database. Tidak mencatat keuangan.
-            </span>
-          ) : (
-            <span>
-              💰 <strong>Pencatatan Keuangan:</strong> Catat transaksi, dompet, dan cicilan keluarga.
-            </span>
-          )}
-        </div>
+        {/* TAB 1: LOGIN PENGGUNA */}
+        {activeTab === 'login' && (
+          <div className="w-full mt-4 flex flex-col items-center">
+            {/* Manual Username Field */}
+            <div className="w-full mb-3 text-left">
+              <label className="text-[11px] font-semibold text-teal-200 uppercase tracking-wider block mb-1">
+                Username Akun
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  id="username-input"
+                  value={username}
+                  onChange={e => {
+                    setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''));
+                    setErrorMsg('');
+                  }}
+                  placeholder="Ketik username Anda..."
+                  className="w-full bg-teal-950/80 border border-teal-700/80 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-teal-400/50 focus:outline-none focus:ring-2 focus:ring-teal-400 font-medium"
+                />
+                <UserIcon className="w-4 h-4 text-teal-400 absolute right-3.5 top-3 pointer-events-none" />
+              </div>
+            </div>
 
-        {/* Quick User Chips (Only for User role) */}
-        {loginRole === 'user' && (
-          <div className="mt-3 w-full">
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
+            {/* PIN Dots Display */}
+            <div className="mb-2">
+              <span className="text-[11px] font-semibold text-teal-200 uppercase tracking-wider block mb-2">
+                Masukkan PIN 5-Digit
+              </span>
+              <div className="flex gap-3 justify-center mb-2">
+                {[0, 1, 2, 3, 4].map(idx => (
+                  <div
+                    key={idx}
+                    className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                      code.length > idx
+                        ? 'bg-teal-300 scale-125 shadow-sm shadow-teal-300/50'
+                        : 'border border-teal-400/40 bg-teal-950/40'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Numeric Keypad */}
+            <div className="w-full max-w-[260px] grid grid-cols-3 gap-2.5 my-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleKeyPress(String(num))}
+                  className="w-full aspect-square rounded-2xl bg-teal-900/60 hover:bg-teal-800 text-xl font-bold text-white border border-teal-700/50 flex items-center justify-center active:scale-95 transition-all shadow-xs"
+                >
+                  {num}
+                </button>
+              ))}
               <button
                 type="button"
-                onClick={() => {
-                  setUsername('maruf');
-                  setCode('12345');
-                  handleExecuteLogin('maruf', '12345');
-                }}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  username.toLowerCase() === 'maruf'
-                    ? 'bg-white text-teal-900 shadow-md ring-2 ring-teal-300'
-                    : 'bg-teal-900/60 text-teal-100 hover:bg-teal-800/80 border border-teal-700/50'
-                }`}
+                onClick={handleClear}
+                className="w-full aspect-square rounded-2xl bg-teal-950/60 hover:bg-teal-900 text-xs font-semibold text-teal-300 border border-teal-800/40 flex items-center justify-center active:scale-95 transition-all"
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span>Maruf (Data Finansial)</span>
+                Clear
               </button>
+              <button
+                type="button"
+                onClick={() => handleKeyPress('0')}
+                className="w-full aspect-square rounded-2xl bg-teal-900/60 hover:bg-teal-800 text-xl font-bold text-white border border-teal-700/50 flex items-center justify-center active:scale-95 transition-all shadow-xs"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="w-full aspect-square rounded-2xl bg-teal-950/60 hover:bg-teal-900 text-teal-300 border border-teal-800/40 flex items-center justify-center active:scale-95 transition-all"
+                title="Hapus Digit"
+              >
+                <Delete className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Login Action Button */}
+            <button
+              type="button"
+              disabled={isLoading || !username.trim()}
+              onClick={() => handleExecuteLogin(username.trim(), code)}
+              className="mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-teal-950 font-extrabold text-sm rounded-xl shadow-lg shadow-teal-950/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
+            >
+              {isLoading ? (
+                <span>Memverifikasi...</span>
+              ) : (
+                <>
+                  <span>Masuk Akun</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* TAB 2: DAFTAR PENGGUNA BARU */}
+        {activeTab === 'register' && (
+          <div className="w-full mt-4 flex flex-col items-center text-left">
+            <div className="w-full bg-teal-950/50 border border-teal-700/50 rounded-2xl p-4 sm:p-5 space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-teal-200 block mb-1">
+                  Nama Lengkap / Panggilan
+                </label>
+                <input
+                  type="text"
+                  id="reg-full-name"
+                  value={regFullName}
+                  onChange={e => setRegFullName(e.target.value)}
+                  placeholder="Contoh: Ahmad Fauzi"
+                  className="w-full bg-teal-900/60 border border-teal-700 rounded-xl px-3 py-2 text-sm text-white placeholder-teal-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-teal-200 block mb-1">
+                  Username Akun (Huruf kecil & angka)
+                </label>
+                <input
+                  type="text"
+                  id="reg-username"
+                  value={regUsername}
+                  onChange={e => setRegUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  placeholder="Contoh: ahmad"
+                  className="w-full bg-teal-900/60 border border-teal-700 rounded-xl px-3 py-2 text-sm text-white placeholder-teal-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400 font-medium font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-semibold text-teal-200 block mb-1">
+                    PIN 5-Digit
+                  </label>
+                  <input
+                    type="password"
+                    id="reg-pin"
+                    maxLength={5}
+                    value={regPin}
+                    onChange={e => setRegPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="12345"
+                    className="w-full bg-teal-900/60 border border-teal-700 rounded-xl px-3 py-2 text-sm text-white placeholder-teal-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400 font-medium tracking-widest text-center"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-teal-200 block mb-1">
+                    Konfirmasi PIN
+                  </label>
+                  <input
+                    type="password"
+                    id="reg-confirm-pin"
+                    maxLength={5}
+                    value={regConfirmPin}
+                    onChange={e => setRegConfirmPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="12345"
+                    className="w-full bg-teal-900/60 border border-teal-700 rounded-xl px-3 py-2 text-sm text-white placeholder-teal-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400 font-medium tracking-widest text-center"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-teal-200 block mb-1">
+                  Kode Household (Opsional)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="reg-household-code"
+                    value={regHouseholdCode}
+                    onChange={e => setRegHouseholdCode(e.target.value.toUpperCase())}
+                    placeholder="Contoh: TK-XXXX-XXXX"
+                    className="w-full bg-teal-900/60 border border-teal-700 rounded-xl px-3 py-2 text-sm text-white placeholder-teal-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono uppercase tracking-wider font-semibold"
+                  />
+                  <Users className="w-4 h-4 text-teal-400 absolute right-3 top-2.5 pointer-events-none" />
+                </div>
+                <p className="text-[10px] text-teal-300/80 mt-1">
+                  💡 Masukkan kode jika diajak oleh keluarga. Kosongkan jika ingin buat keluarga baru.
+                </p>
+              </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  setUsername('budi');
-                  setCode('12345');
-                  handleExecuteLogin('budi', '12345');
-                }}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  username.toLowerCase() === 'budi'
-                    ? 'bg-white text-teal-900 shadow-md ring-2 ring-teal-300'
-                    : 'bg-teal-900/60 text-teal-100 hover:bg-teal-800/80 border border-teal-700/50'
-                }`}
+                disabled={isLoading}
+                onClick={handleExecuteRegister}
+                className="w-full mt-2 py-3 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2"
               >
-                <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                <span>Budi (User Baru)</span>
+                <UserPlus className="w-4 h-4" />
+                <span>{isLoading ? 'Mendaftarkan...' : 'Daftar & Langsung Masuk'}</span>
               </button>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Main Login Box: Username & 5-Digit PIN */}
-      <div className="w-full max-w-xs flex flex-col items-center my-2 space-y-2.5">
-        {/* Username Input Field */}
-        <div className="w-full">
-          <label className="block text-[11px] font-bold text-teal-200 uppercase tracking-wider mb-1 text-center">
-            {loginRole === 'admin' ? 'Username Admin' : 'Username'}
-          </label>
-          <div className="relative">
-            <UserIcon className="w-4 h-4 text-teal-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              id="username-input"
-              type="text"
-              value={username}
-              disabled={loginRole === 'admin'}
-              onChange={e => {
-                setUsername(e.target.value);
-                setErrorMsg('');
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  pinInputRef.current?.focus();
-                }
-              }}
-              placeholder={loginRole === 'admin' ? 'admin' : 'Ketik username baru (misal: budi)'}
-              className="w-full pl-10 pr-4 py-2 bg-teal-900/50 border border-teal-500/40 rounded-xl text-xs sm:text-sm font-bold text-white placeholder-teal-400/60 focus:outline-none focus:ring-2 focus:ring-teal-300 text-center disabled:opacity-80"
-            />
-          </div>
-          {loginRole === 'user' && (
-            <p className="text-[10px] text-teal-300/70 text-center mt-1">
-              * Username baru otomatis dibuatkan pembukuan baru yang bersih
-            </p>
-          )}
-        </div>
+        {/* TAB 3: ADMIN DASHBOARD */}
+        {activeTab === 'admin' && (
+          <div className="w-full mt-4 flex flex-col items-center">
+            <div className="w-full p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200 mb-3 text-left">
+              <strong>Admin Dashboard:</strong> Akses penuh konfigurasi sistem, API AI Vision, dan manajemen anggota. PIN bawaan: <code className="bg-amber-900/60 px-1 py-0.5 rounded font-mono font-bold">12345</code>.
+            </div>
 
-        {/* 5-Digit Code Label */}
-        <div className="w-full text-center">
-          <span className="text-[11px] font-bold text-teal-200 uppercase tracking-wider">
-            5 Digit Kode Unik
-          </span>
-          <div className="text-[11px] text-teal-300/80 mt-0.5">
-            Default kode: <span className="font-mono font-bold text-white underline">12345</span>
-          </div>
-        </div>
-
-        {/* 5 Digits Box Display with Keyboard Support */}
-        <div
-          onClick={() => pinInputRef.current?.focus()}
-          className="relative flex justify-center items-center gap-2.5 py-1 cursor-text group"
-          title="Klik untuk ketik PIN via keyboard PC"
-        >
-          <input
-            ref={pinInputRef}
-            id="pin-hidden-input"
-            type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={5}
-            value={code}
-            onChange={e => {
-              const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 5);
-              setCode(val);
-              setErrorMsg('');
-              if (val.length === 5) {
-                handleExecuteLogin(loginRole === 'admin' ? 'admin' : (username.trim() || 'maruf'), val);
-              }
-            }}
-            className="absolute inset-0 opacity-0 w-full h-full cursor-text z-10"
-            autoComplete="one-time-code"
-          />
-
-          {[0, 1, 2, 3, 4].map(idx => {
-            const isFilled = code.length > idx;
-            const isCurrent = code.length === idx;
-            return (
-              <div
-                key={idx}
-                className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl font-extrabold transition-all ${
-                  isFilled
-                    ? loginRole === 'admin'
-                      ? 'bg-amber-300 text-slate-950 shadow-md ring-2 ring-amber-400 scale-105'
-                      : 'bg-white text-teal-900 shadow-md ring-2 ring-teal-300 scale-105'
-                    : isCurrent
-                    ? 'bg-teal-900/80 border-2 border-teal-300 text-teal-200 ring-2 ring-teal-400/40 animate-pulse'
-                    : 'bg-teal-900/60 border border-teal-600/50 text-teal-400'
-                }`}
-              >
-                {isFilled ? '•' : ''}
+            {/* PIN Dots Display */}
+            <div className="mb-2">
+              <span className="text-[11px] font-semibold text-amber-200 uppercase tracking-wider block mb-2">
+                PIN Admin (5-Digit)
+              </span>
+              <div className="flex gap-3 justify-center mb-2">
+                {[0, 1, 2, 3, 4].map(idx => (
+                  <div
+                    key={idx}
+                    className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                      code.length > idx
+                        ? 'bg-amber-300 scale-125 shadow-sm shadow-amber-300/50'
+                        : 'border border-amber-400/40 bg-amber-950/40'
+                    }`}
+                  />
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
 
-        <p className="text-[10px] text-teal-200/80 text-center flex items-center justify-center gap-1">
-          <span>⌨️</span>
-          <span>Bisa ketik PIN langsung via keyboard PC (0-9)</span>
-        </p>
+            {/* Numeric Keypad */}
+            <div className="w-full max-w-[260px] grid grid-cols-3 gap-2.5 my-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleKeyPress(String(num))}
+                  className="w-full aspect-square rounded-2xl bg-amber-950/50 hover:bg-amber-900/70 text-xl font-bold text-amber-100 border border-amber-600/40 flex items-center justify-center active:scale-95 transition-all shadow-xs"
+                >
+                  {num}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={handleClear}
+                className="w-full aspect-square rounded-2xl bg-amber-950/80 hover:bg-amber-900/80 text-xs font-semibold text-amber-300 border border-amber-700/40 flex items-center justify-center active:scale-95 transition-all"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => handleKeyPress('0')}
+                className="w-full aspect-square rounded-2xl bg-amber-950/50 hover:bg-amber-900/70 text-xl font-bold text-amber-100 border border-amber-600/40 flex items-center justify-center active:scale-95 transition-all shadow-xs"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="w-full aspect-square rounded-2xl bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 border border-amber-700/40 flex items-center justify-center active:scale-95 transition-all"
+                title="Hapus Digit"
+              >
+                <Delete className="w-5 h-5" />
+              </button>
+            </div>
 
-        {/* Error Feedback */}
+            {/* Admin Login Button */}
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={() => handleExecuteLogin('admin', code)}
+              className="mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
+            >
+              <Shield className="w-4 h-4 text-slate-950" />
+              <span>Masuk Admin Dashboard</span>
+            </button>
+          </div>
+        )}
+
+        {/* Error or Success Notification */}
         {errorMsg && (
-          <div className="flex items-center gap-1.5 text-xs text-red-200 bg-red-950/60 px-3 py-1.5 rounded-xl border border-red-500/40 animate-shake">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <div className="mt-3 w-full p-2.5 rounded-xl bg-red-950/80 border border-red-500/60 text-red-200 text-xs flex items-center justify-center gap-2 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="mt-3 w-full p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-200 text-xs flex items-center justify-center gap-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <span>{successMsg}</span>
           </div>
         )}
       </div>
 
-      {/* Numeric Keypad for 5-Digit Code */}
-      <div className="w-full max-w-xs grid grid-cols-3 gap-2 pb-1">
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
-          <button
-            key={d}
-            type="button"
-            onClick={() => handleKeyPress(d)}
-            disabled={isLoading}
-            className="h-11 sm:h-12 rounded-2xl bg-teal-800/50 hover:bg-teal-700/60 active:scale-95 transition-all text-xl font-bold border border-teal-600/30 flex items-center justify-center shadow-xs"
-          >
-            {d}
-          </button>
-        ))}
-
-        {/* Clear Button */}
-        <button
-          type="button"
-          onClick={handleClear}
-          className="h-11 sm:h-12 rounded-2xl bg-teal-900/50 hover:bg-teal-800/60 active:scale-95 transition-all text-xs font-bold text-teal-300 border border-teal-700/40 flex items-center justify-center"
-        >
-          Hapus
-        </button>
-
-        {/* 0 Button */}
-        <button
-          type="button"
-          onClick={() => handleKeyPress('0')}
-          disabled={isLoading}
-          className="h-11 sm:h-12 rounded-2xl bg-teal-800/50 hover:bg-teal-700/60 active:scale-95 transition-all text-xl font-bold border border-teal-600/30 flex items-center justify-center shadow-xs"
-        >
-          0
-        </button>
-
-        {/* Backspace Button */}
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="h-11 sm:h-12 rounded-2xl bg-teal-900/50 hover:bg-teal-800/60 active:scale-95 transition-all text-teal-300 border border-teal-700/40 flex items-center justify-center"
-        >
-          <Delete className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Login Enter Footer */}
-      <div className="w-full max-w-xs pb-3 pt-1 text-center flex flex-col gap-1.5">
-        <button
-          onClick={() => {
-            const targetUser = loginRole === 'admin' ? 'admin' : username.trim();
-            if (!targetUser) {
-              setErrorMsg('Silakan pilih akun atau ketik username terlebih dahulu.');
-              return;
-            }
-            handleExecuteLogin(targetUser, code.trim() || '12345');
-          }}
-          disabled={isLoading || (loginRole === 'user' && !username.trim())}
-          className={`w-full py-2.5 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all ${
-            loginRole === 'admin'
-              ? 'bg-amber-400 hover:bg-amber-300 text-slate-950'
-              : 'bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white'
-          }`}
-        >
-          <span>
-            {loginRole === 'admin'
-              ? 'Masuk ke Admin Dashboard'
-              : `Masuk Sebagai @${username.trim() || 'username'}`}
-          </span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-
-        <div className="flex items-center justify-center gap-1 text-[11px] text-teal-300/80">
-          <ShieldCheck className="w-3.5 h-3.5 text-teal-300" />
-          <span>Terenkripsi aman di perangkat keluarga</span>
-        </div>
+      {/* Footer Info */}
+      <div className="w-full max-w-sm text-center pt-2 pb-1 text-[11px] text-teal-300/70">
+        Takara Keuangan Keluarga • Double-Entry & Multi-Household
       </div>
     </div>
   );

@@ -92,10 +92,10 @@ interface RawSupabaseHousehold {
 }
 
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
-  url: (import.meta.env.VITE_SUPABASE_URL as string) || 'https://gnjrysgmiqapbjroishz.supabase.co',
-  anonKey: (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || 'sb_publishable_3vfImmTVWfPlk9YsPQ64Mg_dAWg0jqT',
-  secretKey: (import.meta.env.VITE_SUPABASE_SECRET_KEY as string) || '',
-  bucket: (import.meta.env.VITE_SUPABASE_BUCKET as string) || 'receipts'
+  url: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) as string) || 'https://gnjrysgmiqapbjroishz.supabase.co',
+  anonKey: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) as string) || 'sb_publishable_3vfImmTVWfPlk9YsPQ64Mg_dAWg0jqT',
+  secretKey: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_SECRET_KEY) as string) || '',
+  bucket: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_BUCKET) as string) || 'receipts'
 };
 
 const getHeaders = (config: SupabaseConfig) => {

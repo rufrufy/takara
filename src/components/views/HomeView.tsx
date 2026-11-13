@@ -15,18 +15,20 @@ import {
   Building2,
   Banknote,
   Smartphone,
-  Sparkles
+  Sparkles,
+  Camera
 } from 'lucide-react';
 import type { ActiveTab } from '../BottomNav';
 import type { TransactionType } from '../../types';
 
 interface HomeViewProps {
   onOpenQuickAdd: (type?: TransactionType) => void;
+  onOpenAIScan?: () => void;
   onOpenImport: () => void;
   onChangeTab: (tab: ActiveTab) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickAdd, onOpenImport, onChangeTab }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickAdd, onOpenAIScan, onOpenImport, onChangeTab }) => {
   const { wallets, transactions, totalBalance, periodIncome, periodExpense, netCashFlow, state } = useApp();
   const [showBalance, setShowBalance] = useState(true);
 
@@ -142,39 +144,49 @@ export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickAdd, onOpenImport
         </div>
       </div>
 
-      {/* Quick Action Buttons */}
-      <div className="grid grid-cols-3 gap-2.5">
+      {/* Quick Action Buttons (4 Kolom Termasuk Scan Nota AI) */}
+      <div className="grid grid-cols-4 gap-2">
         <button
           onClick={() => onOpenQuickAdd('expense')}
-          className="bg-white hover:bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex flex-col items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98 cursor-pointer"
+          className="bg-white hover:bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 flex flex-col items-center justify-center gap-1 shadow-2xs transition-all active:scale-98 cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-            <ArrowDownRight className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+            <ArrowDownRight className="w-4 h-4" />
           </div>
-          <span className="text-xs font-bold text-slate-800">Pengeluaran</span>
+          <span className="text-[11px] font-bold text-slate-800">Pengeluaran</span>
         </button>
 
         <button
           onClick={() => onOpenQuickAdd('income')}
-          className="bg-white hover:bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex flex-col items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98 cursor-pointer"
+          className="bg-white hover:bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 flex flex-col items-center justify-center gap-1 shadow-2xs transition-all active:scale-98 cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <ArrowUpRight className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <ArrowUpRight className="w-4 h-4" />
           </div>
-          <span className="text-xs font-bold text-slate-800">Pemasukan</span>
+          <span className="text-[11px] font-bold text-slate-800">Pemasukan</span>
         </button>
 
         <button
           onClick={() => onOpenQuickAdd('transfer')}
-          className="bg-white hover:bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex flex-col items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98 cursor-pointer"
+          className="bg-white hover:bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 flex flex-col items-center justify-center gap-1 shadow-2xs transition-all active:scale-98 cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-            <ArrowRightLeft className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <ArrowRightLeft className="w-4 h-4" />
           </div>
-          <span className="text-xs font-bold text-slate-800">Transfer</span>
+          <span className="text-[11px] font-bold text-slate-800">Transfer</span>
+        </button>
+
+        <button
+          onClick={onOpenAIScan}
+          className="bg-gradient-to-b from-teal-50 to-teal-100/60 hover:from-teal-100 hover:to-teal-200/70 border border-teal-200 rounded-2xl p-2.5 flex flex-col items-center justify-center gap-1 shadow-2xs transition-all active:scale-98 cursor-pointer group"
+          title="Scan foto struk dengan AI Vision"
+        >
+          <div className="w-8 h-8 rounded-xl bg-teal-700 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+            <Camera className="w-4 h-4" />
+          </div>
+          <span className="text-[11px] font-extrabold text-teal-950">Scan AI</span>
         </button>
       </div>
-
       {/* Wallets Section */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">

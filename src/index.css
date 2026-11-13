@@ -19,10 +19,22 @@
   }
 }
 
-/* Custom smooth scrollbar */
+/* Sembunyikan scrollbar visual tapi tetap bisa di-slide/swipe secara mulus */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important;  /* IE & Edge */
+  scrollbar-width: none !important;  /* Firefox */
+}
+
+/* Custom smooth scrollbar untuk konten vertikal biasa */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
