@@ -122,12 +122,16 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
       return;
     }
 
+    const pickedWallet = wallets.find(w => w.id === selectedWalletId);
     const res = addTransaction({
       type: transactionType,
       amount: finalAmount,
-      sourceWalletId: selectedWalletId,
+      sourceWalletId: transactionType === 'expense' ? selectedWalletId : undefined,
+      destinationWalletId: transactionType === 'income' ? selectedWalletId : undefined,
+      sourceAsset: transactionType === 'expense' ? pickedWallet?.name : undefined,
+      destinationAsset: transactionType === 'income' ? pickedWallet?.name : undefined,
       categoryId: selectedCategoryId || undefined,
-      categoryName: selectedCategoryName || 'Belanja',
+      categoryName: selectedCategoryName || (transactionType === 'income' ? 'Pemasukan Lainnya' : 'Belanja'),
       description: description.trim() || 'Belanja Struk AI',
       imageUrl: previewImage || undefined,
       addedBy: state.currentUser.displayName || 'Maruf H',

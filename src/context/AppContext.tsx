@@ -105,7 +105,7 @@ interface AppContextValue {
   addDebt: (item: Omit<DebtItem, 'id' | 'householdId' | 'createdAt'>) => void;
   toggleDebtSettled: (id: string) => void;
   toggleDebtPaidThisMonth: (id: string) => void;
-  payDebtInstallment: (id: string, walletId?: string) => { success: boolean; error?: string };
+  payDebtInstallment: (id: string, walletId?: string, imageUrl?: string) => { success: boolean; error?: string };
   updateDebt: (id: string, updates: Partial<DebtItem>) => { success: boolean; error?: string };
   deleteDebt: (id: string) => void;
   addTransaction: (input: NewTransactionInput) => { success: boolean; error?: string };
@@ -623,7 +623,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const transactions = useMemo(() => {
     return state.transactions
-      .filter(t => t.householdId === state.activeHouseholdId && t.status === 'POSTED')
+      .filter(t => t.householdId === state.activeHouseholdId && t.status !== 'VOIDED')
       .sort((a, b) => new Date(b.effectiveAt).getTime() - new Date(a.effectiveAt).getTime());
   }, [state.transactions, state.activeHouseholdId]);
 
@@ -671,7 +671,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newLedgers: LedgerEntry[] = [];
 
     if (input.type === 'income') {
-      const destId = input.destinationWalletId || (wallets[0] ? wallets[0].id : '');
+      const destId = input.destinationWalletId || input.sourceWalletId || (wallets[0] ? wallets[0].id : '');
       if (!destId) return { success: false, error: 'Dompet tujuan wajib dipilih' };
 
       newLedgers.push({
@@ -761,10 +761,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       type: input.type,
       amount: Math.round(input.amount),
       fee: input.fee ? Math.round(input.fee) : undefined,
-      sourceWalletId: input.sourceWalletId,
-      destinationWalletId: input.destinationWalletId,
-      categoryId: input.categoryId,
-      categoryName: input.categoryName || (input.type === 'transfer' ? 'Transfer' : 'Lainnya'),
+      sourceWalletId: input.type === 'income' ? undefined : input.sourceWalletId,
+      destinationWalletId: input.type === 'income' ? (input.destinationWalletId || input.sourceWalletId) : input.destinationWalletId,
+      sourceAsset: input.type === 'income' ? undefined : (input.sourceAsset || wallets.find(w => w.id === input.sourceWalletId)?.name),
+      destinationAsset: input.type === 'income'
+        ? (input.destinationAsset || wallets.find(w => w.id === (input.destinationWalletId || input.sourceWalletId))?.name)
+        : (input.destinationAsset || wallets.find(w => w.id === input.destinationWalletId)?.name),
+      categoryId: input.type === 'transfer' ? undefined : input.categoryId,
+      categoryName: input.categoryName || (input.type === 'transfer' ? 'Uncategorized' : 'Lainnya'),
       label: input.label?.trim() || undefined,
       description: input.description,
       notes: input.notes,
@@ -888,6 +892,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (mergedTx.type === 'income') {
       const destId = mergedTx.destinationWalletId || mergedTx.sourceWalletId || (wallets[0] ? wallets[0].id : '');
+      mergedTx.destinationWalletId = destId;
+      mergedTx.sourceWalletId = undefined;
+      mergedTx.destinationAsset = mergedTx.destinationAsset || wallets.find(w => w.id === destId)?.name;
+      mergedTx.sourceAsset = undefined;
       if (destId) {
         newLedgers.push({
           id: `led-${id}-inc`,
@@ -901,6 +909,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
     } else if (mergedTx.type === 'expense') {
+      const srcId = mergedTx.sourceWalletId || (wallets[0] ? wallets[0].id : '');
+      if (srcId) {
+        newLedgers.push({
+          id: `led-${id}-exp`,
+          householdId: mergedTx.householdId,
+          transactionId: id,
+          walletId: srcId,
+          signedAmount: -Math.round(mergedTx.amount),
+          entryType: 'EXPENSE',
+          postedAt: effectiveAt,
+          createdAt: dateNow
+        });
+      }
+    } else if (mergedTx.type === 'transfer') {
+      mergedTx.categoryName = 'Uncategorized';
+      mergedTx.categoryId = undefined;
       const srcId = mergedTx.sourceWalletId || (wallets[0] ? wallets[0].id : '');
       if (srcId) {
         newLedgers.push({
@@ -1060,7 +1084,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (updated) syncDebtToSupabase(updated, state.supabaseConfig);
   };
 
-  const payDebtInstallment = (id: string, walletId?: string): { success: boolean; error?: string } => {
+  const payDebtInstallment = (id: string, walletId?: string, imageUrl?: string): { success: boolean; error?: string } => {
     const list = state.debts || [];
     const debt = list.find(d => d.id === id);
     if (!debt) return { success: false, error: 'Data utang tidak ditemukan' };
@@ -1076,8 +1100,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const now = new Date();
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    // If walletId provided, add expense transaction
-    if (walletId) {
+    // If walletId provided, add expense transaction with receipt photo
+    if (walletId && walletId !== 'none') {
       const srcWallet = state.wallets.find(w => w.id === walletId);
       if (srcWallet) {
         addTransaction({
@@ -1087,6 +1111,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           categoryName: 'Cicilan & Utang',
           label: '#Cicilan',
           description: `Bayar cicilan: ${debt.personOrEntity}`,
+          imageUrl: imageUrl || undefined,
           effectiveAt: now.toISOString(),
           addedBy: state.currentUser?.displayName || 'Maruf H'
         });
@@ -1106,7 +1131,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             remainingAmount: nextRemaining,
             isSettled: nextRemaining <= 0,
             isPaidThisMonth: true,
-            lastPaidMonth: currentMonthKey
+            lastPaidMonth: currentMonthKey,
+            imageUrl: imageUrl || d.imageUrl
           };
           return updated;
         })

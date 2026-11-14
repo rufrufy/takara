@@ -38,7 +38,7 @@ interface TransactionsViewProps {
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickAdd }) => {
-  const { transactions, wallets, categories, labels, voidTransaction, editTransaction } = useApp();
+  const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, state } = useApp();
 
   // Search & Filter State (5 Kriteria: Tipe, Anggota, Aset, Kategori, Label)
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,8 +70,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   const [editTime, setEditTime] = useState('');
   const [editAddedBy, setEditAddedBy] = useState('');
   const [editFeeStr, setEditFeeStr] = useState('');
+  const [editHouseholdId, setEditHouseholdId] = useState('');
   const [editErrorMsg, setEditErrorMsg] = useState('');
 
+  const availableMemberNames = useMemo(() => {
+    const names = new Set<string>();
+    if (state.currentUser?.displayName) names.add(state.currentUser.displayName);
+    for (const m of members) {
+      if (m.displayName) names.add(m.displayName);
+    }
+    for (const m of allMembers) {
+      if (m.displayName) names.add(m.displayName);
+    }
+    if (detailTransaction?.addedBy) names.add(detailTransaction.addedBy);
+    return Array.from(names);
+  }, [state.currentUser, members, allMembers, detailTransaction]);
   // Extract unique members from transactions
   const uniqueMembers = useMemo(() => {
     const set = new Set<string>();
@@ -269,8 +282,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     setIsEditing(false);
     setEditErrorMsg('');
     setEditAmountStr(String(t.amount));
+    setEditHouseholdId(t.householdId || state.activeHouseholdId);
     setEditType(t.type);
-    const matchedSrc = t.sourceWalletId || wallets.find(w => w.name.toLowerCase().trim() === t.sourceAsset?.toLowerCase().trim())?.id || wallets[0]?.id || '';
     const matchedDst = t.destinationWalletId || wallets.find(w => w.name.toLowerCase().trim() === (t.destinationAsset || t.sourceAsset)?.toLowerCase().trim())?.id || (t.type === 'income' ? matchedSrc : '') || wallets[1]?.id || wallets[0]?.id || '';
     setEditSourceWalletId(matchedSrc);
     setEditDestWalletId(matchedDst);
@@ -320,6 +333,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     const dstWallet = wallets.find(w => w.id === editDestWalletId);
 
     const res = editTransaction(detailTransaction.id, {
+      householdId: editHouseholdId || detailTransaction.householdId,
       amount,
       type: editType,
       sourceWalletId: editType === 'expense' || editType === 'transfer' ? editSourceWalletId : undefined,
@@ -330,7 +344,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       categoryName: editType === 'transfer' ? 'Transfer Antar Dompet' : (editCategoryName || (editType === 'income' ? 'Pemasukan Lainnya' : 'Pengeluaran Lainnya')),
       label: editLabel.trim() || undefined,
       description: editDescription.trim() || undefined,
-      addedBy: editAddedBy,
+      addedBy: editAddedBy.trim() || state.currentUser?.displayName || 'Maruf H',
       time: editTime || undefined,
       fee: editType === 'transfer' && fee > 0 ? fee : undefined
     });
@@ -1218,16 +1232,50 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   />
                 </div>
 
-                {/* Added By */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Dicatat Oleh</label>
-                  <input
-                    type="text"
-                    value={editAddedBy}
-                    onChange={e => setEditAddedBy(e.target.value)}
-                    placeholder="Nama pencatat"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
-                  />
+                {/* Pilihan Milik Household & Dicatat Oleh */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Milik Household</label>
+                    <select
+                      value={editHouseholdId}
+                      onChange={e => setEditHouseholdId(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                    >
+                      {households.map(h => (
+                        <option key={h.id} value={h.id}>{h.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Dicatat Oleh / Milik Anggota</label>
+                    <div className="space-y-1">
+                      <select
+                        value={availableMemberNames.includes(editAddedBy) ? editAddedBy : '__custom__'}
+                        onChange={e => {
+                          if (e.target.value !== '__custom__') {
+                            setEditAddedBy(e.target.value);
+                          }
+                        }}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                      >
+                        {availableMemberNames.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                        <option value="__custom__">Nama Lain (Ketik Manual)...</option>
+                      </select>
+
+                      {(!availableMemberNames.includes(editAddedBy) || editAddedBy === '') && (
+                        <input
+                          type="text"
+                          value={editAddedBy}
+                          onChange={e => setEditAddedBy(e.target.value)}
+                          placeholder="Ketik nama anggota"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none"
+                        />
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Submit & Cancel Buttons */}

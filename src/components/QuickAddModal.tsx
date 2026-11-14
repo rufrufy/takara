@@ -182,16 +182,21 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
       }
     }
 
+    const incomeWalletId = destinationWalletId || sourceWalletId;
+    const incomeWallet = wallets.find(w => w.id === incomeWalletId) || selectedDestWallet;
+
     const res = addTransaction({
       type,
       amount,
       fee: fee > 0 ? fee : undefined,
       sourceWalletId: type === 'expense' || type === 'transfer' ? sourceWalletId : undefined,
-      destinationWalletId: type === 'income' ? destinationWalletId : (type === 'transfer' ? destinationWalletId : undefined),
-      categoryId: categoryId || undefined,
-      categoryName: categoryName || (type === 'transfer' ? 'Transfer' : undefined),
+      destinationWalletId: type === 'income' ? incomeWalletId : (type === 'transfer' ? destinationWalletId : undefined),
+      sourceAsset: type === 'expense' || type === 'transfer' ? selectedSourceWallet?.name : undefined,
+      destinationAsset: type === 'income' ? incomeWallet?.name : (type === 'transfer' ? selectedDestWallet?.name : undefined),
+      categoryId: type === 'transfer' ? undefined : (categoryId || undefined),
+      categoryName: type === 'transfer' ? 'Uncategorized' : (categoryName || undefined),
       label: selectedLabel.trim() || undefined,
-      description: description.trim() || categoryName || (type === 'transfer' ? 'Transfer Kas' : 'Transaksi'),
+      description: description.trim() || (type === 'transfer' ? 'Transfer Antar Dompet' : categoryName) || 'Transaksi',
       imageUrl: receiptImage || undefined,
       addedBy,
       effectiveAt: new Date().toISOString()
@@ -460,7 +465,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
               <button
                 type="button"
                 onClick={() => {
-                  setWalletPickerTarget('source');
+                  setWalletPickerTarget(type === 'income' ? 'destination' : 'source');
                   setIsWalletPickerOpen(true);
                 }}
                 className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-left transition-all flex items-center justify-between"
@@ -470,8 +475,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                     {type === 'expense' ? 'Dari Dompet' : 'Ke Dompet'}
                   </span>
                   <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5 mt-0.5">
-                    <WalletIcon className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                    <span className="truncate">{selectedSourceWallet?.name}</span>
+                    <WalletIcon className={`w-3.5 h-3.5 shrink-0 ${type === 'income' ? 'text-emerald-700' : 'text-teal-700'}`} />
+                    <span className="truncate">
+                      {type === 'income' ? (selectedDestWallet?.name || selectedSourceWallet?.name) : selectedSourceWallet?.name}
+                    </span>
                   </div>
                 </div>
                 <span className="text-slate-400 text-xs ml-1">▾</span>
@@ -653,14 +660,19 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
               <div className="space-y-1.5">
                 {wallets.map(w => {
-                  const isSelected = (walletPickerTarget === 'source' ? sourceWalletId : destinationWalletId) === w.id;
+                  const isSelected = (type === 'income' ? (destinationWalletId || sourceWalletId) : (walletPickerTarget === 'source' ? sourceWalletId : destinationWalletId)) === w.id;
                   return (
                     <button
                       key={w.id}
                       type="button"
                       onClick={() => {
-                        if (walletPickerTarget === 'source') setSourceWalletId(w.id);
-                        else setDestinationWalletId(w.id);
+                        if (type === 'income') {
+                          setDestinationWalletId(w.id);
+                        } else if (walletPickerTarget === 'source') {
+                          setSourceWalletId(w.id);
+                        } else {
+                          setDestinationWalletId(w.id);
+                        }
                         setIsWalletPickerOpen(false);
                       }}
                       className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all ${

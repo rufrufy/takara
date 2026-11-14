@@ -31,7 +31,8 @@ import {
   CheckCheck,
   Clock,
   Coins,
-  Edit2
+  Edit2,
+  Camera
 } from 'lucide-react';
 
 interface FinancialProfileViewProps {
@@ -55,7 +56,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     updateDebt,
     deleteDebt,
     addTransaction,
-    members
+    members,
+    activeHousehold
   } = useApp();
 
   // Sub-kategori tabs: 'dompet' | 'utang' | 'pemasukan' (Default dibuka ke Aset dan Dompet)
@@ -93,7 +95,9 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
   // Quick Pay Installment Modal State
   const [paymentModalDebt, setPaymentModalDebt] = useState<DebtItem | null>(null);
   const [paymentSourceWalletId, setPaymentSourceWalletId] = useState<string>('');
+  const [paymentReceiptImage, setPaymentReceiptImage] = useState<string>('');
   const [paymentNotice, setPaymentNotice] = useState<string>('');
+  const paymentReceiptInputRef = React.useRef<HTMLInputElement>(null);
 
   // Edit Debt Modal State
   const [editingDebt, setEditingDebt] = useState<DebtItem | null>(null);
@@ -214,6 +218,22 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
   // Filter income transactions
   const incomeTransactions = transactions.filter(t => t.type === 'income');
 
+  const unattributedIncomeList = React.useMemo(() => {
+    const memberFullNames = new Set(members.map(m => (m.displayName || '').toLowerCase().trim()));
+    const memberFirstWords = new Set(members.map(m => (m.displayName || '').toLowerCase().trim().split(' ')[0] || ''));
+
+    const otherMap = new Map<string, number>();
+    for (const t of incomeTransactions) {
+      const cleanAb = (t.addedBy || '').trim();
+      const lower = cleanAb.toLowerCase();
+      const first = lower.split(' ')[0] || '';
+      if (!memberFullNames.has(lower) && !memberFirstWords.has(first)) {
+        const name = cleanAb || 'Lainnya';
+        otherMap.set(name, (otherMap.get(name) || 0) + t.amount);
+      }
+    }
+    return Array.from(otherMap.entries()).map(([name, amount]) => ({ name, amount }));
+  }, [members, incomeTransactions]);
   // Open New Debt Wizard
   const openNewDebtWizard = (type: 'debt' | 'receivable' = 'debt') => {
     setDebtType(type);
@@ -367,13 +387,15 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
 
     const res = payDebtInstallment(
       paymentModalDebt.id,
-      paymentSourceWalletId !== 'none' ? paymentSourceWalletId : undefined
+      paymentSourceWalletId !== 'none' ? paymentSourceWalletId : undefined,
+      paymentReceiptImage || undefined
     );
 
     if (res.success) {
       const debtName = paymentModalDebt.personOrEntity;
       setPaymentModalDebt(null);
       setPaymentSourceWalletId('');
+      setPaymentReceiptImage('');
       setPaymentNotice(`Cicilan untuk "${debtName}" berhasil dibayar!`);
       setTimeout(() => setPaymentNotice(''), 4000);
     }
@@ -813,6 +835,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                             onClick={() => {
                               setPaymentModalDebt(d);
                               setPaymentSourceWalletId(wallets[0]?.id || 'none');
+                              setPaymentReceiptImage('');
                             }}
                             className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition-colors"
                           >
@@ -880,14 +903,16 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {members.map((m, idx) => {
                 const memberName = m.displayName;
-                const firstWord = memberName.toLowerCase().split(' ')[0] || '';
-                const memberIncome = firstWord
-                  ? incomeTransactions
-                      .filter(t => t.addedBy?.toLowerCase().includes(firstWord))
-                      .reduce((sum, t) => sum + t.amount, 0)
-                  : 0;
+                const memberClean = memberName.toLowerCase().trim();
+                const firstWord = memberClean.split(' ')[0] || '';
+                const memberIncome = incomeTransactions
+                  .filter(t => {
+                    const ab = (t.addedBy || '').toLowerCase().trim();
+                    return ab === memberClean || (firstWord && ab.includes(firstWord));
+                  })
+                  .reduce((sum, t) => sum + t.amount, 0);
 
-                const colors = ['bg-teal-100 text-teal-800', 'bg-emerald-100 text-emerald-800', 'bg-blue-100 text-blue-800'];
+                const colors = ['bg-teal-100 text-teal-800', 'bg-emerald-100 text-emerald-800', 'bg-blue-100 text-blue-800', 'bg-amber-100 text-amber-800'];
                 const avatarColor = colors[idx % colors.length];
 
                 return (
@@ -909,6 +934,78 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   </div>
                 );
               })}
+
+              {unattributedIncomeList.map((entry) => (
+                <div key={entry.name} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
+                        {entry.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">Pemasukan {entry.name}</div>
+                        <div className="text-[11px] text-slate-400">Kontributor Tambahan</div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-extrabold text-emerald-600 tabular-nums">
+                      {formatIDR(entry.amount)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Daftar Riwayat Pemasukan Household */}
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-xs sm:text-sm">Riwayat Pemasukan Household ({incomeTransactions.length})</h3>
+                  <p className="text-[11px] text-slate-400">Seluruh aliran dana masuk yang tercatat di {activeHousehold?.name || 'Household'}</p>
+                </div>
+                <span className="text-xs font-extrabold text-emerald-600 tabular-nums">
+                  {formatIDR(periodIncome)}
+                </span>
+              </div>
+
+              {incomeTransactions.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  Belum ada transaksi pemasukan yang tercatat di household ini.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {incomeTransactions.map(t => (
+                    <div key={t.id} className="py-2.5 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                          <TrendingUp className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 truncate">
+                            {t.description || t.categoryName || 'Pemasukan'}
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
+                            <span className="text-emerald-700 font-semibold">{t.categoryName || 'Gaji'}</span>
+                            <span>•</span>
+                            <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded text-[10px] font-semibold">
+                              Oleh: {t.addedBy || 'Anggota'}
+                            </span>
+                            <span>•</span>
+                            <span>Masuk ke: {wallets.find(w => w.id === (t.destinationWalletId || t.sourceWalletId))?.name || t.destinationAsset || t.sourceAsset || 'Dompet'}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        <div className="font-extrabold text-emerald-600 tabular-nums">
+                          +{formatIDR(t.amount)}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {t.dateStr || new Date(t.effectiveAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -929,7 +1026,10 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                 </div>
               </div>
               <button
-                onClick={() => setPaymentModalDebt(null)}
+                onClick={() => {
+                  setPaymentModalDebt(null);
+                  setPaymentReceiptImage('');
+                }}
                 className="w-7 h-7 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
@@ -1004,10 +1104,76 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
               </div>
             </div>
 
+            {/* Lampiran Foto Struk / Bukti Transfer Cicilan */}
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-[11px] font-bold text-slate-600">
+                Bukti Transfer / Foto Struk (Opsional):
+              </label>
+
+              <input
+                ref={paymentReceiptInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setPaymentReceiptImage(reader.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+
+              {paymentReceiptImage ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src={paymentReceiptImage}
+                      alt="Struk Pembayaran"
+                      className="w-11 h-11 object-cover rounded-xl border border-slate-200"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-800">Foto Struk Terlampir</div>
+                      <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>Tersimpan ke riwayat transaksi</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentReceiptImage('');
+                      if (paymentReceiptInputRef.current) paymentReceiptInputRef.current.value = '';
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Hapus Foto"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => paymentReceiptInputRef.current?.click()}
+                  className="w-full py-2.5 px-3 border border-dashed border-slate-300 hover:border-amber-600 hover:bg-amber-50/40 rounded-2xl text-xs font-semibold text-slate-600 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Camera className="w-4 h-4 text-amber-700" />
+                  <span>Foto Struk / Upload Bukti Transfer</span>
+                </button>
+              )}
+            </div>
+
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setPaymentModalDebt(null)}
+                onClick={() => {
+                  setPaymentModalDebt(null);
+                  setPaymentReceiptImage('');
+                }}
                 className="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-200"
               >
                 Batal

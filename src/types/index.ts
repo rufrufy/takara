@@ -129,6 +129,7 @@ export interface DebtItem {
   isSettled: boolean;
   isPaidThisMonth?: boolean; // Status apakah cicilan bulan berjalan sudah dibayar
   lastPaidMonth?: string; // Penanda bulan pembayaran terakhir, e.g. '2026-11'
+  imageUrl?: string; // Foto bukti transfer / struk pembayaran cicilan
   createdAt: string;
 }
 
