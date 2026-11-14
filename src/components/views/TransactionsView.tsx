@@ -274,7 +274,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     const matchedDst = t.destinationWalletId || wallets.find(w => w.name.toLowerCase().trim() === (t.destinationAsset || t.sourceAsset)?.toLowerCase().trim())?.id || (t.type === 'income' ? matchedSrc : '') || wallets[1]?.id || wallets[0]?.id || '';
     setEditSourceWalletId(matchedSrc);
     setEditDestWalletId(matchedDst);
-    setEditCategoryId(t.categoryId || '');
+    if (t.type === 'transfer') {
+      setEditCategoryName('Transfer Antar Dompet');
+      setEditCategoryId('');
+    } else {
+      const typeCats = categories.filter(c => c.type === t.type);
+      const matchedCat = typeCats.find(c => c.id === t.categoryId || c.name.toLowerCase() === t.categoryName?.toLowerCase());
+      setEditCategoryId(matchedCat ? matchedCat.id : (typeCats[0]?.id || ''));
+      setEditCategoryName(matchedCat ? matchedCat.name : (t.categoryName || typeCats[0]?.name || ''));
+    }
     setEditLabel(t.label || '');
     setEditDescription(t.description || '');
     setEditDateStr(t.dateStr || new Date(t.effectiveAt).toLocaleDateString('id-ID'));
@@ -318,13 +326,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       destinationWalletId: editType === 'income' ? editDestWalletId : (editType === 'transfer' ? editDestWalletId : undefined),
       sourceAsset: editType === 'expense' || editType === 'transfer' ? (srcWallet?.name || detailTransaction.sourceAsset) : undefined,
       destinationAsset: editType === 'income' ? (dstWallet?.name || detailTransaction.destinationAsset) : (editType === 'transfer' ? dstWallet?.name : undefined),
-      categoryId: editCategoryId || undefined,
-      categoryName: editCategoryName || (editType === 'transfer' ? 'Transfer' : undefined),
+      categoryId: editType === 'transfer' ? undefined : (editCategoryId || undefined),
+      categoryName: editType === 'transfer' ? 'Transfer Antar Dompet' : (editCategoryName || (editType === 'income' ? 'Pemasukan Lainnya' : 'Pengeluaran Lainnya')),
       label: editLabel.trim() || undefined,
       description: editDescription.trim() || undefined,
       addedBy: editAddedBy,
       time: editTime || undefined,
-      fee: fee > 0 ? fee : undefined
+      fee: editType === 'transfer' && fee > 0 ? fee : undefined
     });
 
     if (res.success) {
@@ -1049,7 +1057,22 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                       <button
                         key={t}
                         type="button"
-                        onClick={() => setEditType(t)}
+                        onClick={() => {
+                          setEditType(t);
+                          if (t === 'transfer') {
+                            setEditCategoryName('Transfer Antar Dompet');
+                            setEditCategoryId('');
+                          } else {
+                            const typeCats = categories.filter(c => c.type === t);
+                            const currentMatch = typeCats.find(c => c.name === editCategoryName);
+                            if (currentMatch) {
+                              setEditCategoryId(currentMatch.id);
+                            } else if (typeCats.length > 0) {
+                              setEditCategoryName(typeCats[0]!.name);
+                              setEditCategoryId(typeCats[0]!.id);
+                            }
+                          }
+                        }}
                         className={`flex-1 py-1.5 rounded-lg font-bold capitalize transition-all ${
                           editType === t
                             ? t === 'expense'
@@ -1060,7 +1083,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        {t === 'expense' ? 'Pengeluaran' : t === 'income' ? 'Pemasukan' : 'Transfer'}
+                        {t === 'expense' ? 'Pengeluaran' : t === 'income' ? 'Pemasukan' : 'Transfer Antar Dompet'}
                       </button>
                     ))}
                   </div>
@@ -1127,37 +1150,63 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   </div>
                 )}
 
-                {/* Category & Label */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Kategori</label>
-                    <select
-                      value={editCategoryName}
-                      onChange={e => {
-                        setEditCategoryName(e.target.value);
-                        const c = categories.find(cat => cat.name === e.target.value);
-                        if (c) setEditCategoryId(c.id);
-                      }}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
-                    >
-                      {categories.map(c => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Category & Label (Dibedakan tegas per Tipe Transaksi) */}
+                {editType !== 'transfer' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Kategori {editType === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+                      </label>
+                      <select
+                        value={editCategoryName}
+                        onChange={e => {
+                          setEditCategoryName(e.target.value);
+                          const c = categories.find(cat => cat.name === e.target.value);
+                          if (c) setEditCategoryId(c.id);
+                        }}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                      >
+                        {categories
+                          .filter(c => c.type === editType)
+                          .map(c => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                          ))}
+                      </select>
+                    </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Label (Opsional)</label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: Sarapan, AI, Reina"
-                      value={editLabel}
-                      onChange={e => setEditLabel(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
-                    />
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Label (Opsional)</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Sarapan, AI, Reina"
+                        value={editLabel}
+                        onChange={e => setEditLabel(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                      />
+                    </div>
                   </div>
-                </div>
-
+                ) : (
+                  /* Form Khusus Transfer Antar Dompet */
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-900 mb-1">Tipe Mutasi</label>
+                      <div className="p-2 bg-blue-50 text-blue-800 rounded-xl font-bold border border-blue-200 text-xs">
+                        Transfer Antar Dompet
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Biaya Admin (Opsional)</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0 (Gratis)"
+                        value={editFeeStr ? parseInt(editFeeStr, 10).toLocaleString('id-ID') : ''}
+                        onChange={e => setEditFeeStr(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl tabular-nums font-semibold focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
                 {/* Description Input */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Keterangan / Deskripsi</label>
