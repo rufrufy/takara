@@ -465,7 +465,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         {activeTab === 'admin' && (
           <div className="w-full mt-4 flex flex-col items-center">
             <div className="w-full p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200 mb-3 text-left">
-              <strong>Admin Dashboard:</strong> Akses penuh konfigurasi sistem, API AI Vision, dan manajemen anggota. PIN bawaan: <code className="bg-amber-900/60 px-1 py-0.5 rounded font-mono font-bold">12345</code>.
+              <strong>Admin Dashboard:</strong> Akses penuh konfigurasi sistem, API AI Vision, dan manajemen anggota. PIN Superadmin: <code className="bg-amber-900/60 px-1 py-0.5 rounded font-mono font-bold">99999</code>.
             </div>
 
             {/* PIN Dots Display */}

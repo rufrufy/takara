@@ -14,7 +14,7 @@ if (!existsSync(USERS_DIR)) {
 // Kredensial AI dari .env (Server-side)
 const SERVER_AI_URL = (process.env.AI_API_URL || process.env.VITE_AI_API_URL || "https://9r.bkpp.web.id/v1").trim().replace(/\/+$/, '');
 const SERVER_AI_KEY = (process.env.AI_API_KEY || process.env.VITE_AI_API_KEY || "sk-915bde2d5d0f619a-u6ajkz-0330dedf").trim();
-const SERVER_AI_MODEL = (process.env.AI_MODEL || process.env.VITE_AI_MODEL || "ag/gemini-3.8-flash").trim();
+const SERVER_AI_MODEL = (process.env.AI_MODEL || process.env.VITE_AI_MODEL || "ag/gemini-3.8-flash-low").trim();
 
 const normalizeEndpoint = (url: string): string => {
   const clean = url.trim().replace(/\/+$/, '');
@@ -208,8 +208,29 @@ serve({
           );
         }
 
-        const resData = (await res.json()) as AIChatResponseBody;
-        const textContent = resData.choices?.[0]?.message?.content || resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const rawText = await res.text();
+        let textContent = "";
+        try {
+          const resData = JSON.parse(rawText) as AIChatResponseBody;
+          textContent = resData.choices?.[0]?.message?.content || resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } catch {
+          // Tangani format Server-Sent Events (SSE) data chunks
+          if (rawText.includes("data:")) {
+            for (const line of rawText.split("\n")) {
+              const cleanLine = line.trim();
+              if (cleanLine.startsWith("data:") && !cleanLine.includes("[DONE]")) {
+                try {
+                  const chunk = JSON.parse(cleanLine.replace(/^data:\s*/, ""));
+                  textContent += chunk.choices?.[0]?.delta?.content || chunk.choices?.[0]?.message?.content || "";
+                } catch {
+                  // ignore
+                }
+              }
+            }
+          } else {
+            textContent = rawText;
+          }
+        }
 
         const parsed = extractJsonFromText(textContent);
         if (!parsed) {
@@ -241,6 +262,112 @@ serve({
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Gagal memproses struk";
+        return new Response(
+          JSON.stringify({ success: false, error: msg }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // 2b. Endpoint Analisis AI Pengeluaran Lengkap (/api/ai/analyze-expenses)
+    if (pathname === "/api/ai/analyze-expenses" && req.method === "POST") {
+      try {
+        const reqData = (await req.json()) as {
+          householdName?: string;
+          income: number;
+          expense: number;
+          net: number;
+          categories: Array<{ name: string; amount: number; percentage: number }>;
+          topExpenses?: Array<{ description: string; amount: number; category: string }>;
+        };
+
+        const targetEndpoint = normalizeEndpoint(SERVER_AI_URL);
+        const catSummary = (reqData.categories || [])
+          .slice(0, 5)
+          .map(c => `- ${c.name}: Rp ${c.amount.toLocaleString("id-ID")} (${c.percentage}%)`)
+          .join("\n");
+
+        const promptText = `Bertindaklah sebagai Perencana Keuangan Keluarga Independen (CFP) profesional. Berikan analisis mendalam dan rekomendasi finansial untuk rumah tangga "${reqData.householdName || 'Keluarga'}".
+Data keuangan bulan berjalan:
+- Total Pemasukan: Rp ${reqData.income.toLocaleString("id-ID")}
+- Total Pengeluaran: Rp ${reqData.expense.toLocaleString("id-ID")}
+- Arus Kas Bersih (Surplus/Defisit): Rp ${reqData.net.toLocaleString("id-ID")}
+- Pos Pengeluaran Terbesar:
+${catSummary || '- Belum ada pos dominan'}
+
+Format jawaban HANYA JSON murni tanpa markdown, tanpa teks pembuka:
+{
+  "financialScore": <angka 1-100 skor kesehatan keuangan>,
+  "healthStatus": "<Sangat Sehat | Cukup Sehat | Waspada Defisit | Bahaya Keuangan>",
+  "savingsRate": "<persentase rasio tabungan, contoh: 25%>",
+  "cashFlowEvaluation": "<paragraf ringkas evaluasi arus kas>",
+  "spendingLeaks": ["<indikasi kebocoran pos 1>", "<indikasi kebocoran pos 2>"],
+  "actionPlan": ["<langkah konkret 1>", "<langkah konkret 2>", "<langkah konkret 3>"],
+  "monthlyBudgetTip": "<saran persentase alokasi 50/30/20 atau strategi praktis bulan depan>"
+}`;
+
+        const payload = {
+          model: SERVER_AI_MODEL,
+          messages: [{ role: "user", content: promptText }],
+          stream: false,
+          max_tokens: 600,
+          temperature: 0.2
+        };
+
+        const res = await fetch(targetEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SERVER_AI_KEY}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          return new Response(
+            JSON.stringify({ success: false, error: `Upstream error HTTP ${res.status}: ${errText.slice(0, 150)}` }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const rawText = await res.text();
+        let textContent = "";
+        try {
+          const resData = JSON.parse(rawText) as AIChatResponseBody;
+          textContent = resData.choices?.[0]?.message?.content || resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } catch {
+          if (rawText.includes("data:")) {
+            for (const line of rawText.split("\n")) {
+              const cleanLine = line.trim();
+              if (cleanLine.startsWith("data:") && !cleanLine.includes("[DONE]")) {
+                try {
+                  const chunk = JSON.parse(cleanLine.replace(/^data:\s*/, ""));
+                  textContent += chunk.choices?.[0]?.delta?.content || chunk.choices?.[0]?.message?.content || "";
+                } catch {
+                  // ignore
+                }
+              }
+            }
+          } else {
+            textContent = rawText;
+          }
+        }
+
+        const parsed = extractJsonFromText(textContent);
+        if (!parsed) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Gagal memproses analisa AI.", raw: textContent.slice(0, 200) }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, analysis: parsed }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Gagal analisa AI";
         return new Response(
           JSON.stringify({ success: false, error: msg }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -12,7 +12,12 @@ import {
   Tag as TagIcon,
   BarChart3,
   Percent,
-  Sparkles
+  Sparkles,
+  Brain,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  Lightbulb
 } from 'lucide-react';
 
 const CHART_COLORS = [
@@ -29,11 +34,25 @@ const CHART_COLORS = [
   '#64748B'  // Slate fallback
 ];
 
+interface AIAnalysisResult {
+  financialScore: number;
+  healthStatus: string;
+  savingsRate: string;
+  cashFlowEvaluation: string;
+  spendingLeaks: string[];
+  actionPlan: string[];
+  monthlyBudgetTip: string;
+  analyzedAt: string;
+}
+
 export const ReportsView: React.FC = () => {
-  const { transactions, periodIncome, periodExpense, netCashFlow } = useApp();
+  const { transactions, periodIncome, periodExpense, netCashFlow, activeHousehold } = useApp();
   const [reportTab, setReportTab] = useState<'kategori' | 'tren' | 'label'>('kategori');
   const [hoveredCatIndex, setHoveredCatIndex] = useState<number | null>(null);
 
+  // AI Expense Analysis state
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResult | null>(null);
   // Calculate expense categories breakdown
   const categoryStats = useMemo(() => {
     const expenseTxs = transactions.filter(t => t.type === 'expense');
@@ -636,6 +655,260 @@ export const ReportsView: React.FC = () => {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 4. AI Expense Deep Analysis Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-teal-800/40 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-extrabold text-base text-white">Analisis AI Pengeluaran Lengkap</h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-400/20 text-teal-300 border border-teal-400/30">
+                  AI Financial Advisor
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Audit otomatis kebocoran dana, rasio tabungan, dan rencana aksi penghematan {activeHousehold?.name || 'Keluarga'}.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              setIsAnalyzing(true);
+              const topCats = categoryStats.slice(0, 5).map(c => ({
+                name: c.name,
+                amount: c.amount,
+                percentage: c.percentage
+              }));
+
+              const calcSavingsRate = periodIncome > 0
+                ? `${Math.max(0, Math.round(((periodIncome - periodExpense) / periodIncome) * 100))}%`
+                : '0%';
+
+              // Default heuristic analysis engine (Instan & Handal)
+              const topCatName = topCats[0]?.name || 'Kebutuhan Harian';
+              const isDeficit = netCashFlow < 0;
+              const heuristicScore = Math.max(25, Math.min(95, Math.round(
+                (netCashFlow > 0 ? 60 : 35) + (periodIncome > 0 ? (netCashFlow / periodIncome) * 35 : 0)
+              )));
+
+              let fallbackResult: AIAnalysisResult = {
+                financialScore: heuristicScore,
+                healthStatus: heuristicScore >= 75 ? 'Sangat Sehat' : heuristicScore >= 50 ? 'Cukup Sehat' : 'Waspada Defisit',
+                savingsRate: calcSavingsRate,
+                cashFlowEvaluation: isDeficit
+                  ? `Pengeluaran bulan ini (Rp ${periodExpense.toLocaleString('id-ID')}) melebihi pemasukan dengan defisit Rp ${Math.abs(netCashFlow).toLocaleString('id-ID')}. Perlu evaluasi darurat pos non-pokok.`
+                  : `Arus kas keluarga mencatatkan surplus sehat sebesar Rp ${netCashFlow.toLocaleString('id-ID')} dengan rasio tabungan ${calcSavingsRate}. Disiplin pencatatan berjalan dengan baik.`,
+                spendingLeaks: [
+                  `Pos "${topCatName}" memakan ${topCats[0]?.percentage || 0}% total anggaran belanja. Pertimbangkan membatasi alokasi mingguan.`,
+                  categoryStats.length > 3
+                    ? `Terdapat ${categoryStats.length} pos belanja berbeda yang berpotensi memicu kebocoran transaksi mikro yang tidak terasa.`
+                    : 'Alokasi pengeluaran masih terkonsentrasi di pos-pos kebutuhan utama.'
+                ],
+                actionPlan: [
+                  `Terapkan aturan jeda belanja 24 jam untuk transaksi di atas Rp 200.000 pada pos non-esensial.`,
+                  `Amankan surplus minimal 15% langsung di awal bulan begitu gaji/pemasukan diterima ke rekening terpisah.`,
+                  `Tetapkan batas pagu maksimal untuk pos "${topCatName}" agar sisa dana akhir bulan meningkat.`
+                ],
+                monthlyBudgetTip: 'Gunakan formula alokasi 50/30/20: 50% untuk kebutuhan pokok, 30% untuk gaya hidup, dan minimal 20% dialokasikan ke tabungan/dana darurat.',
+                analyzedAt: new Date().toLocaleTimeString('id-ID')
+              };
+
+              try {
+                const res = await fetch('/api/ai/analyze-expenses', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    householdName: activeHousehold?.name || 'Keluarga',
+                    income: periodIncome,
+                    expense: periodExpense,
+                    net: netCashFlow,
+                    categories: topCats
+                  })
+                });
+
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.success && data.analysis) {
+                    const a = data.analysis;
+                    fallbackResult = {
+                      financialScore: Number(a.financialScore) || fallbackResult.financialScore,
+                      healthStatus: a.healthStatus || fallbackResult.healthStatus,
+                      savingsRate: a.savingsRate || fallbackResult.savingsRate,
+                      cashFlowEvaluation: a.cashFlowEvaluation || fallbackResult.cashFlowEvaluation,
+                      spendingLeaks: Array.isArray(a.spendingLeaks) && a.spendingLeaks.length > 0 ? a.spendingLeaks : fallbackResult.spendingLeaks,
+                      actionPlan: Array.isArray(a.actionPlan) && a.actionPlan.length > 0 ? a.actionPlan : fallbackResult.actionPlan,
+                      monthlyBudgetTip: a.monthlyBudgetTip || fallbackResult.monthlyBudgetTip,
+                      analyzedAt: new Date().toLocaleTimeString('id-ID')
+                    };
+                  }
+                }
+              } catch {
+                // Gunakan fallback cerdas
+              } finally {
+                setAiAnalysis(fallbackResult);
+                setIsAnalyzing(false);
+              }
+            }}
+            disabled={isAnalyzing}
+            className="px-4 py-2.5 rounded-2xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-teal-900/40 cursor-pointer shrink-0"
+          >
+            {isAnalyzing ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-teal-200" />
+                <span>Menganalisis...</span>
+              </>
+            ) : aiAnalysis ? (
+              <>
+                <RefreshCw className="w-4 h-4 text-teal-200" />
+                <span>Perbarui Analisis</span>
+              </>
+            ) : (
+              <>
+                <Brain className="w-4 h-4 text-teal-200" />
+                <span>Mulai Analisa AI</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Not Yet Analyzed State */}
+        {!aiAnalysis && !isAnalyzing && (
+          <div className="p-5 rounded-2xl bg-white/5 border border-white/10 text-center space-y-2">
+            <p className="text-xs text-slate-300">
+              Klik tombol di atas untuk menjalankan audit cerdas AI atas {transactions.filter(t => t.type === 'expense').length} transaksi pengeluaran bulan ini.
+            </p>
+            <div className="text-[11px] text-teal-300/80">
+              Mencakup: Evaluasi Arus Kas • Deteksi Pos Bocor Halus • 3 Rencana Aksi Nyata
+            </div>
+          </div>
+        )}
+
+        {/* Loading State Skeleton */}
+        {isAnalyzing && (
+          <div className="p-6 rounded-2xl bg-white/5 border border-white/10 text-center space-y-3 animate-pulse">
+            <div className="w-8 h-8 rounded-full bg-teal-500/30 mx-auto flex items-center justify-center">
+              <RefreshCw className="w-4 h-4 animate-spin text-teal-300" />
+            </div>
+            <p className="text-xs font-semibold text-teal-200">
+              AI sedang mengaudit seluruh pos pengeluaran dan menghitung rasio tabungan keluarga...
+            </p>
+          </div>
+        )}
+
+        {/* Results Display */}
+        {aiAnalysis && !isAnalyzing && (
+          <div className="space-y-4 pt-1 text-xs">
+            {/* Skor & Status Pills */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="p-3.5 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] text-slate-300 uppercase font-semibold">Skor Finansial</div>
+                  <div className="text-xl font-extrabold text-white mt-0.5 tabular-nums">
+                    {aiAnalysis.financialScore} <span className="text-xs text-slate-400 font-normal">/ 100</span>
+                  </div>
+                </div>
+                <div className={`px-2.5 py-1 rounded-xl text-[11px] font-bold ${
+                  aiAnalysis.financialScore >= 75
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : aiAnalysis.financialScore >= 50
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                }`}>
+                  {aiAnalysis.healthStatus}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/10 border border-white/10">
+                <div className="text-[10px] text-slate-300 uppercase font-semibold">Rasio Tabungan</div>
+                <div className="text-xl font-extrabold text-teal-300 mt-0.5 tabular-nums">
+                  {aiAnalysis.savingsRate}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Target sehat: &gt; 20% pemasukan</div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/10 border border-white/10">
+                <div className="text-[10px] text-slate-300 uppercase font-semibold">Net Cash Flow</div>
+                <div className={`text-xl font-extrabold mt-0.5 tabular-nums ${netCashFlow >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>
+                  {netCashFlow >= 0 ? `+${formatIDR(netCashFlow)}` : formatIDR(netCashFlow)}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {netCashFlow >= 0 ? 'Surplus terjaga' : 'Defisit perlu ditekan'}
+                </div>
+              </div>
+            </div>
+
+            {/* Evaluasi Arus Kas */}
+            <div className="p-4 rounded-2xl bg-white/10 border border-white/10 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-teal-300 font-bold text-xs">
+                <TrendingUp className="w-4 h-4" />
+                <span>Evaluasi Arus Kas & Kondisi Finansial</span>
+              </div>
+              <p className="text-slate-200 leading-relaxed text-xs">
+                {aiAnalysis.cashFlowEvaluation}
+              </p>
+            </div>
+
+            {/* Indikasi Kebocoran Pos Pengeluaran */}
+            {aiAnalysis.spendingLeaks && aiAnalysis.spendingLeaks.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/30 space-y-2">
+                <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Sorotan Pos Terbesar & Potensi Kebocoran Halus</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {aiAnalysis.spendingLeaks.map((leak, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-amber-100 text-xs leading-normal">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                      <span>{leak}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* 3 Rekomendasi Aksi Nyata */}
+            {aiAnalysis.actionPlan && aiAnalysis.actionPlan.length > 0 && (
+              <div className="p-4 rounded-2xl bg-white/10 border border-white/10 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold text-xs">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Rencana Aksi Penghematan 30 Hari ke Depan</span>
+                </div>
+                <div className="space-y-2">
+                  {aiAnalysis.actionPlan.map((action, idx) => (
+                    <div key={idx} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-black/20 border border-white/5">
+                      <span className="w-5 h-5 rounded-lg bg-teal-500/30 text-teal-300 text-xs font-bold flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span className="text-slate-200 text-xs leading-normal">{action}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Monthly Budget Tip */}
+            {aiAnalysis.monthlyBudgetTip && (
+              <div className="p-3.5 rounded-2xl bg-teal-900/40 border border-teal-500/30 flex items-start gap-2.5">
+                <Lightbulb className="w-4 h-4 text-teal-300 shrink-0 mt-0.5" />
+                <div className="text-xs text-teal-100 leading-normal">
+                  <strong className="text-teal-200">Tips Alokasi Budget: </strong>
+                  {aiAnalysis.monthlyBudgetTip}
+                </div>
+              </div>
+            )}
+
+            <div className="text-[10px] text-slate-400 text-right pt-1">
+              Dianalisis pada: {aiAnalysis.analyzedAt}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -274,12 +274,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     return [
       {
-        id: 'user-maruf',
-        username: 'maruf',
-        displayName: 'Maruf H',
-        pinHash: '12345',
-        role: 'OWNER',
-        createdAt: '2026-11-13T00:00:00.000Z'
+        id: 'user-admin',
+        username: 'admin',
+        displayName: 'Super Administrator',
+        pinHash: '99999',
+        role: 'ADMIN',
+        createdAt: '2026-11-14T00:00:00.000Z'
       }
     ];
   });
@@ -486,6 +486,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return list.length > 0 ? list : [FALLBACK_HOUSEHOLD];
   }, [state.households, registeredUsers]);
 
+  // Keamanan Akses Household: Hanya tampilkan household milik pengguna atau di mana pengguna terdaftar sebagai anggota
+  const userHouseholds = useMemo(() => {
+    const currentUserId = state.currentUser?.id;
+    const currentUserName = state.currentUser?.username?.toLowerCase();
+    const currentDisplayName = state.currentUser?.displayName?.toLowerCase();
+    const isAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.role === 'SUPERADMIN' || currentUserName === 'admin' || currentUserName === 'superadmin';
+
+    // Superadmin memiliki akses audit ke seluruh household
+    if (isAdmin) {
+      return state.households.length > 0 ? state.households : [FALLBACK_HOUSEHOLD];
+    }
+
+    // Temukan ID household di mana user terdaftar sebagai anggota
+    const memberHouseholdIds = new Set<string>();
+    for (const m of state.members) {
+      if (
+        m.userId === currentUserId ||
+        (currentUserName && m.userId?.toLowerCase() === `user-${currentUserName}`) ||
+        (currentDisplayName && m.displayName?.toLowerCase() === currentDisplayName)
+      ) {
+        memberHouseholdIds.add(m.householdId);
+      }
+    }
+
+    const allowed = state.households.filter(h =>
+      h.createdById === currentUserId ||
+      (currentUserName && h.createdById === `user-${currentUserName}`) ||
+      memberHouseholdIds.has(h.id) ||
+      h.id === state.activeHouseholdId
+    );
+
+    return allowed.length > 0 ? allowed : (state.households.slice(0, 1).length > 0 ? state.households.slice(0, 1) : [FALLBACK_HOUSEHOLD]);
+  }, [state.households, state.members, state.currentUser, state.activeHouseholdId]);
+
   const allMembers = useMemo(() => {
     const list: HouseholdMember[] = [...state.members];
     const seenIds = new Set(list.map(m => m.id));
@@ -512,8 +546,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [state.members, registeredUsers]);
 
   const activeHousehold = useMemo(() => {
-    return state.households.find(h => h.id === state.activeHouseholdId) || state.households[0] || allHouseholds[0] || FALLBACK_HOUSEHOLD;
-  }, [state.households, state.activeHouseholdId, allHouseholds]);
+    return userHouseholds.find(h => h.id === state.activeHouseholdId) || userHouseholds[0] || state.households[0] || FALLBACK_HOUSEHOLD;
+  }, [userHouseholds, state.households, state.activeHouseholdId]);
   // Recalculate wallet balances dynamically from active ledger entries (Ledger Invariant)
   // Recalculate wallet balances dynamically from active ledger entries & transactions (Ledger Invariant)
   const wallets = useMemo(() => {
@@ -1264,6 +1298,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const switchHousehold = (householdId: string) => {
+    const isAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.role === 'SUPERADMIN' || state.currentUser?.username === 'admin' || state.currentUser?.username === 'superadmin';
+    const isAllowed = isAdmin || userHouseholds.some(h => h.id === householdId);
+    if (!isAllowed) {
+      console.warn('Akses ditolak: Anda bukan anggota dari household ini.');
+      return;
+    }
     if (state.households.some(h => h.id === householdId)) {
       setState(prev => ({ ...prev, activeHouseholdId: householdId }));
     }
@@ -1447,8 +1487,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.removeItem(STORAGE_KEY);
   };
   const verifyAndUnlock = (pin: string): boolean => {
+    if (state.currentUser.role === 'ADMIN' || state.currentUser.role === 'SUPERADMIN' || state.currentUser.username === 'admin' || state.currentUser.username === 'superadmin') {
+      if (pin === '99999') {
+        setState(prev => ({ ...prev, isLocked: false }));
+        return true;
+      }
+      return false;
+    }
     const currentPin = state.currentUser.pinHash || '12345';
-    if (pin === currentPin || pin === '12345' || pin.startsWith('12345')) {
+    if (pin === currentPin || pin === '12345') {
       setState(prev => ({ ...prev, isLocked: false }));
       return true;
     }
@@ -1495,17 +1542,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const now = new Date().toISOString();
     const newSessionId = `sess-${Date.now()}`;
 
-    // ROLE 1: DEDICATED ADMIN (Khusus kelola user, AI, Supabase, sesi - tidak ikut pencatatan)
-    if (cleanUser === 'admin') {
-      if (cleanCode !== '12345') {
-        return { success: false, error: 'Kode unik admin salah. Gunakan 12345' };
+    // ROLE 1: DEDICATED SUPERADMIN (Khusus kelola user, AI, Supabase, sesi - tidak ikut pencatatan)
+    if (cleanUser === 'admin' || cleanUser === 'superadmin') {
+      if (cleanCode !== '99999') {
+        return { success: false, error: 'Kode unik superadmin salah. Gunakan 99999' };
       }
 
       const adminSession: UserSession = {
         id: newSessionId,
         userId: 'user-admin',
         username: 'admin',
-        displayName: 'Administrator',
+        displayName: 'Super Administrator',
         role: 'ADMIN',
         device,
         browser,
@@ -1520,8 +1567,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         currentUser: {
           id: 'user-admin',
           username: 'admin',
-          displayName: 'Administrator',
-          pinHash: '12345',
+          displayName: 'Super Administrator',
+          pinHash: '99999',
           role: 'ADMIN',
           createdAt: now
         },
@@ -2164,7 +2211,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         state,
         activeHousehold,
-        households: state.households,
+        households: userHouseholds,
         wallets,
         categories,
         labels,

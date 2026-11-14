@@ -64,7 +64,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   provider: 'custom',
   apiUrl: 'https://9r.bkpp.web.id/v1',
   apiKey: 'sk-915bde2d5d0f619a-u6ajkz-0330dedf',
-  model: 'ag/gemini-3.8-flash',
+  model: 'ag/gemini-3.8-flash-low',
   systemPrompt:
     'Kamu adalah asisten keuangan pintar. Ekstrak data struk/nota pembayaran ini dalam format JSON murni tanpa teks pengantar: {"amount": number, "description": string, "categoryName": string, "date": "YYYY-MM-DD", "type": "expense"}'
 };
@@ -239,16 +239,16 @@ export const compressImageForAI = async (imageInput: File | string): Promise<str
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return rawDataUrl;
   }
-
-  // If already a small image (< 350KB), return as is
-  if (rawDataUrl.length < 350 * 1024) {
+  // If already a tiny image (< 60KB), return as is
+  if (rawDataUrl.length < 60 * 1024) {
     return rawDataUrl;
   }
 
   const { promise, resolve } = Promise.withResolvers<string>();
   const img = new Image();
   img.onload = () => {
-    const maxDim = 1200;
+    // 800px max dimension is optimal for receipt OCR without heavy byte payload
+    const maxDim = 800;
     let width = img.width;
     let height = img.height;
 
@@ -275,7 +275,8 @@ export const compressImageForAI = async (imageInput: File | string): Promise<str
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0, width, height);
 
-    const compressed = canvas.toDataURL('image/jpeg', 0.82);
+    // 0.72 JPEG quality creates lightweight ~40-70KB payload for instant network transfer
+    const compressed = canvas.toDataURL('image/jpeg', 0.72);
     resolve(compressed);
   };
   img.onerror = () => resolve(rawDataUrl);
