@@ -10,8 +10,6 @@ import {
   ArrowRightLeft,
   Wallet as WalletIcon,
   ChevronRight,
-  FileSpreadsheet,
-  CheckCircle2,
   Building2,
   Banknote,
   Smartphone,
@@ -43,30 +41,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickAdd, onOpenAIScan
   return (
     <div className="space-y-4 pb-20 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Excel Active Badge or Fresh Welcome Banner */}
-      {transactions.length > 0 ? (
-        <div
-          onClick={onOpenImport}
-          className="bg-emerald-50 hover:bg-emerald-100/80 cursor-pointer border border-emerald-200/90 rounded-2xl p-3 flex items-center justify-between transition-colors shadow-2xs"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
-              <FileSpreadsheet className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-xs text-emerald-950">Data Keuangan Terhubung</span>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              </div>
-              <p className="text-[11px] text-emerald-700">
-                {transactions.length} transaksi dimuat • Net {formatIDR(netCashFlow)}
-              </p>
-            </div>
-          </div>
-          <span className="text-[11px] font-semibold text-emerald-800 flex items-center">
-            Kelola <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
-          </span>
-        </div>
-      ) : (
+      {transactions.length === 0 && (
         <div className="bg-teal-50/80 border border-teal-200/90 rounded-2xl p-3.5 flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center">
