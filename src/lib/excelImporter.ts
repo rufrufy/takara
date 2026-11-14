@@ -20,11 +20,12 @@ export function parseFinancialExcel(
   targetHouseholdName?: string
 ): ParseExcelResult {
   try {
-    const workbook = XLSX.read(data, { type: 'array' });
+    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
     
-    // 1. Parse Summary Sheet
-    const summarySheet = workbook.Sheets['Summary'];
-    let householdName = 'Keuangan Maruf';
+    // 1. Parse Summary Sheet jika ada
+    const summarySheetName = workbook.SheetNames.find(n => n.toLowerCase().trim() === 'summary');
+    const summarySheet = summarySheetName ? workbook.Sheets[summarySheetName] : undefined;
+    let householdName = 'Keuangan Keluarga';
     let exportedOn = new Date().toLocaleString('id-ID');
     let totalIncome = 0;
     let totalExpenses = 0;
@@ -60,12 +61,30 @@ export function parseFinancialExcel(
       }
     }
 
-    // 2. Parse Transactions Sheet
-    const txSheet = workbook.Sheets['Transactions'];
+    // 2. Temukan Lembar Kerja Transaksi secara fleksibel
+    let txSheet: XLSX.WorkSheet | undefined;
+    const preferredNames = ['transactions', 'transaksi', 'mutasi', 'data', 'sheet1', 'sheet 1'];
+    for (const name of workbook.SheetNames) {
+      const clean = name.toLowerCase().trim();
+      if (preferredNames.includes(clean) || clean.includes('trans')) {
+        txSheet = workbook.Sheets[name];
+        break;
+      }
+    }
+
+    if (!txSheet) {
+      const nonSummary = workbook.SheetNames.filter(n => !n.toLowerCase().includes('summary'));
+      if (nonSummary.length > 0 && workbook.Sheets[nonSummary[0]!]) {
+        txSheet = workbook.Sheets[nonSummary[0]!];
+      } else if (workbook.SheetNames.length > 0) {
+        txSheet = workbook.Sheets[workbook.SheetNames[0]!];
+      }
+    }
+
     if (!txSheet) {
       return {
         success: false,
-        error: 'Lembar kerja "Transactions" tidak ditemukan di dalam berkas Excel.',
+        error: 'Lembar kerja transaksi tidak ditemukan di dalam berkas Excel.',
         summary: {} as ExcelImportSummary,
         household: {} as Household,
         members: [],
@@ -78,6 +97,20 @@ export function parseFinancialExcel(
     }
 
     const rawTxs = XLSX.utils.sheet_to_json<Record<string, unknown>>(txSheet);
+    if (!rawTxs || rawTxs.length === 0) {
+      return {
+        success: false,
+        error: 'Lembar transaksi kosong atau tidak memuat baris data.',
+        summary: {} as ExcelImportSummary,
+        household: {} as Household,
+        members: [],
+        wallets: [],
+        categories: [],
+        labels: [],
+        transactions: [],
+        ledgerEntries: []
+      };
+    }
 
     const householdId = targetHouseholdId;
     const household: Household = {
@@ -87,7 +120,6 @@ export function parseFinancialExcel(
       createdById: 'user-default',
       createdAt: '2026-11-01T00:00:00.000Z'
     };
-
     // Extract Assets/Wallets
     const walletMap = new Map<string, Wallet>();
     const getWalletId = (name: string) => `w-${householdId}-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
@@ -208,31 +240,126 @@ export function parseFinancialExcel(
     let calculatedIncome = 0;
     let calculatedExpense = 0;
 
+    // Helper fleksibel untuk membaca kolom dari berbagai alias (Indonesia / Inggris)
+    const getRowVal = (row: Record<string, unknown>, ...aliases: string[]): unknown => {
+      const keys = Object.keys(row);
+      for (const alias of aliases) {
+        const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const key of keys) {
+          const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (cleanKey === cleanAlias) {
+            return row[key];
+          }
+        }
+      }
+      return undefined;
+    };
+
+    const parseAmount = (val: unknown): number => {
+      if (typeof val === 'number') {
+        return isNaN(val) ? 0 : Math.round(Math.abs(val));
+      }
+      if (!val) return 0;
+      const str = String(val).trim();
+      const digits = str.replace(/[^0-9]/g, '');
+      return digits ? parseInt(digits, 10) || 0 : 0;
+    };
+
+    const parseTxType = (typeVal: unknown, catVal: unknown): 'income' | 'expense' | 'transfer' => {
+      const str = String(typeVal || '').toLowerCase().trim();
+      if (str.includes('income') || str.includes('masuk') || str.includes('pemasukan') || str.includes('kredit')) return 'income';
+      if (str.includes('transfer') || str.includes('pindah') || str.includes('mutasi')) return 'transfer';
+      const catStr = String(catVal || '').toLowerCase().trim();
+      if (catStr.includes('gaji') || catStr.includes('bonus') || catStr.includes('pemasukan') || catStr.includes('income')) return 'income';
+      return 'expense';
+    };
+
+    const parseDateAndEffectiveAt = (dateVal: unknown, timeVal: unknown): { dateStr: string; timeStr: string; effectiveAt: string } => {
+      const now = new Date();
+      let d: Date | null = null;
+      let dateStr = '';
+
+      if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+        d = dateVal;
+        dateStr = d.toISOString().split('T')[0]!;
+      } else if (typeof dateVal === 'number' && dateVal > 25000 && dateVal < 70000) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        d = new Date(excelEpoch.getTime() + dateVal * 86400000);
+        dateStr = d.toISOString().split('T')[0]!;
+      } else if (dateVal) {
+        const s = String(dateVal).trim();
+        const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+        if (dmy) {
+          const year = dmy[3]!.length === 2 ? `20${dmy[3]}` : dmy[3]!;
+          const month = dmy[2]!.padStart(2, '0');
+          const day = dmy[1]!.padStart(2, '0');
+          d = new Date(`${year}-${month}-${day}T12:00:00.000Z`);
+          dateStr = `${year}-${month}-${day}`;
+        } else {
+          const parsed = new Date(s);
+          if (!isNaN(parsed.getTime())) {
+            d = parsed;
+            dateStr = parsed.toISOString().split('T')[0]!;
+          }
+        }
+      }
+
+      if (!d || isNaN(d.getTime())) {
+        d = now;
+        dateStr = now.toISOString().split('T')[0]!;
+      }
+
+      let timeStr = '';
+      if (timeVal) {
+        if (typeof timeVal === 'number' && timeVal >= 0 && timeVal < 1) {
+          const totalSec = Math.round(timeVal * 86400);
+          const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+          const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+          timeStr = `${h}:${m}`;
+        } else {
+          timeStr = String(timeVal).trim();
+        }
+      }
+
+      return {
+        dateStr,
+        timeStr,
+        effectiveAt: d.toISOString()
+      };
+    };
+
+    const importTimestamp = Date.now();
+
     for (let i = 0; i < rawTxs.length; i++) {
       const row = rawTxs[i]!;
-      const no = typeof row['No'] === 'number' ? row['No'] : parseInt(String(row['No']), 10) || i + 1;
-      const rawType = String(row['Type'] || '').toLowerCase().trim();
-      const amount = Math.round(Number(row['Amount']) || 0);
-      const catName = String(row['Category'] || '').trim();
-      const catType = String(row['Category Type'] || '').toLowerCase().trim() as 'income' | 'expense' | undefined;
-      const label = String(row['Label'] || '').trim();
-      const sourceAsset = String(row['Source Asset'] || row['Asset'] || row['Dompet'] || row['Rekening'] || row['Wallet'] || '').trim();
-      const sourceAssetType = String(row['Source Asset Type'] || '').trim();
-      const destAsset = String(row['Destination Asset'] || row['Tujuan'] || row['Dompet Tujuan'] || row['Rekening Tujuan'] || '').trim();
-      const addedBy = String(row['Added By'] || 'Import Excel').trim() || 'Import Excel';
-      const description = String(row['Description'] || '').trim();
-      const notes = String(row['Notes'] || '').trim();
-      const dateStr = String(row['Date'] || '').trim();
-      const day = String(row['Day'] || '').trim();
-      const timeStr = String(row['Time'] || '').trim();
-      const fee = Math.round(Number(row['Transfer Fee']) || 0);
-      const autoIncome = String(row['Auto Income'] || '').toLowerCase() === 'yes';
-      const fromSavings = String(row['From Savings'] || '').toLowerCase() === 'yes';
-      const fromInvestment = String(row['From Investment'] || '').toLowerCase() === 'yes';
+      const rawNo = getRowVal(row, 'No', 'No.', 'Nomor', 'Index');
+      const no = typeof rawNo === 'number' ? rawNo : parseInt(String(rawNo), 10) || i + 1;
 
-      let txType: 'income' | 'expense' | 'transfer' = 'expense';
-      if (rawType === 'income') txType = 'income';
-      else if (rawType === 'transfer') txType = 'transfer';
+      const rawAmountVal = getRowVal(row, 'Amount', 'Nominal', 'Jumlah', 'Total', 'Nilai', 'Besaran', 'Kredit', 'Debit', 'Harga');
+      const amount = parseAmount(rawAmountVal);
+
+      const catName = String(getRowVal(row, 'Category', 'Kategori', 'Pos') || '').trim();
+      const rawTypeVal = getRowVal(row, 'Type', 'Tipe', 'Jenis', 'Kategori Tipe');
+      const txType = parseTxType(rawTypeVal, catName);
+
+      const label = String(getRowVal(row, 'Label', 'Tag', 'Sub', 'Sub Kategori') || '').trim();
+      const sourceAsset = String(getRowVal(row, 'Source Asset', 'Dompet', 'Rekening', 'Dari Dompet', 'Sumber', 'Asset', 'Wallet', 'Dari', 'Akun') || '').trim();
+      const sourceAssetType = String(getRowVal(row, 'Source Asset Type', 'Tipe Dompet', 'Jenis Rekening') || '').trim();
+      const destAsset = String(getRowVal(row, 'Destination Asset', 'Tujuan', 'Dompet Tujuan', 'Rekening Tujuan', 'Ke Dompet', 'Ke') || '').trim();
+      const addedBy = String(getRowVal(row, 'Added By', 'Dicatat Oleh', 'Pencatat', 'Oleh', 'User', 'Anggota', 'Member') || 'Import Excel').trim() || 'Import Excel';
+      const description = String(getRowVal(row, 'Description', 'Deskripsi', 'Keterangan', 'Rincian', 'Catatan', 'Nama', 'Item', 'Keperluan') || '').trim();
+      const notes = String(getRowVal(row, 'Notes', 'Catatan Tambahan', 'Keterangan Tambahan') || '').trim();
+
+      const rawDateVal = getRowVal(row, 'Date', 'Tanggal', 'Tgl', 'Waktu');
+      const rawTimeVal = getRowVal(row, 'Time', 'Jam', 'Waktu');
+      const { dateStr, timeStr, effectiveAt } = parseDateAndEffectiveAt(rawDateVal, rawTimeVal);
+
+      const rawFeeVal = getRowVal(row, 'Transfer Fee', 'Biaya Admin', 'Admin Fee', 'Fee', 'Biaya');
+      const fee = parseAmount(rawFeeVal);
+
+      const autoIncome = String(getRowVal(row, 'Auto Income') || '').toLowerCase() === 'yes';
+      const fromSavings = String(getRowVal(row, 'From Savings') || '').toLowerCase() === 'yes';
+      const fromInvestment = String(getRowVal(row, 'From Investment') || '').toLowerCase() === 'yes';
 
       // Pastikan dompet pemasukan tercatat sebagai destinationAsset
       const incomeAsset = destAsset || sourceAsset;
@@ -251,8 +378,8 @@ export function parseFinancialExcel(
       if (label) labelsSet.add(label);
       if (catName) ensureCategory(catName, txType);
 
-      const txId = `tx-${householdId}-${no}`;
-      const effectiveAt = dateStr ? new Date(`${dateStr} ${timeStr || '12:00'}`).toISOString() : new Date().toISOString();
+      // Gunakan ID unik yang stabil
+      const txId = `tx-${householdId}-${importTimestamp}-${no}`;
 
       const tx: FinancialTransaction = {
         id: txId,
@@ -266,14 +393,13 @@ export function parseFinancialExcel(
           ? (incomeAsset ? getWalletId(incomeAsset) : undefined)
           : (txType === 'transfer' && destAsset ? getWalletId(destAsset) : undefined),
         categoryId: catName ? getCategoryId(catName) : undefined,
-        categoryName: catName || (txType === 'transfer' ? 'Transfer' : 'Lainnya'),
-        categoryType: catType || (txType === 'income' ? 'income' : 'expense'),
+        categoryName: catName || (txType === 'transfer' ? 'Transfer Antar Dompet' : (txType === 'income' ? 'Pemasukan' : 'Lainnya')),
+        categoryType: txType === 'income' ? 'income' : 'expense',
         label: label || undefined,
-        description: description || label || undefined,
+        description: description || label || catName || (txType === 'transfer' ? 'Transfer Antar Dompet' : 'Transaksi'),
         notes: notes || undefined,
         effectiveAt,
         dateStr: dateStr || undefined,
-        day: day || undefined,
         time: timeStr || undefined,
         sourceAsset: txType === 'income' ? undefined : (expenseAsset || undefined),
         sourceAssetType: sourceAssetType || undefined,
@@ -283,8 +409,8 @@ export function parseFinancialExcel(
         fromSavings,
         fromInvestment,
         status: 'POSTED',
-        createdAt: String(row['Created At'] || effectiveAt),
-        updatedAt: String(row['Last Updated'] || effectiveAt)
+        createdAt: String(getRowVal(row, 'Created At') || effectiveAt),
+        updatedAt: String(getRowVal(row, 'Last Updated') || effectiveAt)
       };
 
       transactions.push(tx);

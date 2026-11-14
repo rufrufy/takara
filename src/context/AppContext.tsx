@@ -1472,6 +1472,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       // Petakan transaksi & ledger agar sesuai dengan ID dompet & kategori rumah tangga aktif
+      const defaultWallet = resolvedWallets[0] || state.wallets[0];
+
       const remappedTxs = result.transactions.map(tx => {
         let srcWalletId = tx.sourceWalletId;
         let dstWalletId = tx.destinationWalletId;
@@ -1492,14 +1494,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (match) catId = match.id;
         }
 
-        // Khusus pemasukan: pastikan dompet penerima selalu tercatat di destinationWalletId dan destinationAsset
+        // Pastikan dompet tidak kosong
         if (tx.type === 'income') {
-          if (!dstWalletId && srcWalletId) {
-            dstWalletId = srcWalletId;
-          }
-          if (!dstAsset && srcAsset) {
-            dstAsset = srcAsset;
-          }
+          if (!dstWalletId && srcWalletId) dstWalletId = srcWalletId;
+          if (!dstWalletId && defaultWallet) dstWalletId = defaultWallet.id;
+          if (!dstAsset && defaultWallet) dstAsset = defaultWallet.name;
+        } else if (tx.type === 'expense') {
+          if (!srcWalletId && defaultWallet) srcWalletId = defaultWallet.id;
+          if (!srcAsset && defaultWallet) srcAsset = defaultWallet.name;
+        } else if (tx.type === 'transfer') {
+          if (!srcWalletId && defaultWallet) srcWalletId = defaultWallet.id;
+          if (!dstWalletId && resolvedWallets[1]) dstWalletId = resolvedWallets[1].id;
         }
 
         return {
@@ -1507,9 +1512,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           householdId: targetHouseholdId,
           sourceWalletId: tx.type === 'income' ? undefined : srcWalletId,
           destinationWalletId: dstWalletId,
-          sourceAsset: tx.type === 'income' ? undefined : srcAsset,
-          destinationAsset: dstAsset,
-          categoryId: catId
+          sourceAsset: tx.type === 'income' ? undefined : (srcAsset || (srcWalletId ? resolvedWallets.find(w => w.id === srcWalletId)?.name : undefined)),
+          destinationAsset: dstAsset || (dstWalletId ? resolvedWallets.find(w => w.id === dstWalletId)?.name : undefined),
+          categoryId: catId,
+          status: 'POSTED' as const
         };
       });
 
@@ -1531,19 +1537,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       });
 
       const mergedLabels = Array.from(new Set([...state.labels, ...result.labels]));
-      const otherTxs = state.transactions.filter(t => t.householdId !== targetHouseholdId);
-      const otherLedgers = state.ledgerEntries.filter(le => le.householdId !== targetHouseholdId);
+
+      // Gabungkan transaksi tanpa menghapus transaksi yang sudah ada
+      const txMap = new Map<string, FinancialTransaction>();
+      for (const t of state.transactions) {
+        txMap.set(t.id, t);
+      }
+      for (const t of remappedTxs) {
+        txMap.set(t.id, t);
+      }
+      const combinedTxs = Array.from(txMap.values());
+
+      const ledgerMap = new Map<string, LedgerEntry>();
+      for (const le of state.ledgerEntries) {
+        ledgerMap.set(le.id, le);
+      }
+      for (const le of remappedLedgers) {
+        ledgerMap.set(le.id, le);
+      }
+      const combinedLedgers = Array.from(ledgerMap.values());
 
       const updatedState: AppState = {
         ...state,
         wallets: resolvedWallets,
         categories: resolvedCats,
         labels: mergedLabels,
-        transactions: [...remappedTxs, ...otherTxs],
-        ledgerEntries: [...remappedLedgers, ...otherLedgers],
+        transactions: combinedTxs,
+        ledgerEntries: combinedLedgers,
         importHistory: [result.summary, ...(state.importHistory || [])]
       };
-
       setState(updatedState);
 
       const userKey = getUserStorageKey(state.currentUser.username);

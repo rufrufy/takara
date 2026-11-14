@@ -37,6 +37,20 @@ interface TransactionsViewProps {
   onOpenQuickAdd: (type?: TransactionType) => void;
 }
 
+const safeDisplayDate = (dateStr?: string, effectiveAt?: string): string => {
+  if (dateStr && dateStr.trim()) return dateStr.trim();
+  if (!effectiveAt) return '';
+  try {
+    const d = new Date(effectiveAt);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+    }
+  } catch {
+    // fallback
+  }
+  return String(effectiveAt).split('T')[0] || '';
+};
+
 export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickAdd }) => {
   const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, state } = useApp();
 
@@ -236,7 +250,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
 
     const rows = filteredTransactions.map((t, idx) => [
       t.no || idx + 1,
-      t.dateStr || new Date(t.effectiveAt).toLocaleDateString('id-ID'),
+      t.dateStr || safeDisplayDate(undefined, t.effectiveAt),
       t.day || '',
       t.time || '',
       t.type,
@@ -298,7 +312,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     }
     setEditLabel(t.label || '');
     setEditDescription(t.description || '');
-    setEditDateStr(t.dateStr || new Date(t.effectiveAt).toLocaleDateString('id-ID'));
+    setEditDateStr(t.dateStr || safeDisplayDate(undefined, t.effectiveAt));
     setEditTime(t.time || '');
     setEditAddedBy(t.addedBy || 'Maruf H');
     setEditFeeStr(t.fee ? String(t.fee) : '');
@@ -850,7 +864,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                         {isIncome ? `+${formatIDR(t.amount)}` : isTransfer ? formatIDR(t.amount) : `-${formatIDR(t.amount)}`}
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5">
-                        {t.dateStr || new Date(t.effectiveAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        {safeDisplayDate(t.dateStr, t.effectiveAt)}
                         {t.time ? ` • ${t.time}` : ''}
                       </div>
                     </div>
@@ -1004,7 +1018,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
                     <div className="text-[10px] text-slate-400 font-semibold uppercase">Tanggal & Hari</div>
                     <div className="font-bold text-slate-900 mt-0.5">
-                      {detailTransaction.dateStr || new Date(detailTransaction.effectiveAt).toLocaleDateString('id-ID')}
+                      {safeDisplayDate(detailTransaction.dateStr, detailTransaction.effectiveAt)}
                       {detailTransaction.day ? ` (${detailTransaction.day})` : ''}
                     </div>
                   </div>

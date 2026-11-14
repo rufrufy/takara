@@ -123,6 +123,27 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
     }
 
     const pickedWallet = wallets.find(w => w.id === selectedWalletId);
+
+    let safeEffectiveAt = new Date().toISOString();
+    let safeDateStr = safeEffectiveAt.split('T')[0];
+
+    if (transactionDate) {
+      const dmy = transactionDate.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+      if (dmy) {
+        const y = dmy[3]!.length === 2 ? `20${dmy[3]}` : dmy[3];
+        const m = dmy[2]!.padStart(2, '0');
+        const d = dmy[1]!.padStart(2, '0');
+        safeEffectiveAt = `${y}-${m}-${d}T12:00:00.000Z`;
+        safeDateStr = `${y}-${m}-${d}`;
+      } else {
+        const parsed = new Date(transactionDate);
+        if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) {
+          safeEffectiveAt = parsed.toISOString();
+          safeDateStr = safeEffectiveAt.split('T')[0];
+        }
+      }
+    }
+
     const res = addTransaction({
       type: transactionType,
       amount: finalAmount,
@@ -135,7 +156,8 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
       description: description.trim() || 'Belanja Struk AI',
       imageUrl: previewImage || undefined,
       addedBy: state.currentUser.displayName || 'Maruf H',
-      effectiveAt: transactionDate ? `${transactionDate}T12:00:00.000Z` : new Date().toISOString()
+      effectiveAt: safeEffectiveAt,
+      dateStr: safeDateStr
     });
 
     if (res.success) {
