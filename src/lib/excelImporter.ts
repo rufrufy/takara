@@ -216,9 +216,9 @@ export function parseFinancialExcel(
       const catName = String(row['Category'] || '').trim();
       const catType = String(row['Category Type'] || '').toLowerCase().trim() as 'income' | 'expense' | undefined;
       const label = String(row['Label'] || '').trim();
-      const sourceAsset = String(row['Source Asset'] || '').trim();
+      const sourceAsset = String(row['Source Asset'] || row['Asset'] || row['Dompet'] || row['Rekening'] || row['Wallet'] || '').trim();
       const sourceAssetType = String(row['Source Asset Type'] || '').trim();
-      const destAsset = String(row['Destination Asset'] || '').trim();
+      const destAsset = String(row['Destination Asset'] || row['Tujuan'] || row['Dompet Tujuan'] || row['Rekening Tujuan'] || '').trim();
       const addedBy = String(row['Added By'] || 'Import Excel').trim() || 'Import Excel';
       const description = String(row['Description'] || '').trim();
       const notes = String(row['Notes'] || '').trim();
@@ -230,15 +230,25 @@ export function parseFinancialExcel(
       const fromSavings = String(row['From Savings'] || '').toLowerCase() === 'yes';
       const fromInvestment = String(row['From Investment'] || '').toLowerCase() === 'yes';
 
-      if (sourceAsset) ensureWallet(sourceAsset, sourceAssetType);
-      if (destAsset) ensureWallet(destAsset);
-      if (addedBy) ensureMember(addedBy);
-      if (label) labelsSet.add(label);
-
       let txType: 'income' | 'expense' | 'transfer' = 'expense';
       if (rawType === 'income') txType = 'income';
       else if (rawType === 'transfer') txType = 'transfer';
 
+      // Pastikan dompet pemasukan tercatat sebagai destinationAsset
+      const incomeAsset = destAsset || sourceAsset;
+      const expenseAsset = sourceAsset || destAsset;
+
+      if (txType === 'income') {
+        if (incomeAsset) ensureWallet(incomeAsset, sourceAssetType);
+      } else if (txType === 'transfer') {
+        if (sourceAsset) ensureWallet(sourceAsset, sourceAssetType);
+        if (destAsset) ensureWallet(destAsset);
+      } else {
+        if (expenseAsset) ensureWallet(expenseAsset, sourceAssetType);
+      }
+
+      if (addedBy) ensureMember(addedBy);
+      if (label) labelsSet.add(label);
       if (catName) ensureCategory(catName, txType);
 
       const txId = `tx-${householdId}-${no}`;
@@ -251,8 +261,10 @@ export function parseFinancialExcel(
         type: txType,
         amount,
         fee: fee > 0 ? fee : undefined,
-        sourceWalletId: sourceAsset ? getWalletId(sourceAsset) : undefined,
-        destinationWalletId: destAsset ? getWalletId(destAsset) : (txType === 'income' && sourceAsset ? getWalletId(sourceAsset) : undefined),
+        sourceWalletId: txType === 'income' ? undefined : (expenseAsset ? getWalletId(expenseAsset) : undefined),
+        destinationWalletId: txType === 'income'
+          ? (incomeAsset ? getWalletId(incomeAsset) : undefined)
+          : (txType === 'transfer' && destAsset ? getWalletId(destAsset) : undefined),
         categoryId: catName ? getCategoryId(catName) : undefined,
         categoryName: catName || (txType === 'transfer' ? 'Transfer' : 'Lainnya'),
         categoryType: catType || (txType === 'income' ? 'income' : 'expense'),
@@ -263,9 +275,9 @@ export function parseFinancialExcel(
         dateStr: dateStr || undefined,
         day: day || undefined,
         time: timeStr || undefined,
-        sourceAsset: sourceAsset || undefined,
+        sourceAsset: txType === 'income' ? undefined : (expenseAsset || undefined),
         sourceAssetType: sourceAssetType || undefined,
-        destinationAsset: destAsset || undefined,
+        destinationAsset: txType === 'income' ? (incomeAsset || undefined) : (destAsset || undefined),
         addedBy,
         autoIncome,
         fromSavings,

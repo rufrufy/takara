@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { ChevronDown, Building, Plus, Lock, FileSpreadsheet, Check, LogOut, Download, Users, Link as LinkIcon } from 'lucide-react';
+import { ChevronDown, Building, Plus, Lock, Check, LogOut, Download, Users, Link as LinkIcon } from 'lucide-react';
 import { getSyncStatus, SYNC_EVENT_NAME, processSyncQueue, type SyncEngineStatus } from '../lib/syncEngine';
 interface HeaderProps {
-  onOpenImport: () => void;
+  onOpenImport?: () => void;
   onOpenInstall?: () => void;
 }
 
@@ -259,16 +259,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
               <span className="hidden sm:inline">Install App</span>
             </button>
           )}
-
-          {/* Excel Importer Trigger Button */}
-          <button
-            onClick={onOpenImport}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-xl hover:bg-emerald-100/70 transition-colors text-xs font-semibold shadow-xs"
-            title="Impor / Periksa Berkas Excel"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span className="hidden sm:inline">Impor Excel</span>
-          </button>
 
           {/* Quick Logout Button */}
           <button

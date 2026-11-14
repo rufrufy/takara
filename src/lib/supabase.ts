@@ -417,11 +417,102 @@ export const syncTransactionToSupabase = async (
         updated_at: tx.updatedAt
       })
     });
-
     if (!res.ok) {
       const errText = await res.text();
       return { success: false, error: `Supabase status ${res.status}: ${errText.slice(0, 100)}` };
     }
+
+    // Sinkronkan juga buku besar (ledger_entries) yang sesuai untuk mutasi saldo otomatis
+    const ledgerRows: unknown[] = [];
+    if (tx.type === 'income') {
+      const wId = tx.destinationWalletId || tx.sourceWalletId;
+      if (wId) {
+        ledgerRows.push({
+          id: `led-${tx.id}-inc`,
+          household_id: tx.householdId,
+          transaction_id: tx.id,
+          wallet_id: wId,
+          signed_amount: Math.round(tx.amount),
+          entry_type: 'INCOME',
+          posted_at: tx.effectiveAt,
+          created_at: tx.createdAt
+        });
+      }
+    } else if (tx.type === 'expense') {
+      const wId = tx.sourceWalletId || tx.destinationWalletId;
+      if (wId) {
+        ledgerRows.push({
+          id: `led-${tx.id}-exp`,
+          household_id: tx.householdId,
+          transaction_id: tx.id,
+          wallet_id: wId,
+          signed_amount: -Math.round(tx.amount),
+          entry_type: 'EXPENSE',
+          posted_at: tx.effectiveAt,
+          created_at: tx.createdAt
+        });
+      }
+    } else if (tx.type === 'transfer') {
+      if (tx.sourceWalletId) {
+        ledgerRows.push({
+          id: `led-${tx.id}-tout`,
+          household_id: tx.householdId,
+          transaction_id: tx.id,
+          wallet_id: tx.sourceWalletId,
+          signed_amount: -Math.round(tx.amount),
+          entry_type: 'TRANSFER_OUT',
+          posted_at: tx.effectiveAt,
+          created_at: tx.createdAt
+        });
+      }
+      if (tx.destinationWalletId) {
+        ledgerRows.push({
+          id: `led-${tx.id}-tin`,
+          household_id: tx.householdId,
+          transaction_id: tx.id,
+          wallet_id: tx.destinationWalletId,
+          signed_amount: Math.round(tx.amount),
+          entry_type: 'TRANSFER_IN',
+          posted_at: tx.effectiveAt,
+          created_at: tx.createdAt
+        });
+      }
+      if (tx.fee && tx.fee > 0 && tx.sourceWalletId) {
+        ledgerRows.push({
+          id: `led-${tx.id}-fee`,
+          household_id: tx.householdId,
+          transaction_id: tx.id,
+          wallet_id: tx.sourceWalletId,
+          signed_amount: -Math.round(tx.fee),
+          entry_type: 'FEE',
+          posted_at: tx.effectiveAt,
+          created_at: tx.createdAt
+        });
+      }
+    } else if (tx.type === 'opening_balance') {
+      const wId = tx.destinationWalletId || tx.sourceWalletId;
+      if (wId) {
+        ledgerRows.push({
+          id: `led-${tx.id}-open`,
+          household_id: tx.householdId,
+          transaction_id: tx.id,
+          wallet_id: wId,
+          signed_amount: Math.round(tx.amount),
+          entry_type: 'OPENING',
+          posted_at: tx.effectiveAt,
+          created_at: tx.createdAt
+        });
+      }
+    }
+
+    if (ledgerRows.length > 0) {
+      await fetch(`${cleanUrl}/rest/v1/ledger_entries`, {
+        method: 'POST',
+        headers: getHeaders(config),
+        body: JSON.stringify(ledgerRows)
+      }).catch(() => {});
+    }
+
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown sync error';
@@ -439,11 +530,17 @@ export const deleteTransactionFromSupabase = async (
   if (!config.url || !config.anonKey) return { success: false, error: 'Config missing' };
   try {
     const cleanUrl = config.url.replace(/\/+$/, '');
-    const res = await fetch(`${cleanUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(txId)}`, {
-      method: 'DELETE',
-      headers: getHeaders(config)
-    });
-    return { success: res.ok };
+    await Promise.all([
+      fetch(`${cleanUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(txId)}`, {
+        method: 'DELETE',
+        headers: getHeaders(config)
+      }),
+      fetch(`${cleanUrl}/rest/v1/ledger_entries?transaction_id=eq.${encodeURIComponent(txId)}`, {
+        method: 'DELETE',
+        headers: getHeaders(config)
+      })
+    ]);
+    return { success: true };
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : 'Delete error' };
   }

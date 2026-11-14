@@ -270,10 +270,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     setEditErrorMsg('');
     setEditAmountStr(String(t.amount));
     setEditType(t.type);
-    setEditSourceWalletId(t.sourceWalletId || wallets[0]?.id || '');
-    setEditDestWalletId(t.destinationWalletId || wallets[1]?.id || wallets[0]?.id || '');
+    const matchedSrc = t.sourceWalletId || wallets.find(w => w.name.toLowerCase().trim() === t.sourceAsset?.toLowerCase().trim())?.id || wallets[0]?.id || '';
+    const matchedDst = t.destinationWalletId || wallets.find(w => w.name.toLowerCase().trim() === (t.destinationAsset || t.sourceAsset)?.toLowerCase().trim())?.id || (t.type === 'income' ? matchedSrc : '') || wallets[1]?.id || wallets[0]?.id || '';
+    setEditSourceWalletId(matchedSrc);
+    setEditDestWalletId(matchedDst);
     setEditCategoryId(t.categoryId || '');
-    setEditCategoryName(t.categoryName || '');
     setEditLabel(t.label || '');
     setEditDescription(t.description || '');
     setEditDateStr(t.dateStr || new Date(t.effectiveAt).toLocaleDateString('id-ID'));
@@ -315,8 +316,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       type: editType,
       sourceWalletId: editType === 'expense' || editType === 'transfer' ? editSourceWalletId : undefined,
       destinationWalletId: editType === 'income' ? editDestWalletId : (editType === 'transfer' ? editDestWalletId : undefined),
-      sourceAsset: editType === 'expense' || editType === 'transfer' ? srcWallet?.name : undefined,
-      destinationAsset: editType === 'income' ? dstWallet?.name : (editType === 'transfer' ? dstWallet?.name : undefined),
+      sourceAsset: editType === 'expense' || editType === 'transfer' ? (srcWallet?.name || detailTransaction.sourceAsset) : undefined,
+      destinationAsset: editType === 'income' ? (dstWallet?.name || detailTransaction.destinationAsset) : (editType === 'transfer' ? dstWallet?.name : undefined),
       categoryId: editCategoryId || undefined,
       categoryName: editCategoryName || (editType === 'transfer' ? 'Transfer' : undefined),
       label: editLabel.trim() || undefined,
@@ -794,11 +795,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                             • {wallets.find(w => w.id === t.sourceWalletId)?.name || 'Sumber'} → {wallets.find(w => w.id === t.destinationWalletId)?.name || 'Tujuan'}
                           </span>
                         )}
-                        {!isTransfer && t.sourceWalletId && (
-                          <span>• {wallets.find(w => w.id === t.sourceWalletId)?.name}</span>
+                        {isIncome && (
+                          <span className="text-emerald-700 font-medium">
+                            • Masuk ke: {wallets.find(w => w.id === (t.destinationWalletId || t.sourceWalletId))?.name || t.destinationAsset || t.sourceAsset || 'Dompet Utama'}
+                          </span>
                         )}
-                        {!isTransfer && t.destinationWalletId && (
-                          <span>• {wallets.find(w => w.id === t.destinationWalletId)?.name}</span>
+                        {!isIncome && !isTransfer && (
+                          <span>
+                            • {wallets.find(w => w.id === (t.sourceWalletId || t.destinationWalletId))?.name || t.sourceAsset || t.destinationAsset || 'Dompet'}
+                          </span>
                         )}
                         {t.fee && t.fee > 0 && (
                           <span className="text-amber-700 font-medium bg-amber-50 px-1.5 py-0.2 rounded">
@@ -968,9 +973,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Dompet Tujuan</div>
+                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Dompet Tujuan / Penerima</div>
                     <div className="font-bold text-slate-900 mt-0.5">
-                      {detailTransaction.destinationAsset || (wallets.find(w => w.id === detailTransaction.destinationWalletId)?.name || '-')}
+                      {detailTransaction.destinationAsset || (wallets.find(w => w.id === (detailTransaction.destinationWalletId || detailTransaction.sourceWalletId))?.name || detailTransaction.sourceAsset || '-')}
                     </div>
                   </div>
 
@@ -1167,15 +1172,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                 {/* Added By */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Dicatat Oleh</label>
-                  <select
+                  <input
+                    type="text"
                     value={editAddedBy}
                     onChange={e => setEditAddedBy(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
-                  >
-                    {['Maruf H', 'Zakia Nurul Hanifa'].map(name => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
+                    placeholder="Nama pencatat"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                  />
                 </div>
 
                 {/* Submit & Cancel Buttons */}

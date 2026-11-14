@@ -152,6 +152,113 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+const reconstructMissingLedgers = (
+  transactions: FinancialTransaction[],
+  existingLedgers: LedgerEntry[],
+  householdId: string,
+  wallets: Wallet[] = []
+): LedgerEntry[] => {
+  const ledgerTxSet = new Set((existingLedgers || []).map(le => le.transactionId).filter(Boolean));
+  const result: LedgerEntry[] = [...(existingLedgers || [])];
+
+  const walletByName = new Map<string, string>();
+  for (const w of wallets) {
+    walletByName.set(w.name.toLowerCase().trim(), w.id);
+  }
+  const defaultWalletId = wallets[0]?.id || '';
+
+  for (const tx of transactions) {
+    if (tx.householdId !== householdId || tx.status === 'VOIDED') continue;
+    if (ledgerTxSet.has(tx.id)) continue;
+
+    const srcId = tx.sourceWalletId || (tx.sourceAsset ? walletByName.get(tx.sourceAsset.toLowerCase().trim()) : '') || defaultWalletId;
+    const dstId = tx.destinationWalletId || (tx.destinationAsset ? walletByName.get(tx.destinationAsset.toLowerCase().trim()) : '') || defaultWalletId;
+
+    if (tx.type === 'income') {
+      const wId = dstId || srcId;
+      if (wId) {
+        result.push({
+          id: `led-${tx.id}-inc`,
+          householdId,
+          transactionId: tx.id,
+          walletId: wId,
+          signedAmount: Math.round(tx.amount),
+          entryType: 'INCOME',
+          postedAt: tx.effectiveAt,
+          createdAt: tx.createdAt
+        });
+      }
+    } else if (tx.type === 'expense') {
+      const wId = srcId || dstId;
+      if (wId) {
+        result.push({
+          id: `led-${tx.id}-exp`,
+          householdId,
+          transactionId: tx.id,
+          walletId: wId,
+          signedAmount: -Math.round(tx.amount),
+          entryType: 'EXPENSE',
+          postedAt: tx.effectiveAt,
+          createdAt: tx.createdAt
+        });
+      }
+    } else if (tx.type === 'transfer') {
+      if (srcId) {
+        result.push({
+          id: `led-${tx.id}-tout`,
+          householdId,
+          transactionId: tx.id,
+          walletId: srcId,
+          signedAmount: -Math.round(tx.amount),
+          entryType: 'TRANSFER_OUT',
+          postedAt: tx.effectiveAt,
+          createdAt: tx.createdAt
+        });
+      }
+      if (dstId) {
+        result.push({
+          id: `led-${tx.id}-tin`,
+          householdId,
+          transactionId: tx.id,
+          walletId: dstId,
+          signedAmount: Math.round(tx.amount),
+          entryType: 'TRANSFER_IN',
+          postedAt: tx.effectiveAt,
+          createdAt: tx.createdAt
+        });
+      }
+      if (tx.fee && tx.fee > 0 && srcId) {
+        result.push({
+          id: `led-${tx.id}-fee`,
+          householdId,
+          transactionId: tx.id,
+          walletId: srcId,
+          signedAmount: -Math.round(tx.fee),
+          entryType: 'FEE',
+          postedAt: tx.effectiveAt,
+          createdAt: tx.createdAt
+        });
+      }
+    } else if (tx.type === 'opening_balance') {
+      const wId = dstId || srcId;
+      if (wId) {
+        result.push({
+          id: `led-${tx.id}-open`,
+          householdId,
+          transactionId: tx.id,
+          walletId: wId,
+          signedAmount: Math.round(tx.amount),
+          entryType: 'OPENING',
+          postedAt: tx.effectiveAt,
+          createdAt: tx.createdAt
+        });
+      }
+    }
+  }
+
+  return result;
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
     try {
@@ -212,18 +319,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               ? parsed.households
               : baseTemplate.households;
 
+            const activeHId = parsed.activeHouseholdId || resolvedHouseholds[0]?.id || baseTemplate.activeHouseholdId;
+            const parsedTxs = parsed.transactions || [];
+            const parsedWallets = parsed.wallets || baseTemplate.wallets;
+            const resolvedLedgers = reconstructMissingLedgers(
+              parsedTxs,
+              parsed.ledgerEntries || [],
+              activeHId,
+              parsedWallets
+            );
+
             return {
               ...baseTemplate,
               ...parsed,
               currentUser: parsed.currentUser,
               households: resolvedHouseholds,
-              activeHouseholdId: parsed.activeHouseholdId || resolvedHouseholds[0]?.id || baseTemplate.activeHouseholdId,
+              activeHouseholdId: activeHId,
               members: parsed.members || baseTemplate.members,
-              wallets: parsed.wallets || baseTemplate.wallets,
+              wallets: parsedWallets,
               categories: parsed.categories || baseTemplate.categories,
               labels: parsed.labels || baseTemplate.labels,
-              transactions: parsed.transactions || [],
-              ledgerEntries: parsed.ledgerEntries || [],
+              transactions: parsedTxs,
+              ledgerEntries: resolvedLedgers,
               debts: parsed.debts || [],
               aiConfig: getSystemAIConfig(),
               supabaseConfig: (parsed.supabaseConfig?.url && !parsed.supabaseConfig.url.includes('gnjrysgmiqapbjroishz')) ? parsed.supabaseConfig : DEFAULT_SUPABASE_CONFIG,
@@ -302,14 +419,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               const resolvedHouseholds = (supaRes.data!.households && supaRes.data!.households.length > 0)
                 ? supaRes.data!.households
                 : prev.households;
+              const pulledTxs = supaRes.data!.transactions || [];
+              const rawLedgers = supaRes.data!.ledgerEntries || [];
+              const pulledWallets = (supaRes.data!.wallets && supaRes.data!.wallets.length > 0) ? supaRes.data!.wallets : prev.wallets;
+              const resolvedLedgers = reconstructMissingLedgers(pulledTxs, rawLedgers, state.activeHouseholdId, pulledWallets);
+
               return {
                 ...prev,
-                transactions: supaRes.data!.transactions || [],
-                wallets: (supaRes.data!.wallets && supaRes.data!.wallets.length > 0) ? supaRes.data!.wallets : prev.wallets,
+                transactions: pulledTxs,
+                wallets: pulledWallets,
                 categories: (supaRes.data!.categories && supaRes.data!.categories.length > 0) ? supaRes.data!.categories : prev.categories,
                 debts: supaRes.data!.debts || [],
                 members: (supaRes.data!.members && supaRes.data!.members.length > 0) ? supaRes.data!.members : prev.members,
-                ledgerEntries: supaRes.data!.ledgerEntries || [],
+                ledgerEntries: resolvedLedgers,
                 households: resolvedHouseholds,
                 isLocked: false,
                 isAuthenticated: true
@@ -393,19 +515,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return state.households.find(h => h.id === state.activeHouseholdId) || state.households[0] || allHouseholds[0] || FALLBACK_HOUSEHOLD;
   }, [state.households, state.activeHouseholdId, allHouseholds]);
   // Recalculate wallet balances dynamically from active ledger entries (Ledger Invariant)
+  // Recalculate wallet balances dynamically from active ledger entries & transactions (Ledger Invariant)
   const wallets = useMemo(() => {
     const householdLedgers = state.ledgerEntries.filter(
       le => le.householdId === state.activeHouseholdId
     );
-    return state.wallets
-      .filter(w => w.householdId === state.activeHouseholdId && !w.isArchived)
-      .map(w => {
-        const balance = householdLedgers
-          .filter(le => le.walletId === w.id)
-          .reduce((sum, le) => sum + le.signedAmount, 0);
-        return { ...w, balance };
-      });
-  }, [state.wallets, state.ledgerEntries, state.activeHouseholdId]);
+    const activeHouseholdTxs = state.transactions.filter(
+      t => t.householdId === state.activeHouseholdId && t.status !== 'VOIDED'
+    );
+    const ledgerTxIds = new Set(householdLedgers.map(le => le.transactionId).filter(Boolean));
+
+    const activeWallets = state.wallets.filter(
+      w => w.householdId === state.activeHouseholdId && !w.isArchived
+    );
+
+    return activeWallets.map(w => {
+      // 1. Saldo dari entri buku besar
+      let bal = householdLedgers
+        .filter(le => le.walletId === w.id)
+        .reduce((sum, le) => sum + le.signedAmount, 0);
+
+      // 2. Tambahan mutasi dari transaksi yang belum tercatat di ledgerEntries
+      for (const t of activeHouseholdTxs) {
+        if (ledgerTxIds.has(t.id)) continue;
+
+        const isSrc = t.sourceWalletId === w.id || (!t.sourceWalletId && t.sourceAsset && t.sourceAsset.toLowerCase().trim() === w.name.toLowerCase().trim());
+        const isDst = t.destinationWalletId === w.id || (!t.destinationWalletId && t.destinationAsset && t.destinationAsset.toLowerCase().trim() === w.name.toLowerCase().trim());
+
+        if (t.type === 'income') {
+          if (isDst || (!t.destinationWalletId && isSrc)) {
+            bal += t.amount;
+          }
+        } else if (t.type === 'expense') {
+          if (isSrc || (!t.sourceWalletId && isDst)) {
+            bal -= t.amount;
+          }
+        } else if (t.type === 'transfer') {
+          if (isSrc) bal -= (t.amount + (t.fee || 0));
+          if (isDst) bal += t.amount;
+        } else if (t.type === 'opening_balance') {
+          if (isDst || isSrc) bal += t.amount;
+        }
+      }
+
+      // 3. Fallback: jika belum ada mutasi dari ledger maupun transaksi, pakai w.balance
+      if (householdLedgers.length === 0 && activeHouseholdTxs.length === 0 && w.balance) {
+        bal = w.balance;
+      }
+
+      return { ...w, balance: bal };
+    });
+  }, [state.wallets, state.ledgerEntries, state.transactions, state.activeHouseholdId]);
 
   const categories = useMemo(() => {
     return state.categories.filter(c => c.householdId === state.activeHouseholdId && !c.isArchived);
@@ -434,7 +594,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Summary Metrics
   const { totalBalance, periodIncome, periodExpense, netCashFlow } = useMemo(() => {
-    const totBal = wallets.reduce((sum, w) => sum + w.balance, 0);
+    let totBal = wallets.reduce((sum, w) => sum + w.balance, 0);
 
     let inc = 0;
     let exp = 0;
@@ -447,6 +607,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else if (t.type === 'transfer' && t.fee && t.fee > 0) {
         exp += t.fee;
       }
+    }
+
+    // Invariant: Total saldo household tidak boleh 0 jika ada transaksi pemasukan/pengeluaran riil
+    if (totBal === 0 && (inc > 0 || exp > 0)) {
+      totBal = inc - exp;
     }
 
     return {
@@ -715,6 +880,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ledgerEntries: [...remainingLedgers, ...newLedgers]
       };
     });
+
+    enqueueTransactionSync(mergedTx);
 
     return { success: true };
   };
@@ -1184,6 +1351,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const remappedTxs = result.transactions.map(tx => {
         let srcWalletId = tx.sourceWalletId;
         let dstWalletId = tx.destinationWalletId;
+        let srcAsset = tx.sourceAsset;
+        let dstAsset = tx.destinationAsset;
         let catId = tx.categoryId;
 
         if (tx.sourceAsset) {
@@ -1199,11 +1368,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (match) catId = match.id;
         }
 
+        // Khusus pemasukan: pastikan dompet penerima selalu tercatat di destinationWalletId dan destinationAsset
+        if (tx.type === 'income') {
+          if (!dstWalletId && srcWalletId) {
+            dstWalletId = srcWalletId;
+          }
+          if (!dstAsset && srcAsset) {
+            dstAsset = srcAsset;
+          }
+        }
+
         return {
           ...tx,
           householdId: targetHouseholdId,
-          sourceWalletId: srcWalletId,
+          sourceWalletId: tx.type === 'income' ? undefined : srcWalletId,
           destinationWalletId: dstWalletId,
+          sourceAsset: tx.type === 'income' ? undefined : srcAsset,
+          destinationAsset: dstAsset,
           categoryId: catId
         };
       });
@@ -1449,14 +1630,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         .then(supaRes => {
           if (supaRes.success && supaRes.data) {
             setState(prev => {
+              const pulledTxs = supaRes.data!.transactions || [];
+              const rawLedgers = supaRes.data!.ledgerEntries || [];
+              const pulledWallets = (supaRes.data!.wallets && supaRes.data!.wallets.length > 0) ? supaRes.data!.wallets : prev.wallets;
+              const resolvedLedgers = reconstructMissingLedgers(pulledTxs, rawLedgers, updatedState.activeHouseholdId, pulledWallets);
+
               const merged = {
                 ...prev,
-                transactions: supaRes.data!.transactions || [],
-                wallets: (supaRes.data!.wallets && supaRes.data!.wallets.length > 0) ? supaRes.data!.wallets : prev.wallets,
+                transactions: pulledTxs,
+                wallets: pulledWallets,
                 categories: (supaRes.data!.categories && supaRes.data!.categories.length > 0) ? supaRes.data!.categories : prev.categories,
                 debts: supaRes.data!.debts || [],
                 members: (supaRes.data!.members && supaRes.data!.members.length > 0) ? supaRes.data!.members : prev.members,
-                ledgerEntries: supaRes.data!.ledgerEntries || [],
+                ledgerEntries: resolvedLedgers,
                 households: (supaRes.data!.households && supaRes.data!.households.length > 0) ? supaRes.data!.households : prev.households
               };
               localStorage.setItem(userKey, JSON.stringify(merged));
