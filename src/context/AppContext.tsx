@@ -110,6 +110,7 @@ interface AppContextValue {
   deleteDebt: (id: string) => void;
   addTransaction: (input: NewTransactionInput) => { success: boolean; error?: string };
   voidTransaction: (id: string) => void;
+  clearCurrentMonthTransactions: () => Promise<{ success: boolean; count: number; error?: string }>;
   addWallet: (name: string, type: WalletType, openingBalance?: number, color?: string) => void;
   updateWallet: (walletId: string, updates: { name?: string; type?: WalletType; color?: string; institutionName?: string; targetBalance?: number }) => { success: boolean; error?: string };
   deleteWallet: (walletId: string) => { success: boolean; error?: string };
@@ -140,7 +141,7 @@ interface AppContextValue {
   activeSession: UserSession | null;
   registeredUsers: User[];
   registerUser: (displayName: string, username: string, pin5Digit: string, householdCode?: string) => { success: boolean; error?: string };
-  joinHouseholdByCode: (inviteCode: string) => { success: boolean; error?: string };
+  joinHouseholdByCode: (inviteCode: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
   adminCreateUser: (displayName: string, username: string, pin5Digit: string, role?: UserRole) => { success: boolean; error?: string };
   updateRegisteredUser: (username: string, updates: { displayName?: string; pin5Digit?: string; role?: UserRole }) => { success: boolean; error?: string };
   deleteUser: (username: string) => { success: boolean; error?: string };
@@ -797,7 +798,64 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ledgerEntries: prev.ledgerEntries.filter(le => le.transactionId !== id)
     }));
   };
-  // Edit transaction and recalculate ledgers atomically
+
+  const clearCurrentMonthTransactions = async (): Promise<{ success: boolean; count: number; error?: string }> => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    const activeHId = state.activeHouseholdId;
+
+    const txsToDelete = state.transactions.filter(t => {
+      if (t.householdId !== activeHId) return false;
+      const tDate = new Date(t.effectiveAt || t.createdAt);
+      return !isNaN(tDate.getTime()) && tDate.getFullYear() === currentYear && tDate.getMonth() === currentMonth;
+    });
+
+    if (txsToDelete.length === 0) {
+      return { success: true, count: 0 };
+    }
+
+    const txIdsToDelete = new Set(txsToDelete.map(t => t.id));
+
+    setState(prev => {
+      const remainingTxs = prev.transactions.filter(t => !txIdsToDelete.has(t.id));
+      const remainingLedgers = prev.ledgerEntries.filter(le => !txIdsToDelete.has(le.transactionId));
+      const updated = {
+        ...prev,
+        transactions: remainingTxs,
+        ledgerEntries: remainingLedgers
+      };
+      const userKey = getUserStorageKey(prev.currentUser.username);
+      localStorage.setItem(userKey, JSON.stringify(updated));
+      return updated;
+    });
+
+    if (state.supabaseConfig?.url) {
+      try {
+        const cleanUrl = state.supabaseConfig.url.replace(/\/+$/, '');
+        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey;
+        const headers = {
+          apikey: clientKey,
+          Authorization: `Bearer ${clientKey}`
+        };
+
+        const idsArray = Array.from(txIdsToDelete);
+        for (let i = 0; i < idsArray.length; i += 50) {
+          const chunk = idsArray.slice(i, i + 50);
+          const filter = `in.(${chunk.map(id => `"${id}"`).join(',')})`;
+          await Promise.all([
+            fetch(`${cleanUrl}/rest/v1/transactions?id=${filter}`, { method: 'DELETE', headers }),
+            fetch(`${cleanUrl}/rest/v1/ledger_entries?transaction_id=${filter}`, { method: 'DELETE', headers })
+          ]);
+        }
+      } catch (err) {
+        console.warn('Gagal menghapus transaksi dari Supabase:', err);
+      }
+    }
+
+    return { success: true, count: txsToDelete.length };
+  };
   const editTransaction = (id: string, updatedFields: Partial<FinancialTransaction>): { success: boolean; error?: string } => {
     const existingIndex = state.transactions.findIndex(t => t.id === id);
     if (existingIndex === -1) {
@@ -1503,13 +1561,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
   const getClientDeviceInfo = () => {
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown';
-    let device = 'Desktop';
-    if (/android/i.test(ua)) device = 'Android Mobile';
-    else if (/iphone|ipad|ipod/i.test(ua)) device = 'iPhone / iPad';
-    else if (/windows/i.test(ua)) device = 'Windows PC (Desktop)';
-    else if (/macintosh|mac os x/i.test(ua)) device = 'Apple Mac';
-    else if (/linux/i.test(ua)) device = 'Linux Workstation';
-
+    let device = 'Laptop / PC';
+    if (/android/i.test(ua)) device = 'HP Android';
+    else if (/iphone/i.test(ua)) device = 'iPhone';
+    else if (/ipad/i.test(ua)) device = 'iPad Tablet';
+    else if (/windows/i.test(ua)) device = 'Laptop Windows';
+    else if (/macintosh|mac os x/i.test(ua)) device = 'MacBook / Mac';
+    else if (/linux/i.test(ua)) device = 'Laptop Linux';
     let browser = 'Web Browser';
     if (/chrome|crios/i.test(ua)) browser = 'Google Chrome';
     else if (/firefox|fxios/i.test(ua)) browser = 'Mozilla Firefox';
@@ -1584,25 +1642,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // ROLE 2: USER KELUARGA (Pencatatan Keuangan Rumah Tangga)
-    // Cek di daftar registeredUsers
+    // Cek di daftar registeredUsers - TIDAK auto-register sembarangan di form login
     let userRecord = registeredUsers.find(u => u.username.toLowerCase() === cleanUser);
     if (!userRecord) {
-      // Auto-register pengguna baru secara instan jika belum ada
-      const autoDisplayName = cleanUser === 'maruf' ? 'Maruf H' : (cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1));
-      userRecord = {
-        id: `user-${cleanUser}`,
-        username: cleanUser,
-        displayName: autoDisplayName,
-        pinHash: cleanCode,
-        role: 'OWNER',
-        createdAt: now
+      return {
+        success: false,
+        error: `Username "${cleanUser}" belum terdaftar. Silakan buka tab "Daftar Baru" untuk membuat akun.`
       };
-      setRegisteredUsers(prev => [...prev, userRecord!]);
-    } else {
-      const expectedPin = userRecord.pinHash || '12345';
-      if (cleanCode !== expectedPin && cleanCode !== '12345') {
-        return { success: false, error: `PIN 5-digit tidak cocok untuk akun @${cleanUser}.` };
-      }
+    }
+
+    const expectedPin = userRecord.pinHash;
+    if (cleanCode !== expectedPin) {
+      return { success: false, error: `PIN 5-digit tidak cocok untuk akun @${cleanUser}.` };
     }
 
     const freshTemplate = createFreshUserData(cleanUser, userRecord.displayName, cleanCode);
@@ -1811,11 +1862,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true };
   };
 
-  const joinHouseholdByCode = (inviteCode: string): { success: boolean; error?: string } => {
+  const joinHouseholdByCode = async (inviteCode: string): Promise<{ success: boolean; error?: string }> => {
     const cleanCode = inviteCode.trim().toUpperCase();
     if (!cleanCode) return { success: false, error: 'Silakan masukkan kode household.' };
 
-    const targetHh = allHouseholds.find(h => (h.inviteCode || '').trim().toUpperCase() === cleanCode);
+    let targetHh = allHouseholds.find(h => (h.inviteCode || '').trim().toUpperCase() === cleanCode);
+
+    // Cari langsung ke Supabase Cloud jika belum ada di cache lokal
+    if (!targetHh && state.supabaseConfig?.url) {
+      try {
+        const cleanUrl = state.supabaseConfig.url.replace(/\/+$/, '');
+        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey;
+        const res = await fetch(`${cleanUrl}/rest/v1/households?invite_code=eq.${encodeURIComponent(cleanCode)}`, {
+          headers: {
+            apikey: clientKey,
+            Authorization: `Bearer ${clientKey}`
+          }
+        });
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list[0]) {
+            const h = list[0];
+            targetHh = {
+              id: h.id,
+              name: h.name,
+              baseCurrency: h.base_currency || 'IDR',
+              createdById: h.created_by_id || '',
+              inviteCode: h.invite_code,
+              createdAt: h.created_at
+            };
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (!targetHh) {
       return { success: false, error: `Household dengan kode "${inviteCode}" tidak ditemukan.` };
     }
@@ -1823,13 +1905,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const now = new Date().toISOString();
     const cleanUser = state.currentUser.username;
     const newMember: HouseholdMember = {
-      id: `mem-${cleanUser}-${Date.now()}`,
+      id: `mem-${cleanUser}-${targetHh.id}`,
       householdId: targetHh.id,
       userId: state.currentUser.id,
       displayName: state.currentUser.displayName,
       role: 'MEMBER',
       joinedAt: now
     };
+
+    // Pastikan household tersimpan di Supabase sebelum member di-upsert (mencegah foreign key error 23503 & 409 conflict)
+    if (state.supabaseConfig?.url) {
+      try {
+        const cleanUrl = state.supabaseConfig.url.replace(/\/+$/, '');
+        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey;
+        const authHeaders = {
+          'Content-Type': 'application/json',
+          apikey: clientKey,
+          Authorization: `Bearer ${clientKey}`,
+          Prefer: 'resolution=merge-duplicates'
+        };
+
+        // 1. Upsert household terlebih dahulu
+        await fetch(`${cleanUrl}/rest/v1/households?on_conflict=id`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify([{
+            id: targetHh.id,
+            name: targetHh.name,
+            base_currency: targetHh.baseCurrency || 'IDR',
+            created_by_id: targetHh.createdById || null,
+            invite_code: targetHh.inviteCode || null,
+            created_at: targetHh.createdAt || now
+          }])
+        });
+
+        // 2. Upsert household_member
+        await fetch(`${cleanUrl}/rest/v1/household_members?on_conflict=id`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify([{
+            id: newMember.id,
+            household_id: targetHh.id,
+            user_id: newMember.userId,
+            display_name: newMember.displayName,
+            role: newMember.role || 'MEMBER',
+            joined_at: newMember.joinedAt
+          }])
+        });
+      } catch (e) {
+        console.warn('Gagal sync join ke Supabase:', e);
+      }
+    }
 
     let ownerState: Partial<AppState> | null = null;
     try {
@@ -1839,16 +1965,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch {}
 
     setState(prev => {
-      const alreadyInHousehold = prev.households.some(h => h.id === targetHh.id);
-      const updatedHouseholds = alreadyInHousehold ? prev.households : [...prev.households, targetHh];
-      const updatedMembers = prev.members.some(m => m.householdId === targetHh.id && m.userId === prev.currentUser.id)
+      const alreadyInHousehold = prev.households.some(h => h.id === targetHh!.id);
+      const updatedHouseholds = alreadyInHousehold ? prev.households : [...prev.households, targetHh!];
+      const updatedMembers = prev.members.some(m => m.householdId === targetHh!.id && m.userId === prev.currentUser.id)
         ? prev.members
         : [...prev.members, newMember];
 
       const updatedState = {
         ...prev,
         households: updatedHouseholds,
-        activeHouseholdId: targetHh.id,
+        activeHouseholdId: targetHh!.id,
         members: updatedMembers,
         wallets: (ownerState?.wallets && ownerState.wallets.length > 0) ? ownerState.wallets : prev.wallets,
         categories: (ownerState?.categories && ownerState.categories.length > 0) ? ownerState.categories : prev.categories,
@@ -2224,6 +2350,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         netCashFlow,
         addTransaction,
         voidTransaction,
+        clearCurrentMonthTransactions,
         editTransaction,
         debts,
         addDebt,

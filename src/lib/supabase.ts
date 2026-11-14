@@ -153,8 +153,8 @@ const postSupabaseTable = async (
   chunkSize = 100
 ): Promise<void> => {
   if (!rows.length) return;
-  const query = table === 'app_users' ? '?on_conflict=username' : '';
-
+  const onConflictKey = table === 'app_users' ? 'username' : 'id';
+  const query = `?on_conflict=${onConflictKey}`;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
     const res = await fetch(`${cleanUrl}/rest/v1/${table}${query}`, {
@@ -689,13 +689,28 @@ export const pushAllDataToSupabase = async (
       }]);
     }
 
-    // 1. Households
-    if (state.households?.length) {
+    // 1. Households (Pastikan seluruh household ter-upsert sebelum members)
+    const householdMap = new Map<string, Household>();
+    for (const h of state.households || []) {
+      if (h?.id) householdMap.set(h.id, h);
+    }
+    if (state.activeHouseholdId && !householdMap.has(state.activeHouseholdId)) {
+      householdMap.set(state.activeHouseholdId, {
+        id: state.activeHouseholdId,
+        name: `Keluarga ${state.currentUser?.displayName || 'Takara'}`,
+        baseCurrency: 'IDR',
+        createdById: state.currentUser?.id,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    const householdsList = Array.from(householdMap.values());
+    if (householdsList.length) {
       await postSupabaseTable(
         cleanUrl,
         'households',
         headers,
-        state.households.map(h => ({
+        householdsList.map(h => ({
           id: h.id,
           name: h.name,
           base_currency: h.baseCurrency || 'IDR',
@@ -706,13 +721,16 @@ export const pushAllDataToSupabase = async (
       );
     }
 
-    // 2. Members
-    if (state.members?.length) {
+    // 2. Members (Hanya kirim anggota yang household_id-nya sudah terverifikasi ada di households)
+    const validHhIds = new Set(householdsList.map(h => h.id));
+    const validMembers = (state.members || []).filter(m => m?.id && m.householdId && validHhIds.has(m.householdId));
+
+    if (validMembers.length) {
       await postSupabaseTable(
         cleanUrl,
         'household_members',
         headers,
-        state.members.map(m => ({
+        validMembers.map(m => ({
           id: m.id,
           household_id: m.householdId,
           user_id: m.userId,
@@ -722,7 +740,6 @@ export const pushAllDataToSupabase = async (
         }))
       );
     }
-
     // 3. Wallets
     if (state.wallets?.length) {
       await postSupabaseTable(

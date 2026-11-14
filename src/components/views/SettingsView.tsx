@@ -27,7 +27,9 @@ import {
   Smartphone as PhoneIcon,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  RotateCcw,
+  AlertTriangle
 } from 'lucide-react';
 import type { UserRole } from '../../types';
 
@@ -52,7 +54,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
     sessions,
     activeSession,
     inviteMember,
-    removeMember
+    removeMember,
+    clearCurrentMonthTransactions
   } = useApp();
   const [showSecretKey, setShowSecretKey] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -69,7 +72,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
   const [invitePin, setInvitePin] = useState('12345');
   const [inviteSuccessMsg, setInviteSuccessMsg] = useState('');
 
-  const inviteCode = activeHousehold.inviteCode || 'DK-KLRG-8921';
+  // Reset Transaksi Bulan Ini State
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccessMsg, setResetSuccessMsg] = useState('');
+
+  const now = new Date();
+  const currentMonthLabel = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  const monthTxCount = React.useMemo(() => {
+    return state.transactions.filter(t => {
+      if (t.householdId !== activeHousehold.id) return false;
+      const tDate = new Date(t.effectiveAt || t.createdAt);
+      return !isNaN(tDate.getTime()) && tDate.getFullYear() === currentYear && tDate.getMonth() === currentMonth;
+    }).length;
+  }, [state.transactions, activeHousehold.id, currentYear, currentMonth]);
+
+  const handleExecuteResetMonth = async () => {
+    setIsResetting(true);
+    setResetSuccessMsg('');
+    const res = await clearCurrentMonthTransactions();
+    setIsResetting(false);
+    setIsConfirmingReset(false);
+    if (res.success) {
+      setResetSuccessMsg(`${res.count} transaksi bulan ${currentMonthLabel} berhasil dihapus.`);
+      setTimeout(() => setResetSuccessMsg(''), 5000);
+    }
+  };
+  const inviteCode = activeHousehold?.inviteCode || 'DK-KLRG-8921';
   const inviteLink = `https://dompetkita.app/join?code=${inviteCode}`;
 
   const handleCopyInvite = () => {
@@ -186,91 +218,90 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         </button>
       </div>
 
-      {/* SEKSI 1: STATUS DATABASE KEUANGAN */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="font-bold text-slate-900 text-sm">Status Database Transaksi</h2>
-          </div>
-          {state.transactions.length > 0 ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
-              <Check className="w-3 h-3 stroke-[3]" />
-              <span>{state.importHistory && state.importHistory.length > 0 ? 'Data Excel Terhubung' : 'Data Aktif'}</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full border border-slate-200">
-              <span>Database Baru (Kosong)</span>
-            </span>
-          )}
-        </div>
-
-        {/* Database Status Card */}
-        <div className="p-4 bg-gradient-to-br from-emerald-50/90 to-teal-50/70 border border-emerald-200/80 rounded-2xl space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-900">
-              {activeHousehold.name}
-            </span>
-            <span className="text-[10px] text-emerald-700 font-semibold">
-              {state.importHistory && state.importHistory.length > 0
-                ? `Ekspor Excel: ${state.importHistory[0]?.exportedOn || '10 Nov 2026'}`
-                : 'Pembukuan Mandiri'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-            <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
-              <div className="text-[10px] text-slate-500 font-semibold">Total Transaksi</div>
-              <div className="text-sm font-extrabold text-slate-900 tabular-nums">
-                {state.transactions.length} Data
-              </div>
-            </div>
-
-            <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
-              <div className="text-[10px] text-slate-500 font-semibold">Pemasukan</div>
-              <div className="text-sm font-extrabold text-emerald-600 tabular-nums">
-                {formatIDR(periodIncome)}
-              </div>
-            </div>
-
-            <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
-              <div className="text-[10px] text-slate-500 font-semibold">Pengeluaran</div>
-              <div className="text-sm font-extrabold text-red-600 tabular-nums">
-                {formatIDR(periodExpense)}
-              </div>
-            </div>
-
-            <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
-              <div className="text-[10px] text-slate-500 font-semibold">Arus Kas Bersih</div>
-              <div className="text-sm font-extrabold text-teal-700 tabular-nums">
-                {netCashFlow >= 0 ? `+${formatIDR(netCashFlow)}` : formatIDR(netCashFlow)}
-              </div>
-            </div>
-          </div>
-
-          <p className="text-[11px] text-emerald-800/80 pt-1 leading-relaxed">
-            {state.transactions.length > 0
-              ? 'Data transaksi dan dompet keluarga terhubung penuh ke sistem akuntansi ledger.'
-              : 'Belum ada transaksi. Anda dapat mulai mencatat pengeluaran harian atau mengimpor data Excel (.xlsx).'}
-          </p>
-        </div>
-        {/* Action Button: Import New Excel file */}
-        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+      {/* SEKSI: IMPOR DATA EXCEL & CADANGAN */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={onOpenImport}
-            className="flex-1 py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors"
+            className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Impor Berkas Excel Baru (.xlsx)</span>
+            <span>Impor Berkas Excel (.xlsx)</span>
           </button>
 
           <button
             onClick={handleExportJSON}
-            className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
           >
             <Download className="w-4 h-4 text-slate-500" />
             <span>Unduh Cadangan JSON</span>
           </button>
         </div>
+      </div>
+
+      {/* SEKSI: RESET TRANSAKSI BULAN INI */}
+      <div className="bg-white rounded-3xl border border-red-200/80 p-5 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trash2 className="w-4 h-4 text-red-600" />
+            <h2 className="font-bold text-slate-900 text-sm">Reset Transaksi Bulan Ini</h2>
+          </div>
+          <span className="text-[10px] bg-red-50 text-red-700 font-bold px-2 py-0.5 rounded-full border border-red-200">
+            {monthTxCount} Transaksi ({currentMonthLabel})
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Hapus seluruh riwayat transaksi (pemasukan, pengeluaran, transfer) di {activeHousehold.name} khusus untuk bulan berjalan ({currentMonthLabel}). Saldo dompet akan otomatis dihitung ulang.
+        </p>
+
+        {resetSuccessMsg && (
+          <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-semibold border border-emerald-200 flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{resetSuccessMsg}</span>
+          </div>
+        )}
+
+        {!isConfirmingReset ? (
+          <button
+            type="button"
+            onClick={() => setIsConfirmingReset(true)}
+            disabled={monthTxCount === 0 || isResetting}
+            className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors active:scale-98 cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4 text-red-600" />
+            <span>Reset & Hapus Seluruh Transaksi Bulan Ini ({monthTxCount})</span>
+          </button>
+        ) : (
+          <div className="p-4 bg-red-50/90 rounded-2xl border border-red-200 space-y-3 animate-in fade-in">
+            <div className="flex items-start gap-2.5 text-xs text-red-900">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Konfirmasi Hapus Transaksi</strong>
+                <span>Yakin ingin menghapus seluruh {monthTxCount} transaksi pada bulan {currentMonthLabel}? Data yang terhapus dari cloud Supabase tidak dapat dikembalikan.</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsConfirmingReset(false)}
+                disabled={isResetting}
+                className="flex-1 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteResetMonth}
+                disabled={isResetting}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                {isResetting ? 'Menghapus...' : 'Ya, Hapus Semua'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* SEKSI 2: UNDANG KELUARGA (HOUSEHOLD INVITATION) */}
@@ -529,7 +560,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         {/* Sessions List */}
         <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-2xl overflow-hidden bg-slate-50/50">
           {sessions.map(sess => {
-            const isDesktop = sess.device.toLowerCase().includes('windows') || sess.device.toLowerCase().includes('mac') || sess.device.toLowerCase().includes('desktop');
+            const isMobile = sess.device.toLowerCase().includes('hp') || sess.device.toLowerCase().includes('android') || sess.device.toLowerCase().includes('iphone');
+            const isDesktop = !isMobile;
             const isCurrent = sess.id === state.activeSessionId || sess.isCurrent;
 
             return (

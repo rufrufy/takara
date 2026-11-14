@@ -25,11 +25,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
     window.addEventListener(SYNC_EVENT_NAME, handleSyncChange);
     return () => window.removeEventListener(SYNC_EVENT_NAME, handleSyncChange);
   }, []);
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     setJoinError('');
     if (joinCode.trim()) {
-      const res = joinHouseholdByCode(joinCode.trim());
+      const res = await joinHouseholdByCode(joinCode.trim());
       if (res.success) {
         setJoinCode('');
         setIsJoiningHousehold(false);
