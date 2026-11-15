@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import {jakartaDateTime} from '../lib/dateTime';
+import {loadUserFinancialData} from '../lib/financialBootstrap';
+import {uploadReceiptPhoto,clearReceiptSession} from '../lib/attachments';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import type {
   AppState,
   FinancialTransaction,
@@ -21,6 +24,10 @@ import { initialData, createFreshUserData } from '../lib/initialData';
 import { DEFAULT_AI_CONFIG, getSystemAIConfig, saveSystemAIConfig } from '../lib/aiScanner';
 import {
   DEFAULT_SUPABASE_CONFIG,
+  saveCategoryToSupabase,
+  removeCategoryFromSupabase,
+  fetchUserHouseholds,
+  joinSupabaseHousehold,
   syncTransactionToSupabase,
   deleteTransactionFromSupabase,
   syncDebtToSupabase,
@@ -30,14 +37,19 @@ import {
   syncUsersToSupabase,
   fetchUsersFromSupabase,
   syncWalletToSupabase,
-  deleteWalletFromSupabase
+  deleteWalletFromSupabase,
+  deleteHouseholdFromSupabase
 } from '../lib/supabase';
 import { parseFinancialExcel } from '../lib/excelImporter';
 import {
+  discardHouseholdSync,
   enqueueTransactionSync,
   enqueueStateSync,
   startSyncLoopWorker
 } from '../lib/syncEngine';
+const serializeSessionState = (value: Partial<AppState>) => JSON.stringify({
+  ...value, transactions: [], ledgerEntries: [], debts: [], wallets: [], categories: []
+});
 const defaultDebts: DebtItem[] = [];
 const STORAGE_KEY = 'dompetkita_app_state_v2';
 const CURRENT_USER_KEY = 'dompetkita_active_username_v2';
@@ -77,6 +89,9 @@ interface NewTransactionInput {
   fee?: number;
   sourceWalletId?: string;
   destinationWalletId?: string;
+  sourceAsset?: string;
+  destinationAsset?: string;
+  dateStr?: string;
   categoryId?: string;
   categoryName?: string;
   label?: string; // Label transaksi (e.g. Sarapan, Makan siang, Reina, AI)
@@ -88,6 +103,7 @@ interface NewTransactionInput {
 }
 interface AppContextValue {
   state: AppState;
+  isFinancialReady: boolean;
   activeHousehold: Household;
   households: Household[];
   wallets: Wallet[];
@@ -100,31 +116,32 @@ interface AppContextValue {
   periodIncome: number;
   periodExpense: number;
   netCashFlow: number;
-  editTransaction: (id: string, updatedFields: Partial<FinancialTransaction>) => { success: boolean; error?: string };
+  editTransaction: (id: string, updatedFields: Partial<FinancialTransaction>) => Promise<{ success: boolean; error?: string }>;
   debts: DebtItem[];
-  addDebt: (item: Omit<DebtItem, 'id' | 'householdId' | 'createdAt'>) => void;
+  addDebt: (item: Omit<DebtItem, 'id' | 'householdId' | 'createdAt'>) => Promise<{ success: boolean; error?: string }>;
   toggleDebtSettled: (id: string) => void;
   toggleDebtPaidThisMonth: (id: string) => void;
-  payDebtInstallment: (id: string, walletId?: string, imageUrl?: string) => { success: boolean; error?: string };
+  payDebtInstallment: (id: string, walletId?: string, imageUrl?: string) => Promise<{ success: boolean; error?: string }>;
   updateDebt: (id: string, updates: Partial<DebtItem>) => { success: boolean; error?: string };
   deleteDebt: (id: string) => void;
-  addTransaction: (input: NewTransactionInput) => { success: boolean; error?: string };
-  voidTransaction: (id: string) => void;
+  addTransaction: (input: NewTransactionInput) => Promise<{ success: boolean; error?: string }>;
+  voidTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
   clearCurrentMonthTransactions: () => Promise<{ success: boolean; count: number; error?: string }>;
   addWallet: (name: string, type: WalletType, openingBalance?: number, color?: string) => void;
   updateWallet: (walletId: string, updates: { name?: string; type?: WalletType; color?: string; institutionName?: string; targetBalance?: number }) => { success: boolean; error?: string };
   deleteWallet: (walletId: string) => { success: boolean; error?: string };
-  addCategory: (name: string, type: 'income' | 'expense' | 'transfer', icon?: string, color?: string) => Category;
-  updateCategory: (id: string, updates: Partial<Category>) => { success: boolean };
+  addCategory: (name: string, type: 'income' | 'expense' | 'transfer', icon?: string, color?: string) => Promise<{success:boolean;category?:Category;error?:string}>;
+  updateCategory: (id: string, updates: Partial<Category>) => Promise<{success:boolean;error?:string}>;
+  deleteCategory: (id:string) => Promise<{success:boolean;error?:string}>;
   addLabel: (name: string) => void;
   switchHousehold: (householdId: string) => void;
   createHousehold: (name: string) => void;
   updateHousehold: (householdId: string, name: string) => void;
-  deleteHousehold: (householdId: string) => { success: boolean; error?: string };
+  deleteHousehold: (householdId: string) => Promise<{ success: boolean; error?: string }>;
   importExcelFile: (file: File) => Promise<{ success: boolean; summary?: ExcelImportSummary; error?: string }>;
   resetToDefault: () => void;
   verifyAndUnlock: (pin: string) => boolean;
-  loginUser: (username: string, code5Digit: string) => { success: boolean; error?: string };
+  loginUser: (username: string, code5Digit: string) => Promise<{ success: boolean; error?: string }>;
   lockApp: () => void;
   updatePIN: (newPin: string) => void;
   inviteMember: (displayName: string, username: string, role: UserRole, pin5Digit: string) => { success: boolean; error?: string };
@@ -171,6 +188,7 @@ const reconstructMissingLedgers = (
   for (const tx of transactions) {
     if (tx.householdId !== householdId || tx.status === 'VOIDED') continue;
     if (ledgerTxSet.has(tx.id)) continue;
+    if (tx.type === 'opening_balance' && !tx.sourceWalletId && !tx.destinationWalletId) continue;
 
     const srcId = tx.sourceWalletId || (tx.sourceAsset ? walletByName.get(tx.sourceAsset.toLowerCase().trim()) : '') || defaultWalletId;
     const dstId = tx.destinationWalletId || (tx.destinationAsset ? walletByName.get(tx.destinationAsset.toLowerCase().trim()) : '') || defaultWalletId;
@@ -261,6 +279,9 @@ const reconstructMissingLedgers = (
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const financialVersion = useRef(0);
+  const loadedHousehold = useRef('');
+  const [isFinancialReady,setIsFinancialReady] = useState(false);
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
     try {
       const saved = localStorage.getItem(REGISTERED_USERS_KEY);
@@ -321,7 +342,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               : baseTemplate.households;
 
             const activeHId = parsed.activeHouseholdId || resolvedHouseholds[0]?.id || baseTemplate.activeHouseholdId;
-            const parsedTxs = parsed.transactions || [];
+            const parsedTxs: FinancialTransaction[] = [];
             const parsedWallets = parsed.wallets || baseTemplate.wallets;
             const resolvedLedgers = reconstructMissingLedgers(
               parsedTxs,
@@ -342,9 +363,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               labels: parsed.labels || baseTemplate.labels,
               transactions: parsedTxs,
               ledgerEntries: resolvedLedgers,
-              debts: parsed.debts || [],
+              debts: [],
               aiConfig: getSystemAIConfig(),
-              supabaseConfig: (parsed.supabaseConfig?.url && !parsed.supabaseConfig.url.includes('gnjrysgmiqapbjroishz')) ? parsed.supabaseConfig : DEFAULT_SUPABASE_CONFIG,
+              supabaseConfig: DEFAULT_SUPABASE_CONFIG,
               isLocked: false,
               isAuthenticated: true,
               activeSessionId: parsed.activeSessionId || baseTemplate.activeSessionId,
@@ -367,27 +388,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     startSyncLoopWorker(8000);
   }, []);
-  // Bersihkan cache lokal usang agar database 100% langsung terhubung ke Supabase
-  useEffect(() => {
-    try {
-      const MIGRATION_KEY = 'takara_v4_supabase_direct_sync';
-      if (!localStorage.getItem(MIGRATION_KEY)) {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && (k.startsWith('dompetkita_app_state_user_') || k === 'dompetkita_app_state_v2')) {
-            keysToRemove.push(k);
-          }
-        }
-        keysToRemove.forEach(k => localStorage.removeItem(k));
-        localStorage.setItem(MIGRATION_KEY, 'true');
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-
   // 1. Sync daftar pengguna terdaftar langsung dari Supabase saat aplikasi dimuat
   useEffect(() => {
     fetchUsersFromSupabase(DEFAULT_SUPABASE_CONFIG)
@@ -409,40 +409,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       .catch(() => {});
   }, []);
 
-  // 2. Sync data keuangan pengguna langsung dari Supabase saat aplikasi dimuat
   useEffect(() => {
-    const activeUser = localStorage.getItem(CURRENT_USER_KEY);
-    if (activeUser && activeUser !== 'admin' && state.activeHouseholdId) {
-      pullAllDataFromSupabase(state.supabaseConfig || DEFAULT_SUPABASE_CONFIG, state.activeHouseholdId)
-        .then(supaRes => {
-          if (supaRes.success && supaRes.data) {
-            setState(prev => {
-              const resolvedHouseholds = (supaRes.data!.households && supaRes.data!.households.length > 0)
-                ? supaRes.data!.households
-                : prev.households;
-              const pulledTxs = supaRes.data!.transactions || [];
-              const rawLedgers = supaRes.data!.ledgerEntries || [];
-              const pulledWallets = (supaRes.data!.wallets && supaRes.data!.wallets.length > 0) ? supaRes.data!.wallets : prev.wallets;
-              const resolvedLedgers = reconstructMissingLedgers(pulledTxs, rawLedgers, state.activeHouseholdId, pulledWallets);
-
-              return {
-                ...prev,
-                transactions: pulledTxs,
-                wallets: pulledWallets,
-                categories: (supaRes.data!.categories && supaRes.data!.categories.length > 0) ? supaRes.data!.categories : prev.categories,
-                debts: supaRes.data!.debts || [],
-                members: (supaRes.data!.members && supaRes.data!.members.length > 0) ? supaRes.data!.members : prev.members,
-                ledgerEntries: resolvedLedgers,
-                households: resolvedHouseholds,
-                isLocked: false,
-                isAuthenticated: true
-              };
-            });
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
+    if (!state.isAuthenticated || !state.activeHouseholdId || state.currentUser.role === 'ADMIN') return;
+    const userId=state.currentUser.id, householdId=state.activeHouseholdId;
+    if(loadedHousehold.current===userId+':'+householdId)return;
+    let cancelled=false;
+    const version=financialVersion.current;
+    setIsFinancialReady(false);setSupabaseSyncStatus({status:'syncing'});
+    loadUserFinancialData(userId,localStorage.getItem('takara_household_'+userId)||householdId).then(({householdId:selectedId,data})=>{
+      if(cancelled||version!==financialVersion.current)return;
+      loadedHousehold.current=userId+':'+selectedId;
+      setState(prev=>prev.currentUser.id!==userId?prev:({...prev,...data,activeHouseholdId:selectedId,
+        ledgerEntries:reconstructMissingLedgers(data.transactions||[],data.ledgerEntries||[],selectedId,data.wallets||[])}));
+      setIsFinancialReady(true);setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
+    }).catch(error=>{if(!cancelled)setSupabaseSyncStatus({status:'error',error:String(error)});});
+    return()=>{cancelled=true;};
+  },[state.isAuthenticated,state.currentUser.id,state.activeHouseholdId]);
 
   // Sync state to LocalStorage cache (untuk sesi offline & PWA)
   useEffect(() => {
@@ -450,8 +432,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (state.currentUser?.username) {
         const username = state.currentUser.username;
         const userKey = getUserStorageKey(username);
-        localStorage.setItem(userKey, JSON.stringify(state));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(userKey, serializeSessionState(state));
+        localStorage.setItem(STORAGE_KEY, serializeSessionState(state));
 
         if (state.isAuthenticated && !state.isLocked) {
           localStorage.setItem(CURRENT_USER_KEY, username);
@@ -492,7 +474,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const currentUserId = state.currentUser?.id;
     const currentUserName = state.currentUser?.username?.toLowerCase();
     const currentDisplayName = state.currentUser?.displayName?.toLowerCase();
-    const isAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.role === 'SUPERADMIN' || currentUserName === 'admin' || currentUserName === 'superadmin';
+    const isAdmin = state.currentUser?.role === 'ADMIN' || currentUserName === 'admin' || currentUserName === 'superadmin';
 
     // Superadmin memiliki akses audit ke seluruh household
     if (isAdmin) {
@@ -658,12 +640,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [wallets, transactions]);
 
   // Add Transaction with atomic ledger updates & label support
-  const addTransaction = (input: NewTransactionInput): { success: boolean; error?: string } => {
+  const addTransaction = async (input: NewTransactionInput): Promise<{ success: boolean; error?: string }> => {
     if (!input.amount || input.amount <= 0) {
       return { success: false, error: 'Nominal transaksi harus lebih dari 0' };
     }
 
-    const txId = `tx-${Date.now()}`;
+    if(input.categoryId && input.type!=='transfer') {
+      const category=state.categories.find(c=>c.id===input.categoryId&&c.householdId===state.activeHouseholdId&&!c.isArchived&&c.type===input.type);
+      if(!category)return {success:false,error:'Pilih kategori yang sesuai dengan tipe transaksi dan household aktif.'};
+      input={...input,categoryName:category.name};
+    }
+    const txId = 'tx-' + crypto.randomUUID();
     const dateNow = new Date().toISOString();
     const effectiveAt = input.effectiveAt || dateNow;
     const addedBy = input.addedBy || state.currentUser.displayName || 'Maruf H';
@@ -761,8 +748,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       type: input.type,
       amount: Math.round(input.amount),
       fee: input.fee ? Math.round(input.fee) : undefined,
-      sourceWalletId: input.type === 'income' ? undefined : input.sourceWalletId,
-      destinationWalletId: input.type === 'income' ? (input.destinationWalletId || input.sourceWalletId) : input.destinationWalletId,
+      sourceWalletId: input.type === 'income' ? undefined : (input.sourceWalletId || (input.type === 'expense' ? wallets[0]?.id : undefined)),
+      destinationWalletId: input.type === 'income' ? (input.destinationWalletId || input.sourceWalletId || wallets[0]?.id) : input.destinationWalletId,
       sourceAsset: input.type === 'income' ? undefined : (input.sourceAsset || wallets.find(w => w.id === input.sourceWalletId)?.name),
       destinationAsset: input.type === 'income'
         ? (input.destinationAsset || wallets.find(w => w.id === (input.destinationWalletId || input.sourceWalletId))?.name)
@@ -774,34 +761,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       notes: input.notes,
       imageUrl: input.imageUrl,
       effectiveAt,
-      time: new Date(effectiveAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      dateStr:input.dateStr||jakartaDateTime(effectiveAt).date,
+      time:jakartaDateTime(effectiveAt).time,
       addedBy,
       status: 'POSTED',
       createdAt: dateNow,
       updatedAt: dateNow
     };
 
-    setState(prev => ({
+    if (newTx.imageUrl) {
+      try { newTx.imageUrl = await uploadReceiptPhoto(newTx.imageUrl, newTx.householdId, state.currentUser); }
+      catch(error) { return {success:false,error:error instanceof Error?error.message:'Unggah lampiran gagal.'}; }
+    }
+    setSupabaseSyncStatus({ status: 'syncing' });
+    const prerequisites = await pushAllDataToSupabase({ ...state, transactions: [], ledgerEntries: [], debts: [] }, state.supabaseConfig);
+    const saved = prerequisites.success ? await syncTransactionToSupabase(newTx, state.supabaseConfig) : { success: false, error: prerequisites.error };
+    if (!saved.success) {
+      setSupabaseSyncStatus({ status: 'error', error: saved.error });
+      return { success: false, error: saved.error || 'Transaksi belum tersimpan di Supabase. Coba lagi.' };
+    }
+    setSupabaseSyncStatus({ status: 'synced', lastSynced: new Date().toLocaleTimeString('id-ID') });
+    financialVersion.current++;
+    setState(prev => prev.currentUser.username !== state.currentUser.username ? prev : ({
       ...prev,
       labels: updatedLabels,
       transactions: [newTx, ...prev.transactions],
       ledgerEntries: [...prev.ledgerEntries, ...newLedgers]
     }));
 
-    // Masukkan ke antrean sinkronisasi Supabase dengan looping retry jika offline
-    enqueueTransactionSync(newTx);
 
     return { success: true };
   };
 
   // Void transaction safely (audit preservation)
-  const voidTransaction = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      transactions: prev.transactions.map(t => (t.id === id ? { ...t, status: 'VOIDED' } : t)),
-      ledgerEntries: prev.ledgerEntries.filter(le => le.transactionId !== id)
-    }));
-  };
+  const voidTransaction = async (id: string) => editTransaction(id, { status: 'VOIDED' });
 
   const clearCurrentMonthTransactions = async (): Promise<{ success: boolean; count: number; error?: string }> => {
     const now = new Date();
@@ -831,14 +824,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ledgerEntries: remainingLedgers
       };
       const userKey = getUserStorageKey(prev.currentUser.username);
-      localStorage.setItem(userKey, JSON.stringify(updated));
+      localStorage.setItem(userKey, serializeSessionState(updated));
       return updated;
     });
 
     if (state.supabaseConfig?.url) {
       try {
         const cleanUrl = state.supabaseConfig.url.replace(/\/+$/, '');
-        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey;
+        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey || '';
         const headers = {
           apikey: clientKey,
           Authorization: `Bearer ${clientKey}`
@@ -860,7 +853,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     return { success: true, count: txsToDelete.length };
   };
-  const editTransaction = (id: string, updatedFields: Partial<FinancialTransaction>): { success: boolean; error?: string } => {
+  const editTransaction = async (id: string, updatedFields: Partial<FinancialTransaction>): Promise<{ success: boolean; error?: string }> => {
     const existingIndex = state.transactions.findIndex(t => t.id === id);
     if (existingIndex === -1) {
       return { success: false, error: 'Transaksi tidak ditemukan' };
@@ -923,22 +916,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
     } else if (mergedTx.type === 'transfer') {
-      mergedTx.categoryName = 'Uncategorized';
-      mergedTx.categoryId = undefined;
-      const srcId = mergedTx.sourceWalletId || (wallets[0] ? wallets[0].id : '');
-      if (srcId) {
-        newLedgers.push({
-          id: `led-${id}-exp`,
-          householdId: mergedTx.householdId,
-          transactionId: id,
-          walletId: srcId,
-          signedAmount: -Math.round(mergedTx.amount),
-          entryType: 'EXPENSE',
-          postedAt: effectiveAt,
-          createdAt: dateNow
-        });
-      }
-    } else if (mergedTx.type === 'transfer') {
       if (mergedTx.sourceWalletId && mergedTx.destinationWalletId) {
         newLedgers.push({
           id: `led-${id}-tout`,
@@ -977,6 +954,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
+    if (mergedTx.status === 'VOIDED') newLedgers.length = 0;
     let updatedLabels = state.labels || [];
     if (mergedTx.label && mergedTx.label.trim()) {
       const cleanLabel = mergedTx.label.trim();
@@ -985,19 +963,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    setState(prev => {
-      const newTransactions = [...prev.transactions];
-      newTransactions[existingIndex] = mergedTx;
-      const remainingLedgers = prev.ledgerEntries.filter(le => le.transactionId !== id);
-      return {
-        ...prev,
-        labels: updatedLabels,
-        transactions: newTransactions,
-        ledgerEntries: [...remainingLedgers, ...newLedgers]
-      };
-    });
-
-    enqueueTransactionSync(mergedTx);
+    setSupabaseSyncStatus({ status: 'syncing' });
+    if (mergedTx.imageUrl?.startsWith('data:')) {
+      try { mergedTx.imageUrl = await uploadReceiptPhoto(mergedTx.imageUrl, mergedTx.householdId, state.currentUser); }
+      catch(error) { return {success:false,error:error instanceof Error?error.message:'Unggah lampiran gagal.'}; }
+    }
+    const saved = await syncTransactionToSupabase(mergedTx, state.supabaseConfig, 'update');
+    if (!saved.success) {
+      setSupabaseSyncStatus({ status: 'error', error: saved.error });
+      return saved;
+    }
+    setSupabaseSyncStatus({ status: 'synced', lastSynced: new Date().toLocaleTimeString('id-ID') });
+    financialVersion.current++;
+    setState(prev => prev.currentUser.id !== state.currentUser.id ? prev : ({
+      ...prev, labels: updatedLabels,
+      transactions: prev.transactions.map(tx => tx.id === id ? mergedTx : tx),
+      ledgerEntries: [...prev.ledgerEntries.filter(le => le.transactionId !== id), ...newLedgers]
+    }));
 
     return { success: true };
   };
@@ -1008,18 +990,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return list.filter(d => d.householdId === state.activeHouseholdId);
   }, [state.debts, state.activeHouseholdId]);
 
-  const addDebt = (item: Omit<DebtItem, 'id' | 'householdId' | 'createdAt'>) => {
-    const newDebt: DebtItem = {
-      ...item,
-      id: `debt-${Date.now()}`,
-      householdId: state.activeHouseholdId,
-      createdAt: new Date().toISOString()
-    };
-    setState(prev => ({
-      ...prev,
-      debts: [newDebt, ...(prev.debts || [])]
+  const persistDebtActivity = async (debt: DebtItem, tx: FinancialTransaction) => {
+    if (tx.imageUrl) {
+      try { tx.imageUrl = await uploadReceiptPhoto(tx.imageUrl, tx.householdId, state.currentUser); }
+      catch(error) { return {success:false,error:error instanceof Error?error.message:'Unggah lampiran gagal.'}; }
+    }
+    const ledgers = reconstructMissingLedgers([tx], [], debt.householdId, state.wallets);
+    const snapshot = { ...state, transactions: [tx], ledgerEntries: ledgers, debts: [debt] };
+    const saved = await pushAllDataToSupabase(snapshot, state.supabaseConfig);
+    if (!saved.success) return { success: false, error: saved.error || saved.message };
+    financialVersion.current++;
+    setState(prev => prev.currentUser.id !== state.currentUser.id ? prev : ({
+      ...prev, debts: [debt, ...(prev.debts || []).filter(d => d.id !== debt.id)],
+      transactions: [tx, ...prev.transactions.filter(t => t.id !== tx.id)],
+      ledgerEntries: [...prev.ledgerEntries.filter(le => le.transactionId !== tx.id), ...ledgers]
     }));
-    syncDebtToSupabase(newDebt, state.supabaseConfig);
+    return { success: true };
+  };
+
+  const addDebt = async (item:Omit<DebtItem,'id'|'householdId'|'createdAt'>) => {
+    const newDebt:DebtItem={...item,id:crypto.randomUUID(),householdId:state.activeHouseholdId,createdAt:new Date().toISOString()};
+    const saved=await pushAllDataToSupabase({...state,transactions:[],ledgerEntries:[],debts:[newDebt]},state.supabaseConfig);
+    if(!saved.success)return {success:false,error:saved.error||saved.message};
+    setState(prev=>prev.currentUser.id!==state.currentUser.id?prev:({...prev,debts:[newDebt,...(prev.debts||[])]}));
+    return {success:true};
   };
 
   const updateDebt = (id: string, updates: Partial<DebtItem>): { success: boolean; error?: string } => {
@@ -1084,63 +1078,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (updated) syncDebtToSupabase(updated, state.supabaseConfig);
   };
 
-  const payDebtInstallment = (id: string, walletId?: string, imageUrl?: string): { success: boolean; error?: string } => {
-    const list = state.debts || [];
-    const debt = list.find(d => d.id === id);
-    if (!debt) return { success: false, error: 'Data utang tidak ditemukan' };
-    if (debt.isSettled || debt.remainingAmount <= 0) {
-      return { success: false, error: 'Utang ini sudah lunas' };
-    }
-
-    const paymentAmount = Math.min(
-      debt.monthlyInstallment && debt.monthlyInstallment > 0 ? debt.monthlyInstallment : debt.remainingAmount,
-      debt.remainingAmount
-    );
-
+  const payDebtInstallment = async (id: string, walletId?: string, imageUrl?: string): Promise<{ success: boolean; error?: string }> => {
+    const debt = (state.debts || []).find(d => d.id === id);
+    if (!debt || debt.isSettled || debt.remainingAmount <= 0) return { success: false, error: 'Utang tidak ditemukan atau sudah lunas.' };
+    const wallet = state.wallets.find(w => w.id === walletId && w.householdId === state.activeHouseholdId);
+    if (!wallet) return { success: false, error: 'Pilih dompet pembayaran agar cicilan tercatat dalam transaksi.' };
+    const amount = Math.min(debt.monthlyInstallment || debt.remainingAmount, debt.remainingAmount);
     const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    // If walletId provided, add expense transaction with receipt photo
-    if (walletId && walletId !== 'none') {
-      const srcWallet = state.wallets.find(w => w.id === walletId);
-      if (srcWallet) {
-        addTransaction({
-          amount: paymentAmount,
-          sourceWalletId: walletId,
-          type: 'expense',
-          categoryName: 'Cicilan & Utang',
-          label: '#Cicilan',
-          description: `Bayar cicilan: ${debt.personOrEntity}`,
-          imageUrl: imageUrl || undefined,
-          effectiveAt: now.toISOString(),
-          addedBy: state.currentUser?.displayName || 'Maruf H'
-        });
-      }
-    }
-
-    let updated: DebtItem | undefined;
-    setState(prev => {
-      const curList = prev.debts || [];
-      return {
-        ...prev,
-        debts: curList.map(d => {
-          if (d.id !== id) return d;
-          const nextRemaining = Math.max(0, d.remainingAmount - paymentAmount);
-          updated = {
-            ...d,
-            remainingAmount: nextRemaining,
-            isSettled: nextRemaining <= 0,
-            isPaidThisMonth: true,
-            lastPaidMonth: currentMonthKey,
-            imageUrl: imageUrl || d.imageUrl
-          };
-          return updated;
-        })
-      };
+    const updated = { ...debt, remainingAmount: debt.remainingAmount - amount, isSettled: debt.remainingAmount <= amount, isPaidThisMonth: true, lastPaidMonth: now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') };
+    const incoming = debt.type === 'receivable';
+    return persistDebtActivity(updated, {
+      id: 'tx-payment-' + debt.id + '-' + debt.remainingAmount, householdId: debt.householdId,
+      type: incoming ? 'income' : 'expense', amount,
+      sourceWalletId: incoming ? undefined : wallet.id, destinationWalletId: incoming ? wallet.id : undefined,
+      categoryName: incoming ? 'Pembayaran Piutang' : 'Cicilan & Utang',
+      description: 'Pembayaran: ' + debt.personOrEntity, imageUrl,
+      addedBy: state.currentUser.displayName, effectiveAt: now.toISOString(), createdAt: now.toISOString(), updatedAt: now.toISOString(), status: 'POSTED'
     });
-    if (updated) syncDebtToSupabase(updated, state.supabaseConfig);
-
-    return { success: true };
   };
 
   const deleteDebt = (id: string) => {
@@ -1153,37 +1107,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
     deleteDebtFromSupabase(id, state.supabaseConfig);
   };
-  // Add new Category directly
-  const addCategory = (name: string, type: 'income' | 'expense' | 'transfer', icon = 'Tag', color = '#0F766E'): Category => {
-    const cleanName = name.trim();
-    const existing = state.categories.find(
-      c => c.householdId === state.activeHouseholdId && c.name.toLowerCase() === cleanName.toLowerCase() && c.type === type
-    );
-    if (existing) return existing;
-
-    const newCat: Category = {
-      id: `cat-${Date.now()}`,
-      householdId: state.activeHouseholdId,
-      name: cleanName,
-      type,
-      icon,
-      color,
-      isArchived: false
-    };
-
-    setState(prev => ({
-      ...prev,
-      categories: [...prev.categories, newCat]
-    }));
-
-    return newCat;
+  const categoryWritable = () => state.households.some(h=>h.id===state.activeHouseholdId&&h.createdById===state.currentUser.id)
+    || state.members.some(m=>m.householdId===state.activeHouseholdId&&m.userId===state.currentUser.id&&m.role!=='VIEWER');
+  const addCategory = async (name:string,type:'income'|'expense'|'transfer',icon='Tag',color='#0F766E') => {
+    if(!categoryWritable())return {success:false,error:'Anda tidak dapat mengubah kategori household ini.'};
+    const clean=name.trim();if(!clean)return {success:false,error:'Nama kategori wajib diisi.'};
+    const existing=state.categories.find(c=>c.householdId===state.activeHouseholdId&&!c.isArchived&&c.type===type&&c.name.trim().toLowerCase()===clean.toLowerCase());
+    if(existing)return {success:false,error:'Kategori dengan nama dan tipe ini sudah ada.'};
+    const category:Category={id:'cat-'+crypto.randomUUID(),householdId:state.activeHouseholdId,name:clean,type,icon,color,isArchived:false};
+    try {
+      await saveCategoryToSupabase(category,'create');
+      setState(prev=>prev.currentUser.id!==state.currentUser.id?prev:({...prev,categories:[...prev.categories,category]}));
+      return {success:true,category};
+    }catch(error){return {success:false,error:error instanceof Error?error.message:'Gagal menyimpan kategori.'};}
   };
-  const updateCategory = (id: string, updates: Partial<Category>): { success: boolean } => {
-    setState(prev => ({
-      ...prev,
-      categories: prev.categories.map(c => (c.id === id ? { ...c, ...updates } : c))
-    }));
-    return { success: true };
+  const updateCategory = async (id:string,updates:Partial<Category>) => {
+    const current=state.categories.find(c=>c.id===id&&c.householdId===state.activeHouseholdId);
+    if(!current||!categoryWritable())return {success:false,error:'Kategori tidak ditemukan pada household Anda.'};
+    if(updates.householdId&&updates.householdId!==current.householdId)return {success:false,error:'Kategori terkunci pada household asal.'};
+    if(updates.type&&updates.type!==current.type)return {success:false,error:'Tipe kategori tidak dapat dipindah. Buat kategori baru.'};
+    const name=(updates.name??current.name).trim();if(!name)return {success:false,error:'Nama kategori wajib diisi.'};
+    if(state.categories.some(c=>c.id!==id&&c.householdId===current.householdId&&!c.isArchived&&c.type===current.type&&c.name.toLowerCase()===name.toLowerCase()))return {success:false,error:'Nama kategori sudah digunakan.'};
+    const category={...current,name,icon:updates.icon??current.icon,color:updates.color??current.color};
+    try {await saveCategoryToSupabase(category,'update');setState(prev=>prev.currentUser.id!==state.currentUser.id?prev:({...prev,categories:prev.categories.map(c=>c.id===id?category:c)}));return {success:true};}
+    catch(error){return {success:false,error:error instanceof Error?error.message:'Gagal mengubah kategori.'};}
+  };
+  const deleteCategory = async (id:string) => {
+    const category=state.categories.find(c=>c.id===id&&c.householdId===state.activeHouseholdId);
+    if(!category||!categoryWritable())return {success:false,error:'Kategori tidak ditemukan pada household Anda.'};
+    try {await removeCategoryFromSupabase(category);setState(prev=>({...prev,categories:prev.categories.map(c=>c.id===id?{...c,isArchived:true}:c)}));return {success:true};}
+    catch(error){return {success:false,error:error instanceof Error?error.message:'Gagal menghapus kategori.'};}
   };
 
   // Add new Label directly
@@ -1382,13 +1335,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const switchHousehold = (householdId: string) => {
-    const isAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.role === 'SUPERADMIN' || state.currentUser?.username === 'admin' || state.currentUser?.username === 'superadmin';
+    const isAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.username === 'admin' || state.currentUser?.username === 'superadmin';
     const isAllowed = isAdmin || userHouseholds.some(h => h.id === householdId);
     if (!isAllowed) {
       console.warn('Akses ditolak: Anda bukan anggota dari household ini.');
       return;
     }
     if (state.households.some(h => h.id === householdId)) {
+      localStorage.setItem('takara_household_' + state.currentUser.id, householdId);
       setState(prev => ({ ...prev, activeHouseholdId: householdId }));
     }
   };
@@ -1419,19 +1373,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
 
-  const deleteHousehold = (householdId: string): { success: boolean; error?: string } => {
-    if (state.households.length <= 1) {
-      return { success: false, error: 'Minimal harus ada 1 rumah tangga/household.' };
-    }
-    setState(prev => {
-      const nextHouseholds = prev.households.filter(h => h.id !== householdId);
-      const nextActiveId = prev.activeHouseholdId === householdId ? (nextHouseholds[0]?.id || '') : prev.activeHouseholdId;
-      return {
-        ...prev,
-        households: nextHouseholds,
-        activeHouseholdId: nextActiveId
-      };
+  const deleteHousehold = async (householdId: string): Promise<{ success: boolean; error?: string }> => {
+    const target = allHouseholds.find(h => h.id === householdId);
+    if (!target) return { success: false, error: 'Household tidak ditemukan.' };
+    const isAdmin = state.currentUser.role === 'ADMIN' || state.currentUser.username === 'admin' || state.currentUser.username === 'superadmin';
+    if (!isAdmin && target.createdById !== state.currentUser.id) return { success: false, error: 'Hanya pembuat household atau superadmin yang dapat menghapus.' };
+    const remaining = userHouseholds.filter(h => h.id !== householdId);
+    if (!isAdmin && remaining.length === 0) return { success: false, error: 'Sisakan minimal satu household untuk akun Anda.' };
+    const saved = await deleteHouseholdFromSupabase(householdId, state.supabaseConfig);
+    if (!saved.success) return saved;
+    discardHouseholdSync(householdId);
+    const withoutHousehold = (value: AppState): AppState => ({
+      ...value, households: value.households.filter(h => h.id !== householdId),
+      activeHouseholdId: value.activeHouseholdId === householdId ? (value.currentUser?.id === state.currentUser.id ? remaining[0]?.id || '' : (value.households || []).find(h => h.id !== householdId && h.createdById === value.currentUser?.id)?.id || '') : value.activeHouseholdId,
+      transactions: (value.transactions || []).filter(t => t.householdId !== householdId),
+      ledgerEntries: (value.ledgerEntries || []).filter(t => t.householdId !== householdId),
+      wallets: (value.wallets || []).filter(t => t.householdId !== householdId),
+      categories: (value.categories || []).filter(t => t.householdId !== householdId),
+      members: (value.members || []).filter(t => t.householdId !== householdId),
+      debts: (value.debts || []).filter(t => t.householdId !== householdId)
     });
+    setState(prev => withoutHousehold(prev));
+    // Remove obsolete household metadata so admin inventories cannot restore it from a cached session.
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || (!key.startsWith('dompetkita_app_state_user_') && key !== STORAGE_KEY)) continue;
+      try { const cached = JSON.parse(localStorage.getItem(key) || '{}');
+        if (Array.isArray(cached.households)) localStorage.setItem(key, serializeSessionState(withoutHousehold(cached)));
+      } catch { /* Ignore invalid legacy session metadata. */ }
+    }
     return { success: true };
   };
 
@@ -1449,23 +1419,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       // Gabungkan dompet: simpan dompet yang sudah ada dan tambahkan dompet baru dari Excel
       const existingWalletMap = new Map(state.wallets.map(w => [w.name.toLowerCase().trim(), w]));
-      const resolvedWallets: Wallet[] = [...state.wallets];
+      const resolvedWallets: Wallet[] = Array.from(new Map(state.wallets.map(w => [w.id, w])).values());
 
       for (const rw of result.wallets) {
         const key = rw.name.toLowerCase().trim();
-        if (!existingWalletMap.has(key)) {
+        const sameId = resolvedWallets.find(w => w.id === rw.id);
+        if (sameId) existingWalletMap.set(key, sameId);
+        else if (!existingWalletMap.has(key)) {
           existingWalletMap.set(key, rw);
           resolvedWallets.push(rw);
         }
       }
 
       // Gabungkan kategori: simpan kategori yang sudah ada dan tambahkan kategori baru dari Excel
-      const existingCatMap = new Map(state.categories.map(c => [c.name.toLowerCase().trim(), c]));
-      const resolvedCats: Category[] = [...state.categories];
+      const existingCatMap = new Map(state.categories.filter(c=>c.householdId===targetHouseholdId).map(c => [c.type+':'+c.name.toLowerCase().trim(), c]));
+      const resolvedCats: Category[] = Array.from(new Map(state.categories.map(c => [c.id,c])).values());
 
       for (const rc of result.categories) {
-        const key = rc.name.toLowerCase().trim();
-        if (!existingCatMap.has(key)) {
+        const key = rc.type+':'+rc.name.toLowerCase().trim();
+        const sameId = resolvedCats.find(c => c.id === rc.id);
+        if (sameId) existingCatMap.set(key, sameId);
+        else if (!existingCatMap.has(key)) {
           existingCatMap.set(key, rc);
           resolvedCats.push(rc);
         }
@@ -1490,7 +1464,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (match) dstWalletId = match.id;
         }
         if (tx.categoryName) {
-          const match = existingCatMap.get(tx.categoryName.toLowerCase().trim());
+          const match = existingCatMap.get((tx.type==='income'?'income':'expense')+':'+tx.categoryName.toLowerCase().trim());
           if (match) catId = match.id;
         }
 
@@ -1566,20 +1540,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ledgerEntries: combinedLedgers,
         importHistory: [result.summary, ...(state.importHistory || [])]
       };
-      setState(updatedState);
-
-      const userKey = getUserStorageKey(state.currentUser.username);
-      localStorage.setItem(userKey, JSON.stringify(updatedState));
-
-      // Simpan langsung seluruh data transaksi impor ke Supabase Cloud
-      pushAllDataToSupabase(updatedState, updatedState.supabaseConfig)
-        .then(res => {
-          if (!res.success) {
-            enqueueStateSync(updatedState);
-          }
-        })
-        .catch(() => enqueueStateSync(updatedState));
-
+      setSupabaseSyncStatus({ status: 'syncing' });
+      const saved = await pushAllDataToSupabase(updatedState, updatedState.supabaseConfig);
+      if (!saved.success) {
+        setSupabaseSyncStatus({ status: 'error', error: saved.error });
+        return { success: false, error: saved.error || saved.message };
+      }
+      const verified = await pullAllDataFromSupabase(updatedState.supabaseConfig, targetHouseholdId);
+      const ids = new Set(verified.data?.transactions?.map(t => t.id));
+      if (!verified.success || remappedTxs.some(tx => !ids.has(tx.id))) {
+        return { success: false, error: verified.error || 'Hasil impor belum dapat diverifikasi dari Supabase. Coba impor ulang.' };
+      }
+      financialVersion.current++;
+    setState(prev => prev.currentUser.id !== state.currentUser.id ? prev : ({ ...prev, ...verified.data, labels: mergedLabels, importHistory: updatedState.importHistory }));
+      setSupabaseSyncStatus({ status: 'synced', lastSynced: new Date().toLocaleTimeString('id-ID') });
       return { success: true, summary: result.summary };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Terjadi kesalahan saat membaca file';
@@ -1593,7 +1567,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.removeItem(STORAGE_KEY);
   };
   const verifyAndUnlock = (pin: string): boolean => {
-    if (state.currentUser.role === 'ADMIN' || state.currentUser.role === 'SUPERADMIN' || state.currentUser.username === 'admin' || state.currentUser.username === 'superadmin') {
+    if (state.currentUser.role === 'ADMIN' || state.currentUser.username === 'admin' || state.currentUser.username === 'superadmin') {
       if (pin === '99999') {
         setState(prev => ({ ...prev, isLocked: false }));
         return true;
@@ -1633,7 +1607,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return sessions.find(s => s.id === state.activeSessionId) || sessions.find(s => s.isCurrent) || sessions[0] || null;
   }, [sessions, state.activeSessionId]);
 
-  const loginUser = (username: string, code5Digit: string): { success: boolean; error?: string } => {
+  const loginUser = async (username: string, code5Digit: string): Promise<{ success: boolean; error?: string }> => {
     const cleanUser = username.trim().toLowerCase();
     const cleanCode = code5Digit.trim();
 
@@ -1651,7 +1625,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // ROLE 1: DEDICATED SUPERADMIN (Khusus kelola user, AI, Supabase, sesi - tidak ikut pencatatan)
     if (cleanUser === 'admin' || cleanUser === 'superadmin') {
       if (cleanCode !== '99999') {
-        return { success: false, error: 'Kode unik superadmin salah. Gunakan 99999' };
+        return { success: false, error: 'Kode akses superadmin tidak cocok.' };
       }
 
       const adminSession: UserSession = {
@@ -1691,7 +1665,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // ROLE 2: USER KELUARGA (Pencatatan Keuangan Rumah Tangga)
     // Cek di daftar registeredUsers - TIDAK auto-register sembarangan di form login
-    let userRecord = registeredUsers.find(u => u.username.toLowerCase() === cleanUser);
+    const remoteUsers=await fetchUsersFromSupabase(DEFAULT_SUPABASE_CONFIG);
+    if(!remoteUsers.success)return {success:false,error:remoteUsers.error||'Supabase belum dapat dihubungi.'};
+    let userRecord=remoteUsers.users.find(u=>u.username.toLowerCase()===cleanUser);
     if (!userRecord) {
       return {
         success: false,
@@ -1727,11 +1703,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             labels: (parsed.labels && parsed.labels.length > 0) ? parsed.labels : freshTemplate.labels,
             members: Array.isArray(parsed.members) && parsed.members.length > 0 ? parsed.members : freshTemplate.members,
             sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-            transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
-            ledgerEntries: Array.isArray(parsed.ledgerEntries) ? parsed.ledgerEntries : [],
-            debts: Array.isArray(parsed.debts) ? parsed.debts : [],
+            transactions: [],
+            ledgerEntries: [],
+            debts: [],
             aiConfig: getSystemAIConfig(),
-            supabaseConfig: parsed.supabaseConfig || DEFAULT_SUPABASE_CONFIG,
+            supabaseConfig: DEFAULT_SUPABASE_CONFIG,
           };
         }
       } catch {
@@ -1752,6 +1728,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       isCurrent: true
     };
 
+    let hydrated: Awaited<ReturnType<typeof loadUserFinancialData>>;
+    try { hydrated=await loadUserFinancialData(userRecord.id,localStorage.getItem('takara_household_'+userRecord.id)); }
+    catch(error){return {success:false,error:error instanceof Error?error.message:'Gagal memuat saldo household.'};}
+    targetState={...targetState,...hydrated.data,currentUser:{...userRecord,pinHash:cleanCode},activeHouseholdId:hydrated.householdId,
+      ledgerEntries:reconstructMissingLedgers(hydrated.data.transactions||[],hydrated.data.ledgerEntries||[],hydrated.householdId,hydrated.data.wallets||[])};
+    loadedHousehold.current=userRecord.id+':'+hydrated.householdId;
+    setIsFinancialReady(true);
+    setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
     const priorSessions = (targetState.sessions || []).map(s => ({ ...s, isCurrent: false }));
 
     const updatedState: AppState = {
@@ -1763,7 +1747,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setState(updatedState);
-    localStorage.setItem(userKey, JSON.stringify(updatedState));
+    localStorage.setItem(userKey, serializeSessionState(updatedState));
     localStorage.setItem(CURRENT_USER_KEY, cleanUser);
     if (cleanUser !== 'admin') {
       // Pastikan user terdaftar di tabel app_users Supabase
@@ -1771,38 +1755,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         syncUsersToSupabase([userRecord], updatedState.supabaseConfig).catch(() => {});
       }
 
-      // Sinkronkan langsung dengan Supabase Cloud (pull jika ada data, atau push state lokal jika kosong)
-      pullAllDataFromSupabase(updatedState.supabaseConfig, updatedState.activeHouseholdId)
-        .then(supaRes => {
-          if (supaRes.success && supaRes.data) {
-            setState(prev => {
-              const pulledTxs = supaRes.data!.transactions || [];
-              const rawLedgers = supaRes.data!.ledgerEntries || [];
-              const pulledWallets = (supaRes.data!.wallets && supaRes.data!.wallets.length > 0) ? supaRes.data!.wallets : prev.wallets;
-              const resolvedLedgers = reconstructMissingLedgers(pulledTxs, rawLedgers, updatedState.activeHouseholdId, pulledWallets);
 
-              const merged = {
-                ...prev,
-                transactions: pulledTxs,
-                wallets: pulledWallets,
-                categories: (supaRes.data!.categories && supaRes.data!.categories.length > 0) ? supaRes.data!.categories : prev.categories,
-                debts: supaRes.data!.debts || [],
-                members: (supaRes.data!.members && supaRes.data!.members.length > 0) ? supaRes.data!.members : prev.members,
-                ledgerEntries: resolvedLedgers,
-                households: (supaRes.data!.households && supaRes.data!.households.length > 0) ? supaRes.data!.households : prev.households
-              };
-              localStorage.setItem(userKey, JSON.stringify(merged));
-              return merged;
-            });
-          } else {
-            pushAllDataToSupabase(updatedState, updatedState.supabaseConfig)
-              .then(res => {
-                if (!res.success) enqueueStateSync(updatedState);
-              })
-              .catch(() => enqueueStateSync(updatedState));
-          }
-        })
-        .catch(() => {});
     }
 
     return { success: true };
@@ -1891,7 +1844,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     const userKey = getUserStorageKey(cleanUser);
-    localStorage.setItem(userKey, JSON.stringify(freshState));
+    localStorage.setItem(userKey, serializeSessionState(freshState));
 
     setRegisteredUsers(prev => [...prev, newUser]);
     setState(freshState);
@@ -1911,130 +1864,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const joinHouseholdByCode = async (inviteCode: string): Promise<{ success: boolean; error?: string }> => {
-    const cleanCode = inviteCode.trim().toUpperCase();
-    if (!cleanCode) return { success: false, error: 'Silakan masukkan kode household.' };
-
-    let targetHh = allHouseholds.find(h => (h.inviteCode || '').trim().toUpperCase() === cleanCode);
-
-    // Cari langsung ke Supabase Cloud jika belum ada di cache lokal
-    if (!targetHh && state.supabaseConfig?.url) {
-      try {
-        const cleanUrl = state.supabaseConfig.url.replace(/\/+$/, '');
-        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey;
-        const res = await fetch(`${cleanUrl}/rest/v1/households?invite_code=eq.${encodeURIComponent(cleanCode)}`, {
-          headers: {
-            apikey: clientKey,
-            Authorization: `Bearer ${clientKey}`
-          }
-        });
-        if (res.ok) {
-          const list = await res.json();
-          if (Array.isArray(list) && list[0]) {
-            const h = list[0];
-            targetHh = {
-              id: h.id,
-              name: h.name,
-              baseCurrency: h.base_currency || 'IDR',
-              createdById: h.created_by_id || '',
-              inviteCode: h.invite_code,
-              createdAt: h.created_at
-            };
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!targetHh) {
-      return { success: false, error: `Household dengan kode "${inviteCode}" tidak ditemukan.` };
-    }
-
-    const now = new Date().toISOString();
-    const cleanUser = state.currentUser.username;
-    const newMember: HouseholdMember = {
-      id: `mem-${cleanUser}-${targetHh.id}`,
-      householdId: targetHh.id,
-      userId: state.currentUser.id,
-      displayName: state.currentUser.displayName,
-      role: 'MEMBER',
-      joinedAt: now
-    };
-
-    // Pastikan household tersimpan di Supabase sebelum member di-upsert (mencegah foreign key error 23503 & 409 conflict)
-    if (state.supabaseConfig?.url) {
-      try {
-        const cleanUrl = state.supabaseConfig.url.replace(/\/+$/, '');
-        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey;
-        const authHeaders = {
-          'Content-Type': 'application/json',
-          apikey: clientKey,
-          Authorization: `Bearer ${clientKey}`,
-          Prefer: 'resolution=merge-duplicates'
-        };
-
-        // 1. Upsert household terlebih dahulu
-        await fetch(`${cleanUrl}/rest/v1/households?on_conflict=id`, {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify([{
-            id: targetHh.id,
-            name: targetHh.name,
-            base_currency: targetHh.baseCurrency || 'IDR',
-            created_by_id: targetHh.createdById || null,
-            invite_code: targetHh.inviteCode || null,
-            created_at: targetHh.createdAt || now
-          }])
-        });
-
-        // 2. Upsert household_member
-        await fetch(`${cleanUrl}/rest/v1/household_members?on_conflict=id`, {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify([{
-            id: newMember.id,
-            household_id: targetHh.id,
-            user_id: newMember.userId,
-            display_name: newMember.displayName,
-            role: newMember.role || 'MEMBER',
-            joined_at: newMember.joinedAt
-          }])
-        });
-      } catch (e) {
-        console.warn('Gagal sync join ke Supabase:', e);
-      }
-    }
-
-    let ownerState: Partial<AppState> | null = null;
+    if (!inviteCode.trim()) return { success: false, error: 'Masukkan kode household.' };
     try {
-      const ownerUserKey = getUserStorageKey(targetHh.createdById.replace('user-', ''));
-      const ownerSaved = localStorage.getItem(ownerUserKey);
-      if (ownerSaved) ownerState = JSON.parse(ownerSaved);
-    } catch {}
-
-    setState(prev => {
-      const alreadyInHousehold = prev.households.some(h => h.id === targetHh!.id);
-      const updatedHouseholds = alreadyInHousehold ? prev.households : [...prev.households, targetHh!];
-      const updatedMembers = prev.members.some(m => m.householdId === targetHh!.id && m.userId === prev.currentUser.id)
-        ? prev.members
-        : [...prev.members, newMember];
-
-      const updatedState = {
-        ...prev,
-        households: updatedHouseholds,
-        activeHouseholdId: targetHh!.id,
-        members: updatedMembers,
-        wallets: (ownerState?.wallets && ownerState.wallets.length > 0) ? ownerState.wallets : prev.wallets,
-        categories: (ownerState?.categories && ownerState.categories.length > 0) ? ownerState.categories : prev.categories,
-        transactions: ownerState?.transactions || prev.transactions,
-        ledgerEntries: ownerState?.ledgerEntries || prev.ledgerEntries
-      };
-
-      enqueueStateSync(updatedState);
-      return updatedState;
-    });
-
-    return { success: true };
+      const userId = state.currentUser.id;
+      const household = await joinSupabaseHousehold(inviteCode, state.currentUser);
+      const membership = await fetchUserHouseholds(userId);
+      const result = await pullAllDataFromSupabase(DEFAULT_SUPABASE_CONFIG, household.id);
+      if (!result.success || !result.data) return { success: false, error: result.error || 'Gagal membaca data household.' };
+      localStorage.setItem('takara_household_' + userId, household.id);
+      financialVersion.current++;
+      setState(prev => prev.currentUser.id !== userId ? prev : ({
+        ...prev, ...result.data, households:membership.households,
+        members:Array.from(new Map([...membership.members, ...(result.data!.members || [])].map(m => [m.id,m])).values()),
+        activeHouseholdId:household.id,
+        ledgerEntries:reconstructMissingLedgers(result.data!.transactions || [],result.data!.ledgerEntries || [],household.id,result.data!.wallets || [])
+      }));
+      return { success: true };
+    } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Gagal bergabung ke Supabase.' }; }
   };
 
   const adminCreateUser = (
@@ -2069,7 +1915,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const freshState = createFreshUserData(cleanUser, cleanName, cleanPin);
     freshState.currentUser.role = role;
     const userKey = getUserStorageKey(cleanUser);
-    localStorage.setItem(userKey, JSON.stringify(freshState));
+    localStorage.setItem(userKey, serializeSessionState(freshState));
 
     setRegisteredUsers(prev => [...prev, newUser]);
 
@@ -2117,7 +1963,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           parsed.currentUser.displayName = updates.displayName?.trim() || parsed.currentUser.displayName;
           if (updates.pin5Digit?.trim()) parsed.currentUser.pinHash = updates.pin5Digit.trim();
           if (updates.role) parsed.currentUser.role = updates.role;
-          localStorage.setItem(userKey, JSON.stringify(parsed));
+          localStorage.setItem(userKey, serializeSessionState(parsed));
         }
       } catch {
         // ignore
@@ -2181,6 +2027,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const logoutUser = () => {
+    loadedHousehold.current='';setIsFinancialReady(false);
+    clearReceiptSession(state.currentUser.id);
     setState(prev => {
       const updatedSessions = (prev.sessions || []).map(s => ({
         ...s,
@@ -2196,7 +2044,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
 
       if (prev.currentUser?.username) {
-        localStorage.setItem(getUserStorageKey(prev.currentUser.username), JSON.stringify(loggedOutState));
+        localStorage.setItem(getUserStorageKey(prev.currentUser.username), serializeSessionState(loggedOutState));
       }
       localStorage.removeItem(CURRENT_USER_KEY);
 
@@ -2384,6 +2232,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <AppContext.Provider
       value={{
         state,
+        isFinancialReady,
         activeHousehold,
         households: userHouseholds,
         wallets,
@@ -2412,6 +2261,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteWallet,
         addCategory,
         updateCategory,
+        deleteCategory,
         addLabel,
         switchHousehold,
         createHousehold,

@@ -1,0 +1,11 @@
+import {readFileSync} from 'node:fs';import {stripTypeScriptTypes} from 'node:module';import assert from 'node:assert/strict';
+const source=stripTypeScriptTypes(readFileSync('src/lib/categorySelection.ts','utf8'));
+const {selectTransactionCategory:select}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const categories=[{id:'food',name:'Makanan',type:'expense',householdId:'maruf'},{id:'salary',name:'Gaji',type:'income',householdId:'maruf'},{id:'ulfa',name:'Bonus',type:'income',householdId:'ulfa'},{id:'old',name:'Lama',type:'income',householdId:'maruf',isArchived:true}];
+assert.equal(select(categories,'maruf','income','food').id,'salary');
+assert.equal(select(categories,'maruf','expense','salary').id,'food');
+assert.equal(select(categories,'ulfa','income','salary').id,'ulfa');
+assert.equal(select(categories,'maruf','income','old').id,'salary');
+assert.equal(select(categories,'maruf','transfer','food'),undefined);
+assert.equal(select([],'maruf','income'),undefined);
+console.log('PASS: income/expense switching, household isolation, archived category excluded, transfer reset');

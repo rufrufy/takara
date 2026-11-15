@@ -1,3 +1,5 @@
+import {CategorySettings} from '../CategorySettings';
+import { HouseholdDeleteControl } from '../HouseholdDeleteControl';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
@@ -42,6 +44,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
   const {
     state,
     activeHousehold,
+    households,
     members,
     periodIncome,
     periodExpense,
@@ -164,12 +167,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
   const isDataImported = state.transactions.length >= 74;
 
   return (
-    <div className="space-y-4 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Title */}
       <div>
         <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Pengaturan</h1>
         <p className="text-xs text-slate-500">
-          Database Keuangan, undang keluarga, keamanan PIN 5-digit, dan dashboard admin AI
+          Kelola household, kategori, anggota, dan akun Anda.
         </p>
       </div>
 
@@ -182,7 +185,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
       )}
 
       {/* User Profile Card */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs flex items-center justify-between">
+      <div className="settings-profile bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs flex items-center justify-between">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 font-extrabold text-lg flex items-center justify-center border border-teal-200">
             {state.currentUser.displayName.slice(0, 2).toUpperCase()}
@@ -197,7 +200,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
                 {state.currentUser.username === 'admin' || state.currentUser.role === 'ADMIN'
                   ? 'Superadmin'
                   : state.currentUser.role === 'OWNER'
-                  ? 'Kepala Keluarga (Owner)'
+                  ? 'Kepala keluarga'
                   : state.currentUser.role === 'MEMBER'
                   ? 'Anggota Keluarga'
                   : 'Pengguna'}
@@ -218,6 +221,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         </button>
       </div>
 
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+        <h2 className="text-sm font-bold text-slate-900">Household akun Anda</h2>
+        <p className="text-xs text-slate-500">Hapus household yang Anda buat dan sudah tidak digunakan. Sisakan minimal satu household untuk akun ini.</p>
+        {households.map(h => <div key={h.id} className="border-b border-slate-100 py-3 space-y-2">
+          <p className="text-sm font-semibold text-slate-800">{h.name}{h.id === state.activeHouseholdId ? ' · Aktif' : ''}</p>
+          {h.createdById === state.currentUser.id ? <HouseholdDeleteControl household={h} disabled={households.length <= 1} /> : <p className="text-xs text-slate-500">Hanya pembuat household atau superadmin yang dapat menghapus.</p>}
+        </div>)}
+      </section>
+      <CategorySettings />
       {/* SEKSI: IMPOR DATA EXCEL & CADANGAN */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-3">
         <div className="flex flex-col sm:flex-row gap-2">
@@ -646,54 +658,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         </div>
       </div>
 
-      {/* SEKSI 5: KONEKSI SUPABASE CLOUD */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-emerald-700" />
-            <h2 className="font-bold text-slate-900 text-sm">Koneksi Supabase Cloud</h2>
-          </div>
-          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-            Terhubung Langsung
-          </span>
-        </div>
-
-        <div className="space-y-2 text-xs">
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-            <span className="text-[10px] text-slate-400 font-bold uppercase">Project URL</span>
-            <div className="font-mono text-slate-800 text-[11px] truncate">
-              {state.supabaseConfig?.url || 'https://xmtjesxmkcduirggmzam.supabase.co'}
-            </div>
-          </div>
-
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-            <span className="text-[10px] text-slate-400 font-bold uppercase">Publishable Key</span>
-            <div className="font-mono text-emerald-700 text-[11px] truncate font-semibold">
-              {state.supabaseConfig?.anonKey || 'sb_publishable_3vfImmTVWfPlk9YsPQ64Mg_dAWg0jqT'}
-            </div>
-          </div>
-
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 font-bold uppercase">Secret Key (Admin Direct Bypass)</span>
-              <button
-                type="button"
-                onClick={() => setShowSecretKey(!showSecretKey)}
-                className="text-slate-400 hover:text-slate-600 text-[11px] flex items-center gap-1"
-              >
-                {showSecretKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>{showSecretKey ? 'Sembunyikan' : 'Tampilkan'}</span>
-              </button>
-            </div>
-            <div className="font-mono text-slate-800 text-[11px] truncate font-semibold">
-              {showSecretKey ? (state.supabaseConfig?.secretKey || '(Belum dikonfigurasi / Kosong)') : '••••••••••••••••••••••••••••••••••••••••••••'}
-            </div>
-          </div>
-        </div>
-      </div>
       {/* SEKSI 6: DASHBOARD ADMIN HANYA UNTUK SUPERADMIN */}
       {(state.currentUser.role === 'ADMIN' || state.currentUser.username === 'admin') && (
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl p-5 shadow-lg space-y-3">
+        <div className="soft-summary rounded-3xl p-5 shadow-lg space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-300 flex items-center justify-center border border-teal-400/30">
@@ -702,9 +669,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-bold text-sm">Dashboard Admin & Pengaturan AI</h2>
-                <span className="text-[9px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full font-bold border border-teal-400/30">
-                  SHADCN UI
-                </span>
+
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Atur Vision API URL & Key untuk pembaca foto struk dan cloud Supabase

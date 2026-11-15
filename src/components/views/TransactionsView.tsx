@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import {jakartaDateTime,jakartaDateTimeToISO} from '../../lib/dateTime';
+import {ReceiptAttachment} from '../ReceiptAttachment';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { CategoryIcon } from '../CategoryIcon';
@@ -35,6 +37,7 @@ import type { TransactionType, FinancialTransaction } from '../../types';
 
 interface TransactionsViewProps {
   onOpenQuickAdd: (type?: TransactionType) => void;
+  initialTransactionId?: string;
 }
 
 const safeDisplayDate = (dateStr?: string, effectiveAt?: string): string => {
@@ -51,8 +54,8 @@ const safeDisplayDate = (dateStr?: string, effectiveAt?: string): string => {
   return String(effectiveAt).split('T')[0] || '';
 };
 
-export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickAdd }) => {
-  const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, state } = useApp();
+export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickAdd, initialTransactionId }) => {
+  const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, state, supabaseSyncStatus, syncFromSupabase } = useApp();
 
   // Search & Filter State (5 Kriteria: Tipe, Anggota, Aset, Kategori, Label)
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,6 +71,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
 
   // Selected Transaction for 21-column Detail Modal & Edit Mode
   const [detailTransaction, setDetailTransaction] = useState<FinancialTransaction | null>(null);
+  useEffect(()=>{if(initialTransactionId)setDetailTransaction(transactions.find(t=>t.id===initialTransactionId)||null);},[initialTransactionId]);
   const [isEditing, setIsEditing] = useState(false);
   const [voidConfirmId, setVoidConfirmId] = useState<string | null>(null);
 
@@ -86,6 +90,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   const [editFeeStr, setEditFeeStr] = useState('');
   const [editHouseholdId, setEditHouseholdId] = useState('');
   const [editErrorMsg, setEditErrorMsg] = useState('');
+  const editSavingRef = useRef(false);
+  const [editSaving, setEditSaving] = useState(false);
+
+  useEffect(()=>{
+    if(!isEditing)return;
+    const matching=categories.filter(c=>c.householdId===(editHouseholdId||state.activeHouseholdId)&&c.type===editType);
+    const selected=matching.find(c=>c.id===editCategoryId)||matching[0];
+    setEditCategoryId(selected?.id||'');setEditCategoryName(editType==='transfer'?'Transfer Antar Dompet':selected?.name||'');
+  },[isEditing,editType,editHouseholdId,categories,editCategoryId,state.activeHouseholdId]);
 
   const availableMemberNames = useMemo(() => {
     const names = new Set<string>();
@@ -276,14 +289,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `transaksi-dompetkita-${Date.now()}.csv`);
+    link.setAttribute('download', `transaksi-takara-${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const handleConfirmVoid = (id: string) => {
-    voidTransaction(id);
+  const handleConfirmVoid = async (id: string) => {
+    const result = await voidTransaction(id);
+    if (!result.success) { setEditErrorMsg(result.error || 'Gagal membatalkan transaksi di Supabase.'); return; }
     setVoidConfirmId(null);
     if (detailTransaction?.id === id) {
       setDetailTransaction(null);
@@ -298,6 +312,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     setEditAmountStr(String(t.amount));
     setEditHouseholdId(t.householdId || state.activeHouseholdId);
     setEditType(t.type);
+    const matchedSrc = t.sourceWalletId || wallets.find(w => w.name.toLowerCase().trim() === t.sourceAsset?.toLowerCase().trim())?.id || wallets[0]?.id || '';
     const matchedDst = t.destinationWalletId || wallets.find(w => w.name.toLowerCase().trim() === (t.destinationAsset || t.sourceAsset)?.toLowerCase().trim())?.id || (t.type === 'income' ? matchedSrc : '') || wallets[1]?.id || wallets[0]?.id || '';
     setEditSourceWalletId(matchedSrc);
     setEditDestWalletId(matchedDst);
@@ -312,14 +327,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     }
     setEditLabel(t.label || '');
     setEditDescription(t.description || '');
-    setEditDateStr(t.dateStr || safeDisplayDate(undefined, t.effectiveAt));
-    setEditTime(t.time || '');
+    const dateTime=jakartaDateTime(t.effectiveAt);
+    setEditDateStr(dateTime.date);setEditTime(dateTime.time);
     setEditAddedBy(t.addedBy || 'Maruf H');
     setEditFeeStr(t.fee ? String(t.fee) : '');
   };
 
   // Handle saving transaction edit
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!detailTransaction) return;
     setEditErrorMsg('');
@@ -343,11 +358,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       }
     }
 
+    let editedEffectiveAt:string;
+    try{editedEffectiveAt=jakartaDateTimeToISO(editDateStr,editTime);}catch(error){setEditErrorMsg((error as Error).message);return;}
     const srcWallet = wallets.find(w => w.id === editSourceWalletId);
     const dstWallet = wallets.find(w => w.id === editDestWalletId);
 
-    const res = editTransaction(detailTransaction.id, {
+    if (editSavingRef.current) return;
+    editSavingRef.current = true; setEditSaving(true);
+    const res = await editTransaction(detailTransaction.id, {
       householdId: editHouseholdId || detailTransaction.householdId,
+      effectiveAt:editedEffectiveAt,
+      dateStr:editDateStr,
       amount,
       type: editType,
       sourceWalletId: editType === 'expense' || editType === 'transfer' ? editSourceWalletId : undefined,
@@ -363,6 +384,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       fee: editType === 'transfer' && fee > 0 ? fee : undefined
     });
 
+    editSavingRef.current = false; setEditSaving(false);
     if (res.success) {
       setDetailTransaction(prev => (prev ? {
         ...prev,
@@ -378,6 +400,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
         description: editDescription.trim() || undefined,
         addedBy: editAddedBy,
         time: editTime,
+        effectiveAt:editedEffectiveAt,
+        dateStr:editDateStr,
         fee: fee > 0 ? fee : undefined
       } : null));
       setIsEditing(false);
@@ -387,7 +411,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   };
 
   return (
-    <div className="space-y-4 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Title & Actions Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -410,17 +434,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       </div>
 
       {/* DYNAMIC RECALCULATED SUMMARY BANNER (Bulan Berjalan / Terfilter) */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3">
+      <div className="transaction-summary bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className={`w-2.5 h-2.5 rounded-full ${isFiltered ? 'bg-amber-500 animate-pulse' : 'bg-teal-600'}`} />
             <span className="text-xs font-bold text-slate-800">
               {isFiltered ? (
                 <>
-                  Hasil Filter Terhitung Ulang ({filteredTransactions.length} Transaksi)
+                  Hasil filter ({filteredTransactions.length} Transaksi)
                 </>
               ) : (
-                'Ringkasan Bulan Berjalan (November 2026)'
+                'Ringkasan seluruh transaksi'
               )}
             </span>
           </div>
@@ -494,7 +518,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
             title="Tampilkan semua transaksi"
           >
             <div className="text-[11px] font-semibold text-slate-600">
-              Arus Kas (Net)
+              Selisih
             </div>
             <div className={`text-sm sm:text-base font-extrabold tabular-nums mt-0.5 ${filteredNet >= 0 ? 'text-teal-700' : 'text-red-700'}`}>
               {formatIDR(filteredNet, { showSign: true })}
@@ -506,7 +530,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       {/* SEARCH BAR & 2-LINE COMPACT FILTER */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-2xs space-y-2.5">
         {/* Search Box */}
-        <div className="relative">
+        <div className="flex items-center gap-2"><div className="relative min-w-0 flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -526,6 +550,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
           )}
         </div>
 
+        <button type="button" onClick={()=>setIsFilterOpen(open=>!open)} aria-label="Filter transaksi" aria-expanded={isFilterOpen} aria-controls="transaction-filter-panel" className={`relative shrink-0 rounded-xl border p-2.5 ${isFilterOpen||activeFilterCount?'border-teal-700 bg-teal-50 text-teal-700':'border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Filter className="w-4 h-4" />{activeFilterCount>0&&<span className="absolute -right-1 -top-1 rounded-full bg-teal-700 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}</button></div>
+        {isFilterOpen && <div id="transaction-filter-panel" className="space-y-2.5 pt-2">
         {/* BARIS 1: PILIHAN KRITERIA FILTER (Tipe, Anggota, Aset, Kategori, Label) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-slate-100">
           <button
@@ -766,6 +792,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
             </>
           )}
         </div>
+        </div>}
       </div>
 
       {/* Main Cards List */}
@@ -841,7 +868,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                             • {wallets.find(w => w.id === (t.sourceWalletId || t.destinationWalletId))?.name || t.sourceAsset || t.destinationAsset || 'Dompet'}
                           </span>
                         )}
-                        {t.fee && t.fee > 0 && (
+                        {!!t.fee && t.fee > 0 && (
                           <span className="text-amber-700 font-medium bg-amber-50 px-1.5 py-0.2 rounded">
                             Biaya admin: {formatIDR(t.fee)}
                           </span>
@@ -865,7 +892,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5">
                         {safeDisplayDate(t.dateStr, t.effectiveAt)}
-                        {t.time ? ` • ${t.time}` : ''}
+                        {` • ${t.time || jakartaDateTime(t.effectiveAt).time}`}
                       </div>
                     </div>
 
@@ -900,7 +927,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                 </div>
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-base">
-                    {isEditing ? 'Ubah Rincian Transaksi' : 'Rincian Transaksi Excel'}
+                    {isEditing ? 'Ubah Rincian Transaksi' : 'Rincian Transaksi'}
                   </h3>
                   <p className="text-xs text-slate-500">ID: {detailTransaction.id} • No. #{detailTransaction.no || '1'}</p>
                 </div>
@@ -927,6 +954,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
 
                 <button
                   onClick={() => setDetailTransaction(null)}
+                  aria-label="Tutup rincian transaksi"
                   className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"
                 >
                   <X className="w-4 h-4" />
@@ -968,11 +996,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                       <span>Foto Struk / Nota Pembayaran</span>
                     </div>
                     <div className="rounded-xl overflow-hidden border border-slate-200 max-h-56 bg-slate-900/5 flex items-center justify-center">
-                      <img
-                        src={detailTransaction.imageUrl}
-                        alt="Foto Struk"
-                        className="w-full h-auto max-h-56 object-contain"
-                      />
+                      <ReceiptAttachment reference={detailTransaction.imageUrl} className="w-full h-auto max-h-56 object-contain" />
                     </div>
                   </div>
                 )}
@@ -1025,7 +1049,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
                     <div className="text-[10px] text-slate-400 font-semibold uppercase">Waktu</div>
-                    <div className="font-bold text-slate-900 mt-0.5">{detailTransaction.time || '-'}</div>
+                    <div className="font-bold text-slate-900 mt-0.5">{detailTransaction.time || jakartaDateTime(detailTransaction.effectiveAt).time} WIB</div>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
@@ -1077,6 +1101,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   </div>
                 )}
 
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-slate-600">Tanggal<input type="date" required disabled={editSaving} value={editDateStr} onInput={e=>setEditDateStr(e.currentTarget.value)} onChange={e=>setEditDateStr(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm focus:ring-2 focus:ring-teal-600" /></label>
+                  <label className="text-xs font-semibold text-slate-600">Jam (WIB)<input type="time" required disabled={editSaving} value={editTime} onInput={e=>setEditTime(e.currentTarget.value)} onChange={e=>setEditTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm focus:ring-2 focus:ring-teal-600" /></label>
+                </div>
                 {/* Tipe Selector */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Tipe Transaksi</label>
@@ -1189,7 +1217,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                         value={editCategoryName}
                         onChange={e => {
                           setEditCategoryName(e.target.value);
-                          const c = categories.find(cat => cat.name === e.target.value);
+                          const c = categories.find(cat => cat.name === e.target.value && cat.type === editType && cat.householdId === (editHouseholdId || state.activeHouseholdId));
                           if (c) setEditCategoryId(c.id);
                         }}
                         className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
@@ -1302,11 +1330,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                     Batal
                   </button>
                   <button
-                    type="submit"
+                    type="submit" disabled={editSaving}
                     className="flex-1 py-2.5 rounded-xl text-white font-bold bg-teal-700 hover:bg-teal-800 transition-colors flex items-center justify-center gap-1.5 shadow-xs"
                   >
                     <Check className="w-4 h-4" />
-                    <span>Simpan Perubahan</span>
+                    <span>{editSaving ? 'Menyimpan ke Supabase…' : 'Simpan Perubahan'}</span>
                   </button>
                 </div>
               </form>

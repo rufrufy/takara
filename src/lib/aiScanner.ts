@@ -63,7 +63,7 @@ const detectedEnv = envApiKey ? detectAIProvider(envApiKey, envApiUrl) : null;
 export const DEFAULT_AI_CONFIG: AIConfig = {
   provider: 'custom',
   apiUrl: 'https://9r.bkpp.web.id/v1',
-  apiKey: 'sk-915bde2d5d0f619a-u6ajkz-0330dedf',
+  apiKey: '',
   model: 'ag/gemini-3.8-flash-low',
   systemPrompt:
     'Kamu adalah asisten keuangan pintar. Ekstrak data struk/nota pembayaran ini dalam format JSON murni tanpa teks pengantar: {"amount": number, "description": string, "categoryName": string, "date": "YYYY-MM-DD", "type": "expense"}'
@@ -322,7 +322,7 @@ export const scanReceiptWithAI = async (
         if (scanJson.success && scanJson.data && scanJson.data.amount > 0) {
           return {
             success: true,
-            data: scanJson.data,
+            data: {...scanJson.data,type:scanJson.data.type==='income'?'income':'expense'},
             source: 'ai'
           };
         }

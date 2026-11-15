@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { ChevronDown, Building, Plus, Lock, Check, LogOut, Download, Users, Link as LinkIcon } from 'lucide-react';
+import { ChevronDown, Building, Plus, Lock, Check, LogOut, Download, Users, Link as LinkIcon, House, UserRound } from 'lucide-react';
 import { getSyncStatus, SYNC_EVENT_NAME, processSyncQueue, type SyncEngineStatus } from '../lib/syncEngine';
 interface HeaderProps {
   onOpenImport?: () => void;
@@ -9,6 +9,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) => {
   const { activeHousehold, households, switchHousehold, createHousehold, joinHouseholdByCode, lockApp, logoutUser, state } = useApp();
+  const [profileOpen, setProfileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isCreatingHousehold, setIsCreatingHousehold] = useState(false);
   const [newHouseholdName, setNewHouseholdName] = useState('');
@@ -50,30 +51,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-[#F8FAFC]/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 sm:px-6">
-      <div className="max-w-4xl mx-auto flex items-center justify-between">
+    <header className="app-header">
+      <div className="header-inner">
+        <span className="wordmark">Takara</span>
         {/* Household Switcher */}
         <div className="relative">
           <button
             type="button"
             id="header-household-dropdown-btn"
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2.5 p-1.5 -ml-1.5 rounded-xl hover:bg-slate-100 transition-colors text-left"
-          >
-            <div className="w-9 h-9 rounded-xl bg-teal-800/80 border border-teal-600/40 flex items-center justify-center p-1 shadow-sm overflow-hidden">
-              <img src="/Takara_logo_original_transparan.png" alt="Takara" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-slate-900 text-base leading-tight">
-                  {activeHousehold.name}
-                </span>
-                <ChevronDown className="w-4 h-4 text-slate-500" />
-              </div>
-              <span className="text-xs text-slate-500 font-medium">
-                {state.currentUser.displayName}
-              </span>
-            </div>
+            className="household-switch" aria-expanded={dropdownOpen} aria-label={`Pilih household, ${activeHousehold.name}`}>
+            <House size={18} strokeWidth={1.6}/><span>{activeHousehold.name}</span><ChevronDown size={15}/>
           </button>
 
           {/* Dropdown Menu */}
@@ -216,62 +204,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
           )}
         </div>
 
-        {/* Right Action Icons */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Cloud Sync Status Indicator */}
-          <button
-            type="button"
-            onClick={() => processSyncQueue()}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-xl text-[10px] sm:text-[11px] font-semibold border transition-all ${
-              syncStatus.state === 'offline_pending'
-                ? 'bg-amber-50 text-amber-800 border-amber-300'
-                : syncStatus.state === 'syncing'
-                ? 'bg-blue-50 text-blue-800 border-blue-200'
-                : 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
-            }`}
-            title={
-              syncStatus.state === 'offline_pending'
-                ? `Offline Buffer (${syncStatus.pendingCount} antrean). Klik untuk coba sinkronkan.`
-                : syncStatus.state === 'syncing'
-                ? 'Menghubungkan ke cloud...'
-                : 'Tersinkronisasi'
-            }
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${
-              syncStatus.state === 'offline_pending' ? 'bg-amber-500 animate-pulse' : syncStatus.state === 'syncing' ? 'bg-blue-500 animate-ping' : 'bg-emerald-500'
-            }`} />
-            <span className="hidden md:inline">
-              {syncStatus.state === 'offline_pending'
-                ? `Offline (${syncStatus.pendingCount})`
-                : syncStatus.state === 'syncing'
-                ? 'Sync...'
-                : 'Synced'}
-            </span>
-          </button>
-          {/* PWA Install Button */}
-          {onOpenInstall && (
-            <button
-              onClick={onOpenInstall}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-800 border border-teal-200/80 rounded-xl hover:bg-teal-100 transition-colors text-xs font-semibold shadow-xs"
-              title="Pasang Takara di Layar Utama HP (Android & iOS)"
-            >
-              <Download className="w-4 h-4 text-teal-700" />
-              <span className="hidden sm:inline">Install App</span>
-            </button>
-          )}
-
-          {/* Quick Logout Button */}
-          <button
-            onClick={logoutUser}
-            className="w-9 h-9 rounded-xl bg-red-50 text-red-600 hover:text-red-700 hover:bg-red-100 flex items-center justify-center transition-colors"
-            title="Keluar dari Akun (Logout)"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-          {/* User Avatar */}
-          <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-xs border border-teal-200">
-            {state.currentUser.displayName.slice(0, 2).toUpperCase()}
-          </div>
+        <div className="profile-area">
+          <button className="profile-button" onClick={()=>setProfileOpen(!profileOpen)} aria-label="Menu akun" aria-expanded={profileOpen}><UserRound size={21} strokeWidth={1.6}/></button>
+          {profileOpen&&<>
+            <button className="menu-dismiss" onClick={()=>setProfileOpen(false)} aria-label="Tutup menu akun"/>
+            <div className="profile-menu">
+              <strong>{state.currentUser.displayName}</strong>
+              <button onClick={()=>processSyncQueue()}><span className="sync-dot"/>{syncStatus.state==='syncing'?'Menyinkronkan…':syncStatus.state==='offline_pending'?'Coba sinkronkan':'Tersinkronisasi'}</button>
+              {onOpenImport&&<button onClick={()=>{setProfileOpen(false);onOpenImport();}}><Download size={17}/>Impor data</button>}
+              {onOpenInstall&&<button onClick={()=>{setProfileOpen(false);onOpenInstall();}}><Download size={17}/>Pasang aplikasi</button>}
+              <button onClick={lockApp}><Lock size={17}/>Kunci aplikasi</button>
+              <button onClick={logoutUser}><LogOut size={17}/>Keluar akun</button>
+            </div>
+          </>}
         </div>
       </div>
     </header>

@@ -93,7 +93,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             setErrorMsg('Silakan pilih akun atau ketik username terlebih dahulu.');
             return;
           }
-          handleExecuteLogin(targetUser, code.trim() || '12345');
+          handleExecuteLogin(targetUser, code.trim());
         }
       }
     };
@@ -129,18 +129,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     setErrorMsg('');
   };
 
-  const handleExecuteLogin = (userToLogin: string, codeToVerify: string) => {
-    setIsLoading(true);
-    setErrorMsg('');
-
-    setTimeout(() => {
-      const res = loginUser(userToLogin, codeToVerify);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Kode unik 5-digit tidak cocok.');
-        setCode('');
-      }
-      setIsLoading(false);
-    }, 150);
+  const loginInFlight = useRef(false);
+  const handleExecuteLogin = async (userToLogin:string,codeToVerify:string) => {
+    if(loginInFlight.current)return;
+    loginInFlight.current=true;setIsLoading(true);setErrorMsg('');
+    try {
+      const res=await loginUser(userToLogin,codeToVerify);
+      if(!res.success){setErrorMsg(res.error||'Login gagal.');setCode('');}
+    }catch(error){setErrorMsg(error instanceof Error?error.message:'Gagal memuat akun dan saldo.');}
+    finally{loginInFlight.current=false;setIsLoading(false);}
   };
 
   const handleExecuteRegister = () => {
@@ -178,7 +175,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-gradient-to-b from-[#0F766E] via-[#115E59] to-[#042F2E] text-white flex flex-col justify-between items-center p-4 sm:p-6 select-none animate-in fade-in duration-200 overflow-y-auto">
+    <div className="auth-screen fixed inset-0 z-50 bg-gradient-to-b from-[#0F766E] via-[#115E59] to-[#042F2E] text-white flex flex-col justify-between items-center p-4 sm:p-6 select-none animate-in fade-in duration-200 overflow-y-auto">
       {/* Top Header Bar */}
       <div className="w-full max-w-md flex items-center justify-between pt-1">
         {onBackToLanding ? (
@@ -195,7 +192,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         )}
 
         <div className="text-[11px] text-teal-300 font-semibold px-2.5 py-1 rounded-full bg-teal-950/40 border border-teal-700/40">
-          Takara Security v3.0
+          Takara
         </div>
       </div>
 
@@ -355,7 +352,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               className="mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-teal-950 font-extrabold text-sm rounded-xl shadow-lg shadow-teal-950/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
             >
               {isLoading ? (
-                <span>Memverifikasi...</span>
+                <span>Memuat akun dan saldo…</span>
               ) : (
                 <>
                   <span>Masuk Akun</span>
@@ -465,7 +462,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         {activeTab === 'admin' && (
           <div className="w-full mt-4 flex flex-col items-center">
             <div className="w-full p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200 mb-3 text-left">
-              <strong>Admin Dashboard:</strong> Akses penuh konfigurasi sistem, API AI Vision, dan manajemen anggota. PIN Superadmin: <code className="bg-amber-900/60 px-1 py-0.5 rounded font-mono font-bold">99999</code>.
+              Kelola konfigurasi sistem, layanan AI, dan anggota.
             </div>
 
             {/* PIN Dots Display */}
@@ -554,7 +551,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
       {/* Footer Info */}
       <div className="w-full max-w-sm text-center pt-2 pb-1 text-[11px] text-teal-300/70">
-        Takara Keuangan Keluarga • Double-Entry & Multi-Household
+        Takara · Keuangan keluarga
       </div>
     </div>
   );

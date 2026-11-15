@@ -10,6 +10,7 @@ export interface SyncQueueItem {
   error?: string;
 }
 
+let memoryQueue: SyncQueueItem[] | null = null;
 const SYNC_QUEUE_KEY = 'takara_offline_sync_queue_v1';
 
 export type SyncState = 'synced' | 'syncing' | 'offline_pending' | 'error';
@@ -25,6 +26,7 @@ export interface SyncEngineStatus {
 export const SYNC_EVENT_NAME = 'takara:sync-status-changed';
 
 export const getSyncQueue = (): SyncQueueItem[] => {
+  if (memoryQueue) return memoryQueue;
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(SYNC_QUEUE_KEY);
@@ -48,7 +50,13 @@ export const getSyncQueue = (): SyncQueueItem[] => {
 export const saveSyncQueue = (queue: SyncQueueItem[]): void => {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+    memoryQueue = queue;
+    // Preserve pre-existing unsent records until recovered; never persist new queue items locally.
+    const legacy = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]') as SyncQueueItem[];
+    const pendingIds = new Set(queue.map(item => item.id));
+    const pendingLegacy = legacy.filter(item => pendingIds.has(item.id)).map(item => queue.find(current => current.id === item.id)!);
+    if (pendingLegacy.length) localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(pendingLegacy));
+    else localStorage.removeItem(SYNC_QUEUE_KEY);
     notifyStatus();
   } catch {
     // ignore
@@ -86,6 +94,19 @@ export const enqueueStateSync = (state: AppState): void => {
   triggerSyncLoop();
 };
 
+const deletedHouseholdIds = new Set<string>();
+export const discardHouseholdSync = (householdId: string) => {
+  deletedHouseholdIds.add(householdId);
+  const queue = getSyncQueue().filter(item => item.type !== 'transaction' || (item.data as FinancialTransaction).householdId !== householdId).map(item => {
+    if (item.type !== 'state') return item;
+    const data = { ...(item.data as AppState) };
+    data.households = data.households.filter(h => h.id !== householdId);
+    for (const key of ['transactions', 'ledgerEntries', 'wallets', 'categories', 'members', 'debts'] as const) (data[key] as unknown[]) = (data[key] || []).filter(row => row.householdId !== householdId);
+    if (data.activeHouseholdId === householdId) data.activeHouseholdId = data.households[0]?.id || '';
+    return { ...item, data };
+  });
+  saveSyncQueue(queue);
+};
 let isSyncing = false;
 let loopTimerId: number | null = null;
 let currentStatus: SyncEngineStatus = {
@@ -147,6 +168,7 @@ export const processSyncQueue = async (
 
     if (item.type === 'transaction') {
       const tx = item.data as FinancialTransaction;
+      if (deletedHouseholdIds.has(tx.householdId)) continue;
       try {
         const res = await syncTransactionToSupabase(tx, effectiveConfig);
         if (res.success) {
@@ -158,7 +180,13 @@ export const processSyncQueue = async (
         lastErrStr = err instanceof Error ? err.message : 'Koneksi internet terputus';
       }
     } else if (item.type === 'state') {
-      const appState = item.data as AppState;
+      const original = item.data as AppState;
+      const appState = { ...original };
+      appState.households = (original.households || []).filter(h => !deletedHouseholdIds.has(h.id));
+      for (const key of ['transactions', 'ledgerEntries', 'wallets', 'categories', 'members', 'debts'] as const) {
+        (appState[key] as unknown[]) = (original[key] || []).filter(row => !deletedHouseholdIds.has(row.householdId));
+      }
+      if (deletedHouseholdIds.has(appState.activeHouseholdId)) appState.activeHouseholdId = appState.households[0]?.id || '';
       if (appState.supabaseConfig?.url?.includes('gnjrysgmiqapbjroishz')) {
         appState.supabaseConfig = DEFAULT_SUPABASE_CONFIG;
       }
@@ -183,7 +211,8 @@ export const processSyncQueue = async (
     }
   }
 
-  saveSyncQueue(remainingQueue);
+  const processedIds = new Set(queue.map(item => item.id));
+  saveSyncQueue([...remainingQueue, ...getSyncQueue().filter(item => !processedIds.has(item.id))]);
   isSyncing = false;
 
   if (remainingQueue.length === 0) {

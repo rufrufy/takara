@@ -155,6 +155,8 @@ const postSupabaseTable = async (
   if (!rows.length) return;
   const onConflictKey = table === 'app_users' ? 'username' : 'id';
   const query = `?on_conflict=${onConflictKey}`;
+  // One upsert batch cannot affect the same key twice (Postgres 21000).
+  rows = Array.from(new Map(rows.map(row => [(row as Record<string, unknown>)[onConflictKey], row])).values());
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
     const res = await fetch(`${cleanUrl}/rest/v1/${table}${query}`, {
@@ -307,66 +309,30 @@ export const testSupabaseConnection = async (
   }
 };
 
-/**
- * Uploads a receipt photo to Supabase Storage with resilient local Base64 fallback.
- */
-export const uploadReceiptPhoto = async (
-  fileOrBase64: File | string,
-  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
-): Promise<{ url: string; isRemote: boolean; error?: string }> => {
-  let base64Url = '';
-  let fileBlob: Blob | null = null;
-  let fileExt = 'jpg';
-
-  if (typeof fileOrBase64 === 'string') {
-    base64Url = fileOrBase64;
-  } else {
-    fileBlob = fileOrBase64;
-    fileExt = fileOrBase64.name.split('.').pop() || 'jpg';
-    const { promise, resolve, reject } = Promise.withResolvers<string>();
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(fileOrBase64);
-    base64Url = await promise;
-  }
-
-  if (config.url && config.anonKey) {
-    try {
-      const fileName = `receipt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
-      const bucket = config.bucket || 'receipts';
-      const cleanUrl = config.url.replace(/\/+$/, '');
-      const uploadEndpoint = `${cleanUrl}/storage/v1/object/${bucket}/${fileName}`;
-
-      let bodyData: Blob;
-      if (fileBlob) {
-        bodyData = fileBlob;
-      } else {
-        const res = await fetch(base64Url);
-        bodyData = await res.blob();
-      }
-
-      const uploadRes = await fetch(uploadEndpoint, {
-        method: 'POST',
-        headers: {
-          apikey: config.anonKey,
-          Authorization: `Bearer ${config.anonKey}`,
-          'Content-Type': bodyData.type || 'image/jpeg',
-          'x-upsert': 'true'
-        },
-        body: bodyData
-      });
-
-      if (uploadRes.ok) {
-        const publicUrl = `${cleanUrl}/storage/v1/object/public/${bucket}/${fileName}`;
-        return { url: publicUrl, isRemote: true };
-      }
-    } catch (err: unknown) {
-      console.warn('Supabase storage upload error, using local resilient storage:', err);
+/** Recompute stored wallet balances from the authoritative Supabase ledger. */
+export const refreshHouseholdWalletBalances = async (householdId: string, config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG): Promise<void> => {
+  const base = config.url.replace(/\/+$/, '') + '/rest/v1/';
+  const headers = getHeaders(config);
+  const read = async (table: string, select: string): Promise<Array<Record<string, unknown>>> => {
+    const rows: Array<Record<string, unknown>> = [];
+    while (true) {
+      const response = await fetch(base + table + '?household_id=eq.' + encodeURIComponent(householdId) + '&select=' + select + '&order=id&limit=500&offset=' + rows.length, { headers });
+      if (!response.ok) throw new Error('Gagal menghitung saldo dompet dari ' + table + ': ' + response.status);
+      const page = await response.json(); rows.push(...page);
+      if (!page.length) return rows;
     }
-  }
-
-  return { url: base64Url, isRemote: false };
+  };
+  const [wallets, entries] = await Promise.all([read('wallets', 'id,balance'), read('ledger_entries', 'id,wallet_id,signed_amount')]);
+  const balances = new Map<string, number>();
+  for (const entry of entries) balances.set(String(entry.wallet_id), (balances.get(String(entry.wallet_id)) || 0) + Number(entry.signed_amount));
+  await Promise.all(wallets.map(async wallet => {
+    const balance = balances.get(String(wallet.id)) || 0;
+    if (Number(wallet.balance) === balance) return;
+    const response = await fetch(base + 'wallets?id=eq.' + encodeURIComponent(String(wallet.id)) + '&household_id=eq.' + encodeURIComponent(householdId), {
+      method: 'PATCH', headers, body: JSON.stringify({ balance, updated_at: new Date().toISOString() })
+    });
+    if (!response.ok) throw new Error('Gagal memperbarui saldo dompet di Supabase: ' + response.status);
+  }));
 };
 
 /**
@@ -374,7 +340,8 @@ export const uploadReceiptPhoto = async (
  */
 export const syncTransactionToSupabase = async (
   tx: FinancialTransaction,
-  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG,
+  mode: 'insert' | 'update' = 'insert'
 ): Promise<{ success: boolean; error?: string }> => {
   if (!config.url || !config.anonKey) {
     return { success: false, error: 'Supabase URL atau Anon Key belum dikonfigurasi' };
@@ -382,9 +349,9 @@ export const syncTransactionToSupabase = async (
 
   try {
     const cleanUrl = config.url.replace(/\/+$/, '');
-    const res = await fetch(`${cleanUrl}/rest/v1/transactions`, {
-      method: 'POST',
-      headers: getHeaders(config),
+    const res = await fetch(`${cleanUrl}/rest/v1/transactions${mode === 'update' ? '?id=eq.' + encodeURIComponent(tx.id) : ''}`, {
+      method: mode === 'update' ? 'PATCH' : 'POST',
+      headers: { ...getHeaders(config), Prefer: 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify({
         id: tx.id,
         household_id: tx.householdId,
@@ -422,8 +389,12 @@ export const syncTransactionToSupabase = async (
       return { success: false, error: `Supabase status ${res.status}: ${errText.slice(0, 100)}` };
     }
 
+    if (mode === 'update') {
+      const changed = await res.json() as RawSupabaseTx[];
+      if (changed.length !== 1 || changed[0]?.id !== tx.id) return { success: false, error: 'Transaksi tidak ditemukan atau perubahan tidak diizinkan oleh Supabase.' };
+    }
     // Sinkronkan juga buku besar (ledger_entries) yang sesuai untuk mutasi saldo otomatis
-    const ledgerRows: unknown[] = [];
+    const ledgerRows: Array<Record<string, unknown>> = [];
     if (tx.type === 'income') {
       const wId = tx.destinationWalletId || tx.sourceWalletId;
       if (wId) {
@@ -505,14 +476,23 @@ export const syncTransactionToSupabase = async (
       }
     }
 
+    if (tx.status === 'VOIDED') ledgerRows.length = 0;
     if (ledgerRows.length > 0) {
-      await fetch(`${cleanUrl}/rest/v1/ledger_entries`, {
+      const ledgerResult = await fetch(`${cleanUrl}/rest/v1/ledger_entries`, {
         method: 'POST',
         headers: getHeaders(config),
         body: JSON.stringify(ledgerRows)
-      }).catch(() => {});
+      });
+      if (!ledgerResult.ok) throw new Error(`Transaksi tersimpan, buku besar gagal (${ledgerResult.status}): ${await ledgerResult.text()}`);
     }
 
+    if (mode === 'update') {
+      const ids = ledgerRows.map(row => String(row.id));
+      const keep = ids.length ? '&id=not.in.(' + ids.map(id => '"' + id + '"').join(',') + ')' : '';
+      const cleanup = await fetch(cleanUrl + '/rest/v1/ledger_entries?transaction_id=eq.' + encodeURIComponent(tx.id) + keep, { method: 'DELETE', headers: getHeaders(config) });
+      if (!cleanup.ok) return { success: false, error: 'Transaksi berubah, tetapi pembaruan buku besar belum selesai. Simpan ulang.' };
+    }
+    await refreshHouseholdWalletBalances(tx.householdId, config);
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown sync error';
@@ -865,6 +845,9 @@ export const pushAllDataToSupabase = async (
       );
     }
 
+    const changedHouseholds = new Set((state.transactions || []).map(tx => tx.householdId));
+    for (const householdId of changedHouseholds) await refreshHouseholdWalletBalances(householdId, config);
+
     const totalCount =
       (state.transactions?.length || 0) +
       (state.wallets?.length || 0) +
@@ -905,20 +888,30 @@ export const pullAllDataFromSupabase = async (
   const headers = getHeaders(config);
 
   try {
+    const readAll = async (url: string): Promise<Response> => {
+      const rows: unknown[] = [];
+      for (let offset = 0; ; offset = rows.length) {
+        const response = await fetch(url + (url.includes('?') ? '&' : '?') + 'limit=500&offset=' + offset, { headers });
+        if (!response.ok) return response;
+        const page = await response.json() as unknown[];
+        rows.push(...page);
+        if (page.length < 500) return new Response(JSON.stringify(rows), { status: 200 });
+      }
+    };
     const filterQuery = householdId ? `?household_id=eq.${encodeURIComponent(householdId)}` : '';
 
     const [txRes, walletsRes, catRes, debtsRes, houseRes, membersRes, ledgerRes] = await Promise.all([
-      fetch(`${cleanUrl}/rest/v1/transactions${filterQuery}${filterQuery ? '&' : '?'}order=effective_at.desc`, { headers }),
-      fetch(`${cleanUrl}/rest/v1/wallets${filterQuery}`, { headers }),
-      fetch(`${cleanUrl}/rest/v1/categories${filterQuery}`, { headers }),
-      fetch(`${cleanUrl}/rest/v1/debts${filterQuery}`, { headers }),
-      fetch(`${cleanUrl}/rest/v1/households`, { headers }),
-      fetch(`${cleanUrl}/rest/v1/household_members${filterQuery}`, { headers }),
-      fetch(`${cleanUrl}/rest/v1/ledger_entries${filterQuery}`, { headers })
+      readAll(`${cleanUrl}/rest/v1/transactions${filterQuery}${filterQuery ? '&' : '?'}order=effective_at.desc`),
+      readAll(`${cleanUrl}/rest/v1/wallets${filterQuery}`),
+      readAll(`${cleanUrl}/rest/v1/categories${filterQuery}`),
+      readAll(`${cleanUrl}/rest/v1/debts${filterQuery}`),
+      readAll(`${cleanUrl}/rest/v1/households${householdId ? '?id=eq.' + encodeURIComponent(householdId) : ''}`),
+      readAll(`${cleanUrl}/rest/v1/household_members${filterQuery}`),
+      readAll(`${cleanUrl}/rest/v1/ledger_entries${filterQuery}`)
     ]);
 
-    if (!txRes.ok && !walletsRes.ok) {
-      return { success: false, error: 'Gagal mengambil data dari Supabase' };
+    for (const [table, response] of [['transactions', txRes], ['wallets', walletsRes], ['categories', catRes], ['debts', debtsRes], ['households', houseRes], ['household_members', membersRes], ['ledger_entries', ledgerRes]] as const) {
+      if (!response.ok) throw new Error(`Gagal membaca ${table} (${response.status}): ${(await response.text()).slice(0, 180)}`);
     }
 
     const rawTxs = txRes.ok ? (await txRes.json() as RawSupabaseTx[]) : [];
@@ -1050,4 +1043,70 @@ export const pullAllDataFromSupabase = async (
       error: err instanceof Error ? err.message : 'Pull failed'
     };
   }
+};
+
+/** Delete only the selected household; child records follow database foreign keys. */
+export const deleteHouseholdFromSupabase = async (householdId: string, config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await fetch(config.url.replace(/\/+$/, '') + '/rest/v1/households?id=eq.' + encodeURIComponent(householdId), {
+      method: 'DELETE', headers: { ...getHeaders(config), Prefer: 'return=representation' }
+    });
+    if (!response.ok) return { success: false, error: 'Gagal menghapus household dari Supabase (' + response.status + '): ' + (await response.text()).slice(0,180) };
+    const check = await fetch(config.url.replace(/\/+$/, '') + '/rest/v1/households?id=eq.' + encodeURIComponent(householdId) + '&select=id', { headers: getHeaders(config) });
+    if (!check.ok || (await check.json()).length) return { success: false, error: 'Penghapusan household belum dapat dikonfirmasi di Supabase.' };
+    return { success: true };
+  } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Koneksi Supabase gagal.' }; }
+};
+
+export const fetchUserHouseholds = async (userId: string, config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG): Promise<{ households: Household[]; members: HouseholdMember[] }> => {
+  const base = config.url.replace(/\/+$/, '') + '/rest/v1/';
+  const headers = getHeaders(config);
+  const [memberRes, ownRes] = await Promise.all([fetch(base + 'household_members?user_id=eq.' + encodeURIComponent(userId), { headers }),fetch(base + 'households?created_by_id=eq.' + encodeURIComponent(userId), { headers })]);
+  if (!memberRes.ok) throw new Error('Gagal membaca keanggotaan Supabase: ' + memberRes.status);
+  const raw = await memberRes.json();
+  const members: HouseholdMember[] = raw.map((m: any) => ({ id:m.id, householdId:m.household_id, userId:m.user_id, displayName:m.display_name, role:m.role, joinedAt:m.joined_at }));
+  if (!ownRes.ok) throw new Error('Gagal membaca household milik akun.');
+  const houses: RawSupabaseHousehold[] = await ownRes.json();
+  for (const member of members) {
+    if (houses.some(h => h.id === member.householdId)) continue;
+    const response = await fetch(base + 'households?id=eq.' + encodeURIComponent(member.householdId), { headers });
+    if (!response.ok) throw new Error('Gagal membaca household keanggotaan.');
+    houses.push(...await response.json());
+  }
+  return { households: houses.map(h => ({id:h.id,name:h.name,createdById:h.created_by_id || '',inviteCode:h.invite_code,baseCurrency:'IDR',createdAt:h.created_at})), members };
+};
+
+export const joinSupabaseHousehold = async (code: string, user: User, config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG): Promise<Household> => {
+  const base = config.url.replace(/\/+$/, '') + '/rest/v1/';
+  const headers = getHeaders(config);
+  const response = await fetch(base + 'households?invite_code=eq.' + encodeURIComponent(code.trim().toUpperCase()), { headers });
+  if (!response.ok) throw new Error('Gagal memeriksa kode undangan di Supabase.');
+  const raw = (await response.json())[0];
+  if (!raw) throw new Error('Kode household tidak ditemukan.');
+  const memberUrl = base + 'household_members?household_id=eq.' + encodeURIComponent(raw.id) + '&user_id=eq.' + encodeURIComponent(user.id);
+  const existing = await fetch(memberUrl, { headers });
+  if (!existing.ok) throw new Error('Gagal memeriksa keanggotaan Supabase.');
+  if (!(await existing.json()).length) {
+    const saved = await fetch(base + 'household_members?on_conflict=id', {
+      method:'POST', headers, body:JSON.stringify({id:'mem-'+user.id+'-'+raw.id,household_id:raw.id,user_id:user.id,display_name:user.displayName,role:'MEMBER',joined_at:new Date().toISOString()})
+    });
+    if (!saved.ok) throw new Error('Keanggotaan belum tersimpan di Supabase (' + saved.status + ').');
+  }
+  const verified = await fetch(memberUrl, { headers });
+  if (!verified.ok || !(await verified.json()).length) throw new Error('Keanggotaan belum dapat diverifikasi.');
+  return {id:raw.id,name:raw.name,createdById:raw.created_by_id,inviteCode:raw.invite_code,createdAt:raw.created_at,baseCurrency:'IDR'};
+};
+
+export const saveCategoryToSupabase = async (category:Category, mode:'create'|'update',config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<void> => {
+  const base=config.url.replace(/\/+$/,'')+'/rest/v1/categories';
+  const response=await fetch(base+(mode==='update'?'?id=eq.'+encodeURIComponent(category.id)+'&household_id=eq.'+encodeURIComponent(category.householdId):''),{
+    method:mode==='create'?'POST':'PATCH',headers:{...getHeaders(config),Prefer:'return=representation'},
+    body:JSON.stringify({id:category.id,household_id:category.householdId,name:category.name,type:category.type,icon:category.icon,color:category.color,is_archived:category.isArchived||false})
+  });
+  if(!response.ok)throw new Error('Kategori belum tersimpan di Supabase ('+response.status+').');
+  const rows=await response.json();if(rows.length!==1)throw new Error('Kategori tidak ditemukan pada household ini.');
+};
+export const removeCategoryFromSupabase = async (category:Category,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<void> => {
+  // Archive removes it from new entries and preserves the category on historical transactions.
+  await saveCategoryToSupabase({...category,isArchived:true},'update',config);
 };

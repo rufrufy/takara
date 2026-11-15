@@ -1,0 +1,14 @@
+import {readFileSync} from 'node:fs';import {stripTypeScriptTypes} from 'node:module';import assert from 'node:assert/strict';
+const source=stripTypeScriptTypes(readFileSync('src/lib/dateTime.ts','utf8'));
+const uri='data:text/javascript;base64,'+Buffer.from(source).toString('base64');
+const {jakartaDateTime:fields,jakartaDateTimeToISO:iso}=await import(uri);
+assert.deepEqual(fields('2026-10-31T18:15:00Z'),{date:'2026-11-01',time:'01:15'});
+assert.equal(iso('2026-11-15','09:37'),'2026-11-15T02:37:00.000Z');
+assert.throws(()=>iso('2026-02-30','09:00'));assert.throws(()=>iso('2026-11-15','25:00'));
+let monthly=stripTypeScriptTypes(readFileSync('src/lib/reportPeriod.ts','utf8')).replace("from './dateTime'",`from '${uri}'`);
+const {transactionsForMonth}=await import('data:text/javascript;base64,'+Buffer.from(monthly).toString('base64'));
+const txs=[{id:'a',effectiveAt:'2026-10-31T18:15:00Z',status:'POSTED'},{id:'b',effectiveAt:'2026-11-30T17:00:00Z',status:'POSTED'},{id:'c',effectiveAt:'2026-11-15T10:00:00Z',status:'VOIDED'},{id:'d',effectiveAt:'invalid',status:'POSTED'}];
+assert.deepEqual(transactionsForMonth(txs,2026,11).map(t=>t.id),['a']);
+assert.deepEqual(transactionsForMonth(txs,2026,12).map(t=>t.id),['b']);
+assert.deepEqual(transactionsForMonth(txs,2025,11),[]);
+console.log('PASS: Jakarta date/time roundtrip, invalid inputs, month/year boundaries, voided transactions excluded');

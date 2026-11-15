@@ -13,7 +13,7 @@ if (!existsSync(USERS_DIR)) {
 }
 // Kredensial AI dari .env (Server-side)
 const SERVER_AI_URL = (process.env.AI_API_URL || process.env.VITE_AI_API_URL || "https://9r.bkpp.web.id/v1").trim().replace(/\/+$/, '');
-const SERVER_AI_KEY = (process.env.AI_API_KEY || process.env.VITE_AI_API_KEY || "sk-915bde2d5d0f619a-u6ajkz-0330dedf").trim();
+const SERVER_AI_KEY = (process.env.AI_API_KEY || process.env.VITE_AI_API_KEY || "").trim();
 const SERVER_AI_MODEL = (process.env.AI_MODEL || process.env.VITE_AI_MODEL || "ag/gemini-3.8-flash-low").trim();
 
 const normalizeEndpoint = (url: string): string => {

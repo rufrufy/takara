@@ -19,8 +19,9 @@ import { AIScanModal } from './components/AIScanModal';
 import { Camera, Sparkles } from 'lucide-react';
 
 export const TakaraMainLayout: React.FC = () => {
-  const { state } = useApp();
+  const { state, isFinancialReady, supabaseSyncStatus, logoutUser } = useApp();
   const [activeTab, setActiveTab] = useState<ActiveTab>('beranda');
+  const [selectedTransactionId,setSelectedTransactionId] = useState<string>();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddType, setQuickAddType] = useState<TransactionType>('expense');
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -66,30 +67,38 @@ export const TakaraMainLayout: React.FC = () => {
     );
   }
   // ROLE 1: ADMIN DASHBOARD (Khusus Admin: kelola user, AI, Supabase, sesi - tidak ikut pencatatan)
+  if(!isFinancialReady && state.currentUser.role!=='ADMIN' && state.currentUser.username!=='admin') {
+    return <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6"><div className="max-w-sm text-center space-y-4">
+      <h1 className="text-lg font-bold text-teal-900">Menyiapkan household Anda</h1>
+      {supabaseSyncStatus.status==='error'?<><p role="alert" className="text-sm text-red-700">{supabaseSyncStatus.error}</p><button onClick={()=>window.location.reload()} className="rounded-xl bg-teal-700 text-white px-4 py-2">Coba lagi</button><button onClick={logoutUser} className="block mx-auto text-sm underline">Kembali ke login</button></>:<p role="status" className="text-sm text-slate-600">Memuat saldo, dompet, dan transaksi dari Supabase…</p>}
+    </div></main>;
+  }
+
   if (state.currentUser?.role === 'ADMIN' || state.currentUser?.username === 'admin') {
-    return <AdminDashboardView onBack={isAdminOpen ? () => setIsAdminOpen(false) : undefined} />;
+    return <div className="takara-app"><AdminDashboardView onBack={isAdminOpen ? () => setIsAdminOpen(false) : undefined} /></div>;
   }
 
   // ROLE 2: USER KELUARGA (Pencatatan Keuangan Rumah Tangga)
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-['Plus_Jakarta_Sans',sans-serif] text-[#0F172A]">
+    <div className="takara-app min-h-screen flex flex-col">
       {/* Top Sticky Header */}
       <Header
         onOpenImport={() => setIsImportOpen(true)}
         onOpenInstall={() => setIsPwaModalOpen(true)}
       />
       {/* Main Content Area */}
-      <main className="flex-1">
+      <main className="app-content flex-1">
         {activeTab === 'beranda' && (
           <HomeView
             onOpenQuickAdd={handleOpenQuickAdd}
             onOpenAIScan={() => setIsAIScanOpen(true)}
             onOpenImport={() => setIsImportOpen(true)}
             onChangeTab={setActiveTab}
+            onOpenTransaction={id=>{setSelectedTransactionId(id);setActiveTab('transaksi');}}
           />
         )}
         {activeTab === 'transaksi' && (
-          <TransactionsView onOpenQuickAdd={handleOpenQuickAdd} />
+          <TransactionsView onOpenQuickAdd={handleOpenQuickAdd} initialTransactionId={selectedTransactionId} />
         )}
         {activeTab === 'profil-keuangan' && <FinancialProfileView onOpenQuickAdd={handleOpenQuickAdd} />}
         {activeTab === 'laporan' && <ReportsView />}
@@ -105,33 +114,9 @@ export const TakaraMainLayout: React.FC = () => {
       {/* Mobile-First Bottom Navigation */}
       <BottomNav
         activeTab={activeTab}
-        onChangeTab={setActiveTab}
+        onChangeTab={tab=>{setSelectedTransactionId(undefined);setActiveTab(tab);}}
       />
-      {/* Floating Action Buttons: Scan Nota AI & Catat Cepat */}
-      <div className="fixed bottom-20 right-4 sm:bottom-8 sm:right-8 z-40 flex flex-col items-end gap-2.5">
-        {/* Tombol Opsi 1: Scan Nota AI */}
-        <button
-          type="button"
-          onClick={() => setIsAIScanOpen(true)}
-          className="flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full bg-white hover:bg-teal-50 text-teal-900 border border-teal-200 shadow-lg shadow-slate-900/10 text-xs font-extrabold active:scale-95 transition-all group"
-          title="Scan Foto Nota dengan AI"
-        >
-          <div className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center">
-            <Camera className="w-3 h-3 text-teal-700" />
-          </div>
-          <span>Scan Nota AI</span>
-        </button>
-
-        {/* Tombol Opsi 2: Catat Transaksi Biasa */}
-        <button
-          type="button"
-          onClick={() => handleOpenQuickAdd('expense')}
-          className="w-14 h-14 rounded-full bg-teal-700 hover:bg-teal-800 text-white shadow-xl shadow-teal-950/30 flex items-center justify-center active:scale-90 transition-all border-2 border-white/20 group"
-          title="Catat Transaksi Manual"
-        >
-          <Plus className="w-7 h-7 stroke-[2.5] group-hover:rotate-90 transition-transform duration-200" />
-        </button>
-      </div>
+      {(activeTab==='transaksi'||activeTab==='profil-keuangan')&&<div className="page-record-action"><button onClick={()=>handleOpenQuickAdd()} aria-label="Catat transaksi"><Plus size={23}/><span>Catat</span></button></div>}
 
       {/* Quick Add Transaction Modal */}
       <QuickAddModal

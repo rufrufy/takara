@@ -328,7 +328,11 @@ export function parseFinancialExcel(
       };
     };
 
-    const importTimestamp = Date.now();
+    const normalizeTimestamp = (value: unknown, fallback: string): string => {
+      if (!value) return fallback;
+      const parsed = value instanceof Date ? value : new Date(String(value));
+      return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+    };
 
     for (let i = 0; i < rawTxs.length; i++) {
       const row = rawTxs[i]!;
@@ -379,7 +383,10 @@ export function parseFinancialExcel(
       if (catName) ensureCategory(catName, txType);
 
       // Gunakan ID unik yang stabil
-      const txId = `tx-${householdId}-${importTimestamp}-${no}`;
+      const identity = JSON.stringify([no, txType, amount, fee, effectiveAt, sourceAsset, destAsset, catName, label, description, notes, addedBy]);
+      let hash = 2166136261;
+      for (let j = 0; j < identity.length; j++) hash = Math.imul(hash ^ identity.charCodeAt(j), 16777619);
+      const txId = `tx-${householdId}-import-${no}-${(hash >>> 0).toString(16)}`;
 
       const tx: FinancialTransaction = {
         id: txId,
@@ -409,8 +416,8 @@ export function parseFinancialExcel(
         fromSavings,
         fromInvestment,
         status: 'POSTED',
-        createdAt: String(getRowVal(row, 'Created At') || effectiveAt),
-        updatedAt: String(getRowVal(row, 'Last Updated') || effectiveAt)
+        createdAt: normalizeTimestamp(getRowVal(row, 'Created At'), effectiveAt),
+        updatedAt: normalizeTimestamp(getRowVal(row, 'Last Updated'), effectiveAt)
       };
 
       transactions.push(tx);

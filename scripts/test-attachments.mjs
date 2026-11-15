@@ -1,0 +1,16 @@
+import {readFileSync} from 'node:fs';import {stripTypeScriptTypes} from 'node:module';import assert from 'node:assert/strict';
+let authCalls=0,uploadCalls=0,fail=false;const log=[];
+const client={auth:{getUser:async()=>({data:{user:{id:'auth-test'}}}),signOut:async()=>{}},storage:{from:bucket=>{assert.equal(bucket,'receipts');return {upload:async(path,blob)=>{uploadCalls++;log.push('upload');assert(path.startsWith('hh-test/auth-test/'));return fail?{error:{message:'denied'}}:{data:{path},error:null};},createSignedUrl:async()=>{log.push('sign');return {data:{signedUrl:'https://test.invalid/signed'},error:null};}};}}};
+globalThis.__ensureReceiptAuth=async()=>{authCalls++;log.push('auth');return client;};globalThis.__getReceiptAuthClient=()=>client;
+const source=stripTypeScriptTypes(readFileSync('src/lib/attachments.ts','utf8')).replace(/import \{ensureReceiptAuth,getReceiptAuthClient\} from '[^']+';/,'const ensureReceiptAuth=globalThis.__ensureReceiptAuth,getReceiptAuthClient=globalThis.__getReceiptAuthClient;');
+const {uploadReceiptPhoto,resolveReceiptUrl,clearReceiptSession}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const user={id:'user-test',username:'tester',pinHash:'45827'};
+const file=new File(['sample-image'],'receipt.png',{type:'image/png'});
+const reference=await uploadReceiptPhoto(file,'hh-test',user);assert(reference.startsWith('supabase-storage://receipts/hh-test/'));
+assert.deepEqual(log,['auth','upload','sign']);assert.equal(await uploadReceiptPhoto(file,'hh-test',user),reference);assert.equal(uploadCalls,1);
+assert.equal(await resolveReceiptUrl(reference,user),'https://test.invalid/signed');
+await assert.rejects(uploadReceiptPhoto(reference,'hh-other',user),/berbeda/);
+await assert.rejects(uploadReceiptPhoto(new File(['x'],'bad.html',{type:'text/html'}),'hh-test',user),/maksimal/);
+fail=true;await assert.rejects(uploadReceiptPhoto(new File(['different'],'retry.png',{type:'image/png'}),'hh-test',user),/Unggah/);
+clearReceiptSession(user.id);assert.equal(await resolveReceiptUrl('data:image/png;base64,aA==',user),'data:image/png;base64,aA==');
+console.log('PASS: Supabase Auth precedes private upload, file reference only, household boundary, signed access, deduplicated retry, no Base64 fallback on failure');

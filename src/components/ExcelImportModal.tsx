@@ -10,7 +10,7 @@ interface ExcelImportModalProps {
 }
 
 export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onClose }) => {
-  const { importExcelFile, resetToDefault, state } = useApp();
+  const { importExcelFile } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(false);
@@ -23,6 +23,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
   const handleFileProcess = async (file: File) => {
     setErrorMsg('');
     setLoading(true);
+    setSuccessSummary(null);
 
     const res = await importExcelFile(file);
     setLoading(false);
@@ -42,14 +43,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
     }
   };
 
-  const handleResetData = () => {
-    resetToDefault();
-    setSuccessSummary(null);
-    setErrorMsg('');
-    onClose();
-  };
-
-  const latestImport = successSummary || (state.importHistory && state.importHistory[0]);
+  const latestImport = successSummary;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
@@ -133,18 +127,18 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 flex items-center justify-between">
             <div>
               <div className="font-semibold text-xs text-slate-800">
-                Gunakan Data Bawaan (74 Transaksi)
+                Pilih berkas transaksi
               </div>
               <div className="text-[11px] text-slate-500">
-                Muat ulang data Keuangan-Maruf-transactions-2026-11-10.xlsx
+                Hasil impor ditampilkan setelah diverifikasi dari Supabase.
               </div>
             </div>
             <button
-              onClick={handleResetData}
+              onClick={() => fileInputRef.current?.click()}
               className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5 text-teal-700" />
-              <span>Muat Ulang</span>
+              <span>Pilih Excel</span>
             </button>
           </div>
 

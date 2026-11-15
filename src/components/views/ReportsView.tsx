@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import {jakartaDateTime} from '../../lib/dateTime';
+import {transactionsForMonth} from '../../lib/reportPeriod';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { CategoryIcon } from '../CategoryIcon';
@@ -46,13 +48,29 @@ interface AIAnalysisResult {
 }
 
 export const ReportsView: React.FC = () => {
-  const { transactions, periodIncome, periodExpense, netCashFlow, activeHousehold } = useApp();
+  const {transactions:allTransactions,activeHousehold}=useApp();
+  const currentPeriod=jakartaDateTime().date;
+  const [selectedMonth,setSelectedMonth]=useState(Number(currentPeriod.slice(5,7)));
+  const [selectedYear,setSelectedYear]=useState(Number(currentPeriod.slice(0,4)));
+  const periodLabel=new Intl.DateTimeFormat('id-ID',{month:'long',year:'numeric',timeZone:'Asia/Jakarta'}).format(new Date(selectedYear,selectedMonth-1,15));
+  const transactions=useMemo(()=>transactionsForMonth(allTransactions,selectedYear,selectedMonth),[allTransactions,selectedYear,selectedMonth]);
+  const periodIncome=transactions.filter(t=>t.type==='income').reduce((n,t)=>n+t.amount,0);
+  const periodExpense=transactions.filter(t=>t.type==='expense').reduce((n,t)=>n+t.amount,0);
+  const netCashFlow=periodIncome-periodExpense;
+  const reportKey=activeHousehold.id+':'+selectedYear+':'+selectedMonth;
+  const analysisPeriod=useRef(reportKey);analysisPeriod.current=reportKey;
+  const years=useMemo(()=>{
+    const values=allTransactions.flatMap(t=>{try{return [Number(jakartaDateTime(t.effectiveAt).date.slice(0,4))];}catch{return [];}});
+    const current=Number(currentPeriod.slice(0,4));const min=Math.min(current-5,...values),max=Math.max(current+1,...values);
+    return Array.from({length:max-min+1},(_,i)=>max-i);
+  },[allTransactions,currentPeriod]);
   const [reportTab, setReportTab] = useState<'kategori' | 'tren' | 'label'>('kategori');
   const [hoveredCatIndex, setHoveredCatIndex] = useState<number | null>(null);
 
   // AI Expense Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResult | null>(null);
+  useEffect(()=>{setAiAnalysis(null);setIsAnalyzing(false);setHoveredCatIndex(null);},[reportKey]);
   // Calculate expense categories breakdown
   const categoryStats = useMemo(() => {
     const expenseTxs = transactions.filter(t => t.type === 'expense');
@@ -149,7 +167,7 @@ export const ReportsView: React.FC = () => {
     const expenseTxs = transactions.filter(t => t.type === 'expense');
     const dayMap = new Map<string, number>();
     for (const t of expenseTxs) {
-      const dateKey = t.effectiveAt ? t.effectiveAt.split('T')[0] : '2026-11-01';
+      const dateKey = jakartaDateTime(t.effectiveAt).date;
       dayMap.set(dateKey!, (dayMap.get(dateKey!) || 0) + t.amount);
     }
     const entries = Array.from(dayMap.entries())
@@ -164,25 +182,25 @@ export const ReportsView: React.FC = () => {
   }, [transactions]);
 
   return (
-    <div className="space-y-4 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Title */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-            Laporan & Rekapitulasi Keuangan
+            Laporan bulanan
           </h1>
           <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
             <Calendar className="w-3.5 h-3.5 text-teal-700" />
-            <span>Periode November 2026 • Analisis Buku Besar Real-time</span>
+            <span>Periode {periodLabel}</span>
           </p>
-        </div>
-
-        <div className="flex items-center gap-1 px-2.5 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-full text-xs font-semibold">
-          <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
-          <span>Ledger Terverifikasi</span>
         </div>
       </div>
 
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+        <label className="min-w-36 flex-1 text-xs font-semibold text-slate-600">Bulan<select value={selectedMonth} onChange={e=>setSelectedMonth(Number(e.target.value))} className="mt-1 block w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600">{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Intl.DateTimeFormat('id-ID',{month:'long'}).format(new Date(2020,i,15))}</option>)}</select></label>
+        <label className="min-w-24 flex-1 text-xs font-semibold text-slate-600">Tahun<select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} className="mt-1 block w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600">{years.map(year=><option key={year} value={year}>{year}</option>)}</select></label>
+        <p className="w-full text-xs text-slate-500">{transactions.length} transaksi pada {periodLabel}{transactions.length===0?' · Belum ada transaksi untuk periode ini.':''}</p>
+      </div>
       {/* Net Cash Flow Card */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
         <div className="flex items-center justify-between">
@@ -445,7 +463,7 @@ export const ReportsView: React.FC = () => {
       {reportTab === 'tren' && (
         <div className="space-y-4">
           {/* Savings Rate Card */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl p-5 shadow-xl space-y-3">
+          <div className="soft-summary rounded-3xl p-5 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Percent className="w-4 h-4 text-emerald-400" />
@@ -562,7 +580,7 @@ export const ReportsView: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="font-bold text-slate-900 text-sm">Aktivitas Pengeluaran per Tanggal</h2>
-                  <p className="text-[11px] text-slate-500">Pola belanja harian keluarga bulan ini</p>
+                  <p className="text-[11px] text-slate-500">Pola belanja harian keluarga periode terpilih</p>
                 </div>
                 <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                   {dailySpending.length} Hari Aktif
@@ -658,7 +676,7 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* 4. AI Expense Deep Analysis Card */}
-      <div className="bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-teal-800/40 space-y-5">
+      <div className="soft-summary rounded-3xl p-5 sm:p-6 shadow-xl border border-teal-800/40 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
@@ -666,13 +684,13 @@ export const ReportsView: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-base text-white">Analisis AI Pengeluaran Lengkap</h2>
+                <h2 className="font-extrabold text-base text-white">Tinjau pengeluaran</h2>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-400/20 text-teal-300 border border-teal-400/30">
-                  AI Financial Advisor
+                  Analisis pengeluaran
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Audit otomatis kebocoran dana, rasio tabungan, dan rencana aksi penghematan {activeHousehold?.name || 'Keluarga'}.
+                Tinjau pola pengeluaran dan peluang menabung untuk {activeHousehold?.name || 'Keluarga'}.
               </p>
             </div>
           </div>
@@ -680,6 +698,7 @@ export const ReportsView: React.FC = () => {
           <button
             type="button"
             onClick={async () => {
+              const requestedPeriod=reportKey;
               setIsAnalyzing(true);
               const topCats = categoryStats.slice(0, 5).map(c => ({
                 name: c.name,
@@ -703,7 +722,7 @@ export const ReportsView: React.FC = () => {
                 healthStatus: heuristicScore >= 75 ? 'Sangat Sehat' : heuristicScore >= 50 ? 'Cukup Sehat' : 'Waspada Defisit',
                 savingsRate: calcSavingsRate,
                 cashFlowEvaluation: isDeficit
-                  ? `Pengeluaran bulan ini (Rp ${periodExpense.toLocaleString('id-ID')}) melebihi pemasukan dengan defisit Rp ${Math.abs(netCashFlow).toLocaleString('id-ID')}. Perlu evaluasi darurat pos non-pokok.`
+                  ? `Pengeluaran periode terpilih (Rp ${periodExpense.toLocaleString('id-ID')}) melebihi pemasukan dengan defisit Rp ${Math.abs(netCashFlow).toLocaleString('id-ID')}. Perlu evaluasi darurat pos non-pokok.`
                   : `Arus kas keluarga mencatatkan surplus sehat sebesar Rp ${netCashFlow.toLocaleString('id-ID')} dengan rasio tabungan ${calcSavingsRate}. Disiplin pencatatan berjalan dengan baik.`,
                 spendingLeaks: [
                   `Pos "${topCatName}" memakan ${topCats[0]?.percentage || 0}% total anggaran belanja. Pertimbangkan membatasi alokasi mingguan.`,
@@ -752,11 +771,10 @@ export const ReportsView: React.FC = () => {
               } catch {
                 // Gunakan fallback cerdas
               } finally {
-                setAiAnalysis(fallbackResult);
-                setIsAnalyzing(false);
+                if(analysisPeriod.current===requestedPeriod){setAiAnalysis(fallbackResult);setIsAnalyzing(false);}
               }
             }}
-            disabled={isAnalyzing}
+            disabled={isAnalyzing||transactions.length===0}
             className="px-4 py-2.5 rounded-2xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-teal-900/40 cursor-pointer shrink-0"
           >
             {isAnalyzing ? (
@@ -782,7 +800,7 @@ export const ReportsView: React.FC = () => {
         {!aiAnalysis && !isAnalyzing && (
           <div className="p-5 rounded-2xl bg-white/5 border border-white/10 text-center space-y-2">
             <p className="text-xs text-slate-300">
-              Klik tombol di atas untuk menjalankan audit cerdas AI atas {transactions.filter(t => t.type === 'expense').length} transaksi pengeluaran bulan ini.
+              Klik tombol di atas untuk menjalankan audit cerdas AI atas {transactions.filter(t => t.type === 'expense').length} transaksi pengeluaran periode terpilih.
             </p>
             <div className="text-[11px] text-teal-300/80">
               Mencakup: Evaluasi Arus Kas • Deteksi Pos Bocor Halus • 3 Rencana Aksi Nyata

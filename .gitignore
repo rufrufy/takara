@@ -35,3 +35,17 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # local user database storage
 data/
+
+# Local design review captures, sessions and temporary maintenance work
+.impeccable/*
+!.impeccable/design.json
+!.impeccable/surfaces/
+.impeccable/surfaces/*
+!.impeccable/surfaces/src-app-tsx.md
+!.impeccable/mocks/
+.impeccable/mocks/*
+!.impeccable/mocks/activity.png
+!.impeccable/mocks/activity.png.json
+scripts/recover-maruf-import.mjs
+scripts/reconcile-maruf-wallets.mjs
+scripts/verify-supabase-live.mjs

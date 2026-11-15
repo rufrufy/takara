@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import {jakartaDateTime,jakartaDateTimeToISO} from '../lib/dateTime';
+import {uploadReceiptPhoto} from '../lib/attachments';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import type { TransactionType } from '../types';
 import {
@@ -24,6 +26,7 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
   const { wallets, categories, addTransaction, state } = useApp();
 
   const [previewImage, setPreviewImage] = useState<string>('');
+  const [receiptReference,setReceiptReference] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -34,9 +37,13 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
   const [selectedWalletId, setSelectedWalletId] = useState<string>(wallets[0]?.id || '');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedCategoryName, setSelectedCategoryName] = useState<string>('');
-  const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0] || '');
+  const [transactionDate, setTransactionDate] = useState<string>(()=>jakartaDateTime().date);
+  const [transactionTime,setTransactionTime] = useState(()=>jakartaDateTime().time);
   const [transactionType, setTransactionType] = useState<TransactionType>('expense');
   const [hasScanned, setHasScanned] = useState(false);
+
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
@@ -45,6 +52,9 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
     if (!file) return;
 
     setErrorMsg('');
+    if(isScanning)return;
+    setSelectedCategoryId('');setSelectedCategoryName('');
+    setReceiptReference('');
     setIsScanning(true);
     setHasScanned(false);
 
@@ -59,8 +69,10 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
       const dataUrl = await dataUrlPromise;
       setPreviewImage(dataUrl);
 
+      const reference=await uploadReceiptPhoto(file,state.activeHouseholdId,state.currentUser);
+      setReceiptReference(reference);
       // Jalankan AI Scan
-      const categoryNames = categories.filter(c => c.type === 'expense').map(c => c.name);
+      const categoryNames = categories.filter(c => c.type === transactionType).map(c => c.name);
       const aiResult = await scanReceiptWithAI(dataUrl, state.aiConfig, categoryNames);
 
       if (aiResult.success && aiResult.data) {
@@ -69,12 +81,15 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
         setAmountStr(d.amount > 0 ? String(d.amount) : '');
         setDescription(d.description || 'Belanja Nota');
         setTransactionType(d.type || 'expense');
-        if (d.date) setTransactionDate(d.date);
+        if (d.date) {
+          const ymd=d.date.match(/^(\d{4})-(\d{2})-(\d{2})/),dmy=d.date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+          if(ymd)setTransactionDate(ymd[0]);else if(dmy)setTransactionDate(dmy[3]+'-'+dmy[2]!.padStart(2,'0')+'-'+dmy[1]!.padStart(2,'0'));
+        }
 
         // Cocokkan kategori
         if (d.categoryName) {
           const catSearch = d.categoryName.toLowerCase();
-          const matched = categories.find(c => {
+          const matched = categories.filter(c=>c.type===(d.type==='income'?'income':'expense')).find(c => {
             const cName = c.name.toLowerCase();
             return cName === catSearch || cName.includes(catSearch) || catSearch.includes(cName);
           });
@@ -82,6 +97,7 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
             setSelectedCategoryId(matched.id);
             setSelectedCategoryName(matched.name);
           } else {
+            setSelectedCategoryId('');
             setSelectedCategoryName(d.categoryName);
           }
         }
@@ -101,6 +117,7 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
 
   const handleReset = () => {
     setPreviewImage('');
+    setReceiptReference('');
     setHasScanned(false);
     setAmount(0);
     setAmountStr('');
@@ -110,7 +127,7 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
     setErrorMsg('');
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalAmount = parseInt(amountStr.replace(/[^0-9]/g, ''), 10) || amount;
     if (finalAmount <= 0) {
@@ -122,29 +139,17 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
       return;
     }
 
+    if(previewImage && !receiptReference){setErrorMsg('Foto belum tersimpan di Supabase. Unggah ulang sebelum menyimpan transaksi.');return;}
     const pickedWallet = wallets.find(w => w.id === selectedWalletId);
 
-    let safeEffectiveAt = new Date().toISOString();
-    let safeDateStr = safeEffectiveAt.split('T')[0];
+    let safeEffectiveAt:string;
+    try{safeEffectiveAt=jakartaDateTimeToISO(transactionDate,transactionTime);}catch(error){setErrorMsg((error as Error).message);return;}
+    const safeDateStr=transactionDate;
 
-    if (transactionDate) {
-      const dmy = transactionDate.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-      if (dmy) {
-        const y = dmy[3]!.length === 2 ? `20${dmy[3]}` : dmy[3];
-        const m = dmy[2]!.padStart(2, '0');
-        const d = dmy[1]!.padStart(2, '0');
-        safeEffectiveAt = `${y}-${m}-${d}T12:00:00.000Z`;
-        safeDateStr = `${y}-${m}-${d}`;
-      } else {
-        const parsed = new Date(transactionDate);
-        if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) {
-          safeEffectiveAt = parsed.toISOString();
-          safeDateStr = safeEffectiveAt.split('T')[0];
-        }
-      }
-    }
-
-    const res = addTransaction({
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    const res = await addTransaction({
       type: transactionType,
       amount: finalAmount,
       sourceWalletId: transactionType === 'expense' ? selectedWalletId : undefined,
@@ -154,11 +159,13 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
       categoryId: selectedCategoryId || undefined,
       categoryName: selectedCategoryName || (transactionType === 'income' ? 'Pemasukan Lainnya' : 'Belanja'),
       description: description.trim() || 'Belanja Struk AI',
-      imageUrl: previewImage || undefined,
+      imageUrl: receiptReference || undefined,
       addedBy: state.currentUser.displayName || 'Maruf H',
       effectiveAt: safeEffectiveAt,
       dateStr: safeDateStr
     });
+    savingRef.current = false;
+    setSaving(false);
 
     if (res.success) {
       handleReset();
@@ -176,7 +183,7 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
         onClick={e => e.stopPropagation()}
       >
         {/* Top Header */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-teal-900 to-teal-800 text-white">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between soft-summary">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-teal-700/80 border border-teal-500/40 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-amber-300" />
@@ -304,6 +311,10 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-slate-600">Tanggal<input type="date" required disabled={saving} value={transactionDate} onInput={e=>setTransactionDate(e.currentTarget.value)} onChange={e=>setTransactionDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm" /></label>
+                  <label className="text-xs font-semibold text-slate-600">Jam (WIB)<input type="time" required disabled={saving} value={transactionTime} onInput={e=>setTransactionTime(e.currentTarget.value)} onChange={e=>setTransactionTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm" /></label>
+                </div>
                 {/* Deskripsi Toko / Nota */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
@@ -337,23 +348,13 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Tanggal Struk
-                    </label>
-                    <input
-                      type="date"
-                      value={transactionDate}
-                      onChange={e => setTransactionDate(e.target.value)}
-                      className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-600"
-                    />
-                  </div>
+                  <p className="self-center text-xs text-teal-800">{receiptReference?'Lampiran tersimpan di Supabase.':'Lampiran belum tersimpan.'}</p>
                 </div>
 
                 {/* Kategori */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Kategori Pengeluaran
+                    Kategori {transactionType==='income'?'Pemasukan':'Pengeluaran'}
                   </label>
                   <select
                     value={selectedCategoryId}
@@ -376,11 +377,11 @@ export const AIScanModal: React.FC<AIScanModalProps> = ({ isOpen, onClose, onSav
 
               {/* Submit Button */}
               <button
-                type="submit"
+                type="submit" disabled={saving}
                 className="w-full py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
               >
-                <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>Simpan Transaksi Struk Ini</span>
+                {saving?<Loader2 className="w-4 h-4 animate-spin" />:<Check className="w-4 h-4 stroke-[2.5]" />}
+                <span role={saving?'status':undefined}>{saving?'Menyimpan ke Supabase…':'Simpan Transaksi Struk Ini'}</span>
               </button>
             </form>
           )}

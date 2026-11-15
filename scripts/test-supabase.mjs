@@ -1,0 +1,28 @@
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { stripTypeScriptTypes } from 'node:module';
+const source = stripTypeScriptTypes(readFileSync('src/lib/supabase.ts', 'utf8'));
+const api = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const config = { url: 'https://test.supabase.co', anonKey: 'sb_publishable_test', bucket: 'receipts' };
+let mode = 'read';
+let calls = [];
+globalThis.fetch = async (url, options) => {
+  calls.push({ url, options });
+  assert.equal(options.headers.apikey, config.anonKey);
+  const u = new URL(url);
+  if (mode === 'write-fail') return new Response('denied', {status:403});
+  if (mode === 'read-fail' && u.pathname.endsWith('/transactions')) return new Response('denied', {status:403});
+  if (options.method === 'POST') return new Response(null, {status:201});
+  const offset = Number(u.searchParams.get('offset'));
+  return new Response(JSON.stringify(u.pathname.endsWith('/transactions') && offset < 501 ? Array.from({length:offset===0?500:1},(_,i)=>({id:'tx-'+(offset+i),household_id:'hh-test',amount:123,type:'income',added_by:'Tester',effective_at:'2026-11-14T00:00:00Z',created_at:'2026-11-14T00:00:00Z',status:'POSTED'})) : []));
+};
+let result = await api.pullAllDataFromSupabase(config, 'hh-test');
+assert.equal(result.success, true);
+assert.equal(result.data.transactions.length, 501);
+assert(calls.some(c => c.url.includes('offset=500')));
+mode = 'read-fail'; result = await api.pullAllDataFromSupabase(config, 'hh-test');
+assert.equal(result.success, false); assert.match(result.error, /transactions.*403/);
+mode = 'write-fail'; result = await api.syncTransactionToSupabase({id:'tx-test'},config); assert.equal(result.success,false);
+mode = 'write'; result = await api.syncTransactionToSupabase({id:'tx-test',householdId:'hh-test',type:'income',amount:123,destinationWalletId:'wallet-test'},config); assert.equal(result.success,true);
+assert(calls.some(c => c.url.endsWith('/ledger_entries') && c.options.method === 'POST'));
+console.log('PASS: Supabase pagination, household read, read error, rejected write, confirmed transaction and ledger write');

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import { HouseholdDeleteControl } from '../HouseholdDeleteControl';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DEFAULT_AI_CONFIG, testRealAIConnection, detectAIProvider, resolveGeminiEndpoint, normalizeAIEndpoint, getSystemAIConfig } from '../../lib/aiScanner';
-import { DEFAULT_SUPABASE_CONFIG, testSupabaseConnection } from '../../lib/supabase';
+import { DEFAULT_SUPABASE_CONFIG, testSupabaseConnection, pullAllDataFromSupabase } from '../../lib/supabase';
 import {
   Shield,
   Cpu,
@@ -30,7 +31,7 @@ import {
   ArrowRightLeft,
   UserPlus
 } from 'lucide-react';
-import type { UserRole, HouseholdMember, Household, User } from '../../types';
+import type { UserRole, HouseholdMember, Household, User, FinancialTransaction } from '../../types';
 
 interface AdminDashboardViewProps {
   onBack?: () => void;
@@ -44,7 +45,6 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     switchHousehold,
     createHousehold,
     updateHousehold,
-    deleteHousehold,
     updateAIConfig,
     updateSupabaseConfig,
     inviteMember,
@@ -69,7 +69,26 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   const currentAI = getSystemAIConfig();
   const currentSupabase = state.supabaseConfig || DEFAULT_SUPABASE_CONFIG;
 
-  const [activeTab, setActiveTab] = useState<'members' | 'households' | 'ai' | 'supabase' | 'sessions'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'households' | 'ai' | 'supabase' | 'sessions' | 'transactions'>('members');
+
+  const [databaseTransactions, setDatabaseTransactions] = useState<FinancialTransaction[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [logError, setLogError] = useState('');
+  const [logSearch, setLogSearch] = useState('');
+  const [logRevision, setLogRevision] = useState(0);
+  useEffect(() => {
+    if (activeTab !== 'transactions') return;
+    let cancelled = false;
+    setLogLoading(true);
+    setLogError('');
+    pullAllDataFromSupabase(currentSupabase).then(result => {
+      if (cancelled) return;
+      if (result.success && result.data) setDatabaseTransactions((result.data.transactions || []).sort((a,b) => b.createdAt.localeCompare(a.createdAt)));
+      else setLogError(result.error || 'Gagal membaca transaksi Supabase.');
+    }).catch(error => { if (!cancelled) setLogError(String(error)); })
+      .finally(() => { if (!cancelled) setLogLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, logRevision, currentSupabase.url, currentSupabase.anonKey]);
 
   // AI Configuration State
   const [provider, setProvider] = useState(currentAI.provider);
@@ -135,7 +154,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       setApiUrl('https://9r.bkpp.web.id/v1');
       setModel('ag/gemini-3.8-flash');
       if (!apiKey || apiKey.startsWith('AIza')) {
-        setApiKey('sk-915bde2d5d0f619a-u6ajkz-0330dedf');
+        setApiKey('');
       }
     }
   };
@@ -410,7 +429,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   };
 
   return (
-    <div className="space-y-4 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -475,6 +494,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
           <span>Pengguna ({registeredUsers.length})</span>
         </button>
 
+        <button type="button" onClick={() => setActiveTab('transactions')} className={`flex-1 min-w-[140px] py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${activeTab === 'transactions' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}><Activity className="w-3.5 h-3.5 text-teal-700" />Log Transaksi</button>
         <button
           type="button"
           onClick={() => setActiveTab('households')}
@@ -527,6 +547,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
         </button>
       </div>
 
+      {activeTab === 'transactions' && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-sm font-bold text-slate-900">Log penambahan transaksi semua user</h2><p className="text-xs text-slate-500">Transaksi yang tersimpan di Supabase, diurutkan berdasarkan waktu penambahan.</p></div>
+            <button type="button" disabled={logLoading} onClick={() => setLogRevision(n => n + 1)} className="rounded-xl bg-teal-700 text-white px-3 py-2 text-xs disabled:opacity-50">{logLoading ? 'Memuat…' : 'Muat ulang'}</button>
+          </div>
+          <input aria-label="Cari transaksi semua user" value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="Cari pencatat, household, deskripsi, atau ID" className="w-full rounded-xl border border-slate-200 p-3 text-sm" />
+          {logError ? <p role="alert" className="text-sm text-red-700">{logError}</p> : logLoading ? <p role="status" className="text-sm text-slate-600">Membaca database Supabase…</p> : <>
+            <p className="text-xs text-slate-600">{databaseTransactions.length} transaksi tersimpan di database</p>
+            <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="border-b border-slate-200">{['Waktu ditambahkan', 'Pencatat', 'Household', 'Transaksi', 'Nominal', 'Status'].map(label => <th key={label} scope="col" className="p-3 whitespace-nowrap">{label}</th>)}</tr></thead>
+              <tbody>{databaseTransactions.filter(tx => [tx.addedBy, tx.householdId, tx.description, tx.id].join(' ').toLowerCase().includes(logSearch.toLowerCase())).map(tx => <tr key={tx.id} className="border-b border-slate-100">
+                <td className="p-3 whitespace-nowrap">{new Date(tx.createdAt).toLocaleString('id-ID')}</td><td className="p-3">{tx.addedBy}</td><td className="p-3">{tx.householdId}</td><td className="p-3"><p>{tx.description || tx.categoryName || tx.type}</p><p className="text-slate-500 break-all">{tx.id}</p></td><td className="p-3 whitespace-nowrap tabular-nums">{new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',maximumFractionDigits:0}).format(tx.amount)}</td><td className="p-3">{tx.status}</td>
+              </tr>)}</tbody></table></div>
+            {databaseTransactions.length === 0 && <p className="text-sm text-slate-500">Belum ada transaksi yang tersimpan di Supabase.</p>}
+          </>}
+        </section>
+      )}
       {/* TAB 1: MEMBERS / REGISTERED USERS MANAGEMENT */}
       {activeTab === 'members' && (
         <div className="space-y-4">
@@ -794,16 +831,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                        {households.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => deleteHousehold(h.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                            title="Hapus Household"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <HouseholdDeleteControl household={h} onDeleted={() => setHouseholdSuccess('Household berhasil dihapus dari Supabase.')} />
                       </div>
                     </div>
 

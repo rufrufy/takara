@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { Wallet, WalletType, DebtItem, TransactionType } from '../../types';
@@ -334,8 +334,9 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     setDebtStep(3);
   };
 
+  const debtSaving = useRef(false);
   // Final Step 3 submission
-  const handleSubmitDebtWizard = (e: React.FormEvent) => {
+  const handleSubmitDebtWizard = async (e: React.FormEvent) => {
     e.preventDefault();
     setWizardError('');
 
@@ -352,19 +353,9 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     const finalTitle = debtTitle.trim() || debtKind;
     const dueDateFormatted = `Tgl ${dueDayNum} tiap bulan`;
 
-    // If money was newly received in a wallet, record the disbursement into that wallet
-    if (debtRecipientWalletId !== 'none') {
-      addTransaction({
-        type: 'income',
-        amount: totalAmt,
-        destinationWalletId: debtRecipientWalletId,
-        categoryName: 'Pencairan Pinjaman',
-        description: `Pencairan ${finalTitle}`,
-        effectiveAt: new Date().toISOString()
-      });
-    }
-
-    addDebt({
+    if (debtSaving.current) return;
+    debtSaving.current = true;
+    const saved = await addDebt({
       type: debtType,
       personOrEntity: finalTitle,
       amount: totalAmt,
@@ -376,21 +367,26 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       isSettled: false,
       isPaidThisMonth: false
     });
+    debtSaving.current = false;
+    if (!saved.success) { setWizardError(saved.error || 'Gagal menyimpan utang ke Supabase.'); return; }
 
     setIsDebtModalOpen(false);
   };
 
   // Execute quick monthly installment payment
-  const handleExecutePayment = (e: React.FormEvent) => {
+  const handleExecutePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentModalDebt) return;
 
-    const res = payDebtInstallment(
+    if (debtSaving.current) return;
+    debtSaving.current = true;
+    const res = await payDebtInstallment(
       paymentModalDebt.id,
       paymentSourceWalletId !== 'none' ? paymentSourceWalletId : undefined,
       paymentReceiptImage || undefined
     );
 
+    debtSaving.current = false;
     if (res.success) {
       const debtName = paymentModalDebt.personOrEntity;
       setPaymentModalDebt(null);
@@ -398,7 +394,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       setPaymentReceiptImage('');
       setPaymentNotice(`Cicilan untuk "${debtName}" berhasil dibayar!`);
       setTimeout(() => setPaymentNotice(''), 4000);
-    }
+    } else { setPaymentNotice(res.error || 'Pembayaran belum tersimpan.'); }
   };
 
   const getWalletIcon = (type: WalletType) => {
@@ -421,11 +417,11 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     : [];
 
   return (
-    <div className="space-y-4 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Title */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Profil Finansial</h1>
+          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Dompet & keuangan</h1>
           <p className="text-xs text-slate-500">
             Total aset & portofolio, utang piutang, cicilan bulanan, dan arus pemasukan keluarga
           </p>
@@ -483,7 +479,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       {subTab === 'dompet' && (
         <div className="space-y-4">
           {/* Total Assets Banner */}
-          <div className="bg-gradient-to-br from-teal-800 to-slate-900 text-white rounded-3xl p-5 shadow-lg space-y-2">
+          <div className="soft-summary rounded-3xl p-5 shadow-lg space-y-2">
             <span className="text-xs font-semibold text-teal-200 uppercase tracking-wider">
               Total Kekayaan Bersih (Aset Dompet)
             </span>
@@ -873,7 +869,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       {subTab === 'pemasukan' && (
         <div className="space-y-4">
           {/* Total Monthly Income Banner */}
-          <div className="bg-gradient-to-br from-emerald-700 to-teal-800 text-white rounded-3xl p-5 shadow-lg space-y-2">
+          <div className="soft-summary rounded-3xl p-5 shadow-lg space-y-2">
             <span className="text-xs font-semibold text-emerald-100 uppercase tracking-wider">
               Total Pemasukan Bulan Berjalan
             </span>
@@ -1483,73 +1479,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   )}
                 </div>
 
-                {/* Question: Uang pinjamannya baru masuk ke dompet? */}
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900 leading-tight">
-                    Uang pinjamannya baru masuk ke dompet?
-                  </h3>
-                  <div className="text-xs font-semibold text-slate-500 mt-1">
-                    Dompet penerima
-                  </div>
-                </div>
-
-                {/* Wallet Options Grid */}
-                <div className="space-y-2">
-                  {/* Option: Tidak dicatat */}
-                  <button
-                    type="button"
-                    onClick={() => setDebtRecipientWalletId('none')}
-                    className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all ${
-                      debtRecipientWalletId === 'none'
-                        ? 'bg-teal-50 border-teal-600 ring-2 ring-teal-600/20'
-                        : 'bg-white border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <div className="text-xs font-extrabold text-slate-900">Tidak dicatat</div>
-                      <div className="text-[11px] text-slate-500">tidak dicatat</div>
-                    </div>
-                    {debtRecipientWalletId === 'none' && (
-                      <CheckCircle2 className="w-4 h-4 text-teal-700" />
-                    )}
-                  </button>
-
-                  {/* List of active wallets */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {wallets.map(w => {
-                      const isSelected = debtRecipientWalletId === w.id;
-                      const badge = getWalletBadge(w.name, w.type);
-
-                      return (
-                        <button
-                          key={w.id}
-                          type="button"
-                          onClick={() => setDebtRecipientWalletId(w.id)}
-                          className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                            isSelected
-                              ? 'bg-teal-50 border-teal-600 ring-2 ring-teal-600/20'
-                              : 'bg-white border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-700 shrink-0">
-                            {badge}
-                          </div>
-                          <div className="overflow-hidden">
-                            <div className="text-xs font-bold text-slate-900 truncate">{w.name}</div>
-                            <div className="text-[11px] text-slate-500 tabular-nums">
-                              {w.balance < 0 ? `-${formatIDR(Math.abs(w.balance))}` : formatIDR(w.balance)}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Petunjuk Penggunaan */}
-                <p className="text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-xl leading-relaxed">
-                  💡 Pilih dompet hanya kalau uang pinjamannya baru saja kamu terima di dompet itu. Utang lama atau cicilan barang (emas, motor, HP)? Pilih <strong>Tidak dicatat</strong>.
-                </p>
+                <p className="rounded-xl bg-teal-50 p-3 text-xs leading-relaxed text-teal-800">Utang awal hanya disimpan pada daftar Utang/Piutang. Transaksi dan mutasi saldo dompet akan dicatat saat pembayaran cicilan.</p>
 
                 {/* Tambahan: Bunga, Auto-debit, Catatan */}
                 <div className="space-y-3 pt-2 border-t border-slate-100">

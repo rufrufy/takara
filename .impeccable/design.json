@@ -1,0 +1,359 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T00:00:05.443484+00:00",
+  "title": "Design System: Takara — Catatan Harian",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "glass",
+        "value": "0 8px 28px -18px #45623d40,inset 0 1px 0 #fff",
+        "purpose": "Shared refractive pale glass."
+      },
+      {
+        "name": "balance",
+        "value": "inset 0 1px 1px #fff,0 6px 24px -18px #607a5150",
+        "purpose": "Shallow balance panel."
+      },
+      {
+        "name": "dock",
+        "value": "inset 0 1px 1px #fff,0 8px 28px -12px #46623a35",
+        "purpose": "Floating navigation."
+      },
+      {
+        "name": "shared-elevated",
+        "value": "0 16px 50px -24px #34532e45",
+        "purpose": "Large shared overlays."
+      }
+    ],
+    "motion": [
+      {
+        "name": "dock-state",
+        "value": "background .2s ease,color .2s ease",
+        "purpose": "Navigation state changes."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation:none!important;transition:none!important;scroll-behavior:auto!important",
+        "purpose": "Applied with prefers-reduced-motion:reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-max",
+        "value": "359px"
+      },
+      {
+        "name": "wide-min",
+        "value": "640px"
+      }
+    ],
+    "materials": [
+      {
+        "name": "canvas",
+        "value": "linear-gradient(155deg,#fff 0,#f1f6f1 46%,#edf4e8 100%)"
+      },
+      {
+        "name": "balance",
+        "value": "linear-gradient(110deg,#e6efddba,#edf5e5a8);backdrop-filter:blur(16px)"
+      },
+      {
+        "name": "entry-sheet",
+        "value": "background:#f7faf3f5;backdrop-filter:blur(24px);margin:8px;max-height:calc(100dvh - 16px)"
+      }
+    ],
+    "focus": {
+      "value": "2px solid #426638",
+      "offset": "4px"
+    },
+    "layout": {
+      "contentMax": "896px",
+      "dockMax": "560px",
+      "dockWidth": "calc(100% - 16px)",
+      "dockBottom": "calc(12px + env(safe-area-inset-bottom,0px))",
+      "contentBottom": "calc(112px + env(safe-area-inset-bottom,0px))"
+    },
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas",
+        "tonalRamp": [
+          "oklch(15% 0.00845 145.51)",
+          "oklch(26% 0.00845 145.51)",
+          "oklch(38% 0.00845 145.51)",
+          "oklch(49% 0.00845 145.51)",
+          "oklch(61% 0.00845 145.51)",
+          "oklch(72% 0.00845 145.51)",
+          "oklch(84% 0.00845 145.51)",
+          "oklch(95% 0.00845 145.51)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "tonalRamp": [
+          "oklch(15% 0.00000 89.88)",
+          "oklch(26% 0.00000 89.88)",
+          "oklch(38% 0.00000 89.88)",
+          "oklch(49% 0.00000 89.88)",
+          "oklch(61% 0.00000 89.88)",
+          "oklch(72% 0.00000 89.88)",
+          "oklch(84% 0.00000 89.88)",
+          "oklch(95% 0.00000 89.88)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "tonalRamp": [
+          "oklch(15% 0.04664 158.69)",
+          "oklch(26% 0.04664 158.69)",
+          "oklch(38% 0.04664 158.69)",
+          "oklch(49% 0.04664 158.69)",
+          "oklch(61% 0.04664 158.69)",
+          "oklch(72% 0.04664 158.69)",
+          "oklch(84% 0.04664 158.69)",
+          "oklch(95% 0.04664 158.69)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "tonalRamp": [
+          "oklch(15% 0.03562 137.89)",
+          "oklch(26% 0.03562 137.89)",
+          "oklch(38% 0.03562 137.89)",
+          "oklch(49% 0.03562 137.89)",
+          "oklch(61% 0.03562 137.89)",
+          "oklch(72% 0.03562 137.89)",
+          "oklch(84% 0.03562 137.89)",
+          "oklch(95% 0.03562 137.89)"
+        ]
+      },
+      "leaf": {
+        "role": "primary",
+        "displayName": "Leaf",
+        "tonalRamp": [
+          "oklch(15% 0.04384 131.51)",
+          "oklch(26% 0.04384 131.51)",
+          "oklch(38% 0.04384 131.51)",
+          "oklch(49% 0.04384 131.51)",
+          "oklch(61% 0.04384 131.51)",
+          "oklch(72% 0.04384 131.51)",
+          "oklch(84% 0.04384 131.51)",
+          "oklch(95% 0.04384 131.51)"
+        ]
+      },
+      "action": {
+        "role": "primary",
+        "displayName": "Action",
+        "tonalRamp": [
+          "oklch(15% 0.05635 129.67)",
+          "oklch(26% 0.05635 129.67)",
+          "oklch(38% 0.05635 129.67)",
+          "oklch(49% 0.05635 129.67)",
+          "oklch(61% 0.05635 129.67)",
+          "oklch(72% 0.05635 129.67)",
+          "oklch(84% 0.05635 129.67)",
+          "oklch(95% 0.05635 129.67)"
+        ]
+      },
+      "action-ink": {
+        "role": "neutral",
+        "displayName": "Action Ink",
+        "tonalRamp": [
+          "oklch(15% 0.06700 138.92)",
+          "oklch(26% 0.06700 138.92)",
+          "oklch(38% 0.06700 138.92)",
+          "oklch(49% 0.06700 138.92)",
+          "oklch(61% 0.06700 138.92)",
+          "oklch(72% 0.06700 138.92)",
+          "oklch(84% 0.06700 138.92)",
+          "oklch(95% 0.06700 138.92)"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Primary",
+        "tonalRamp": [
+          "oklch(15% 0.08224 139.07)",
+          "oklch(26% 0.08224 139.07)",
+          "oklch(38% 0.08224 139.07)",
+          "oklch(49% 0.08224 139.07)",
+          "oklch(61% 0.08224 139.07)",
+          "oklch(72% 0.08224 139.07)",
+          "oklch(84% 0.08224 139.07)",
+          "oklch(95% 0.08224 139.07)"
+        ]
+      },
+      "glass": {
+        "role": "neutral",
+        "displayName": "Glass",
+        "tonalRamp": [
+          "oklch(15% 0.00000 89.88)",
+          "oklch(26% 0.00000 89.88)",
+          "oklch(38% 0.00000 89.88)",
+          "oklch(49% 0.00000 89.88)",
+          "oklch(61% 0.00000 89.88)",
+          "oklch(72% 0.00000 89.88)",
+          "oklch(84% 0.00000 89.88)",
+          "oklch(95% 0.00000 89.88)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "tonalRamp": [
+          "oklch(15% 0.02104 134.09)",
+          "oklch(26% 0.02104 134.09)",
+          "oklch(38% 0.02104 134.09)",
+          "oklch(49% 0.02104 134.09)",
+          "oklch(61% 0.02104 134.09)",
+          "oklch(72% 0.02104 134.09)",
+          "oklch(84% 0.02104 134.09)",
+          "oklch(95% 0.02104 134.09)"
+        ]
+      },
+      "active": {
+        "role": "primary",
+        "displayName": "Active",
+        "tonalRamp": [
+          "oklch(15% 0.03854 128.22)",
+          "oklch(26% 0.03854 128.22)",
+          "oklch(38% 0.03854 128.22)",
+          "oklch(49% 0.03854 128.22)",
+          "oklch(61% 0.03854 128.22)",
+          "oklch(72% 0.03854 128.22)",
+          "oklch(84% 0.03854 128.22)",
+          "oklch(95% 0.03854 128.22)"
+        ]
+      },
+      "income": {
+        "role": "secondary",
+        "displayName": "Income",
+        "tonalRamp": [
+          "oklch(15% 0.09857 136.00)",
+          "oklch(26% 0.09857 136.00)",
+          "oklch(38% 0.09857 136.00)",
+          "oklch(49% 0.09857 136.00)",
+          "oklch(61% 0.09857 136.00)",
+          "oklch(72% 0.09857 136.00)",
+          "oklch(84% 0.09857 136.00)",
+          "oklch(95% 0.09857 136.00)"
+        ]
+      },
+      "expense": {
+        "role": "secondary",
+        "displayName": "Expense",
+        "tonalRamp": [
+          "oklch(15% 0.11041 32.45)",
+          "oklch(26% 0.11041 32.45)",
+          "oklch(38% 0.11041 32.45)",
+          "oklch(49% 0.11041 32.45)",
+          "oklch(61% 0.11041 32.45)",
+          "oklch(72% 0.11041 32.45)",
+          "oklch(84% 0.11041 32.45)",
+          "oklch(95% 0.11041 32.45)"
+        ]
+      },
+      "transfer": {
+        "role": "secondary",
+        "displayName": "Transfer",
+        "tonalRamp": [
+          "oklch(15% 0.04007 173.46)",
+          "oklch(26% 0.04007 173.46)",
+          "oklch(38% 0.04007 173.46)",
+          "oklch(49% 0.04007 173.46)",
+          "oklch(61% 0.04007 173.46)",
+          "oklch(72% 0.04007 173.46)",
+          "oklch(84% 0.04007 173.46)",
+          "oklch(95% 0.04007 173.46)"
+        ]
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Record action",
+      "kind": "button",
+      "refersTo": "button-record",
+      "description": "Pale capsule opening the expense sheet.",
+      "html": "<button class=\"ds-record\">+ Catat</button>",
+      "css": ".ds-record{font-family:var(--font-sans,\"Plus Jakarta Sans\",sans-serif);min-height:44px;padding:10px 16px;border:0;border-radius:999px;background:#cfe3bc;color:#36522e;font-size:14px;font-weight:600;box-shadow:inset 0 1px 0 #ffffff80}.ds-record:hover{filter:brightness(.98)}.ds-record:active{transform:scale(.98)}.ds-record:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+    },
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Floating recording action on other destinations.",
+      "html": "<button class=\"ds-primary\">Catat transaksi</button>",
+      "css": ".ds-primary{border:0;border-radius:999px;background:#426638;color:#fff;padding:13px 18px;font:600 14px \"Plus Jakarta Sans\",sans-serif;box-shadow:0 6px 24px -9px #29432660}.ds-primary:hover{filter:brightness(.96)}.ds-primary:active{transform:scale(.98)}.ds-primary:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+    },
+    {
+      "name": "Search",
+      "kind": "input",
+      "refersTo": "search",
+      "description": "Capsule search in the daily ledger; real filtering is supplied by the app.",
+      "html": "<label class=\"ds-search\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input type=\"search\" aria-label=\"Cari catatan harian\" placeholder=\"Cari transaksi…\"></label>",
+      "css": ".ds-search{display:flex;align-items:center;gap:11px;padding:0 17px;min-height:48px;border-radius:999px;background:#ffffffa8;box-shadow:0 8px 28px -18px #45623d40,inset 0 1px 0 #fff;color:#7a8c70}.ds-search input{width:100%;min-width:0;background:transparent;border:0;color:var(--ink,#193727);font:14px \"Plus Jakarta Sans\",sans-serif}.ds-search:hover{background:#ffffffb8}.ds-search input:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+    },
+    {
+      "name": "Glass card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Shared translucent wallet/settings container.",
+      "html": "<section class=\"ds-card\"><strong>Dompet</strong><p>Saldo household</p></section>",
+      "css": ".ds-card{padding:16px;border:1px solid #dce5d8;border-radius:24px;background:var(--glass,rgba(255,255,255,.72));color:var(--ink,#193727);font:15px/1.5 \"Plus Jakarta Sans\",sans-serif}.ds-card p{color:var(--muted,#61705c);margin:8px 0 0}"
+    },
+    {
+      "name": "Date capsule",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Date grouping label; not an interactive filter.",
+      "html": "<h2 class=\"ds-date\">Hari ini</h2>",
+      "css": ".ds-date{margin:0;padding:8px 14px;border-radius:999px;background:#e7efdf99;color:#52664a;font:650 13px \"Plus Jakarta Sans\",sans-serif}"
+    },
+    {
+      "name": "Floating dock",
+      "kind": "nav",
+      "refersTo": "dock-active",
+      "description": "Five-item capsule dock. Preview uses a house glyph; application uses distinct Lucide icons per destination.",
+      "html": "<nav class=\"ds-dock\" aria-label=\"Navigasi utama\"><button aria-current=\"page\"><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Beranda</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Transaksi</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Dompet</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Laporan</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Setelan</span></button></nav>",
+      "css": ".ds-dock{display:flex;max-width:560px;padding:8px 7px;border-radius:999px;background:linear-gradient(135deg,#fffffff0,#e8f0decc);backdrop-filter:blur(24px) saturate(1.1);box-shadow:inset 0 1px 1px #fff,0 8px 28px -12px #46623a35}.ds-dock button{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:58px;border:0;border-radius:999px;background:transparent;color:#63715b;font:500 10px \"Plus Jakarta Sans\",sans-serif;transition:background .2s ease,color .2s ease}.ds-dock button[aria-current=page]{background:#dce9ce;color:#3c5f2f;box-shadow:inset 0 1px 1px #ffffff80}.ds-dock button:hover{background:#e5eedc}.ds-dock button:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+    },
+    {
+      "name": "Shared field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Rounded shared transaction/settings field.",
+      "html": "<label class=\"ds-field\">Catatan<input placeholder=\"Catatan transaksi\"></label>",
+      "css": ".ds-field{display:grid;gap:6px;color:#61705c;font:13px \"Plus Jakarta Sans\",sans-serif}.ds-field input{min-height:44px;padding:10px 12px;border:1px solid #dce5d8;border-radius:18px;background:var(--glass,rgba(255,255,255,.72));color:var(--ink,#193727);font:15px \"Plus Jakarta Sans\",sans-serif}.ds-field input:hover{border-color:#c1ceba}.ds-field input:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Catatan Harian",
+    "overview": "An airy dailyhousehold ledger with soft green and white liquid glass. Rounded translucent surfaces, readable financial amounts, and quiet outlined icons make everyday recording approachable. The balance supports the working transaction area without turning the screen into a stack of dashboard cards.\n\nThis is the approved replacement visual world from image 2, extracted from the implemented application. The reference composition adapts to real household values and logical phone dimensions; it is not a claim of pixel reproduction. The automated hero comparison remains open/failed at 59.2. Documentation does not close that gate.",
+    "keyCharacteristics": [
+      "Soft green and white translucent material.",
+      "Fully rounded containers and capsule actions.",
+      "Airy lists with readable amounts and metadata.",
+      "One self-hosted sans family and Lucide outline icons."
+    ],
+    "rules": [
+      {
+        "name": "The Quiet Material Rule",
+        "body": "Use green-white surfaces for structure; reserve stronger color for actions, selection, and financial meaning.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "**Do** use soft green-white glass, rounded surfaces, and outlined icons consistently across screens and sheets.",
+      "**Do** keep real amounts readable with tabular numerals and reserve clearance for the floating dock.",
+      "**Do** preserve live values and loading, error, empty, selected, and keyboard-focus states."
+    ],
+    "donts": [
+      "**Don't** add nested dashboard cards, promotional badges, or decorative AI motifs to the daily ledger.",
+      "**Don't** reintroduce the former dark teal visual identity or desktop sidebar as the default system.",
+      "**Don't** describe reference comparison, authentication migration, or storage setup as complete without independent evidence."
+    ]
+  }
+}

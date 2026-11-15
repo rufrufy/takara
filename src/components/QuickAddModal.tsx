@@ -1,4 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import {CategoryAppearancePicker} from './CategoryAppearancePicker';
+import {jakartaDateTime,jakartaDateTimeToISO} from '../lib/dateTime';
+import {selectTransactionCategory} from '../lib/categorySelection';
+import {uploadReceiptPhoto} from '../lib/attachments';
+import {ReceiptAttachment} from './ReceiptAttachment';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import type { TransactionType } from '../types';
 import {
@@ -17,7 +22,8 @@ import {
   Wallet as WalletIcon,
   FolderOpen,
   Delete,
-  Calculator
+  Calculator,
+  RotateCcw
 } from 'lucide-react';
 import { CategoryIcon } from './CategoryIcon';
 
@@ -39,6 +45,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   const [selectedLabel, setSelectedLabel] = useState<string>('');
   const [description, setDescription] = useState('');
   const [feeStr, setFeeStr] = useState('');
+  const [transactionDate,setTransactionDate] = useState(()=>jakartaDateTime().date);
+  const [transactionTime,setTransactionTime] = useState(()=>jakartaDateTime().time);
   const addedBy = state.currentUser.displayName || 'Maruf H';
   const [errorMsg, setErrorMsg] = useState('');
   const [successToast, setSuccessToast] = useState('');
@@ -56,8 +64,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   const [categorySearch, setCategorySearch] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCatName, setNewCatName] = useState('');
-  const newCatColor = '#0F766E';
-  const newCatIcon = 'ShoppingCart';
+  const [newCatColor,setNewCatColor]=useState('#CCFBF1');
+  const [newCatIcon,setNewCatIcon]=useState('ShoppingCart');
   // Label creator in picker
   const [newLabelText, setNewLabelText] = useState('');
 
@@ -73,6 +81,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
       setDescription('');
       setSelectedLabel('');
       setFeeStr('');
+      const dateTime=jakartaDateTime();setTransactionDate(dateTime.date);setTransactionTime(dateTime.time);
       setReceiptImage('');
       setErrorMsg('');
       setSuccessToast('');
@@ -93,9 +102,35 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
         setCategoryName('');
       }
     }
-  }, [isOpen, initialType, wallets, categories]);
+  }, [isOpen, initialType, state.activeHouseholdId]);
 
+  useEffect(()=>{
+    if(!isOpen)return;
+    const selected=selectTransactionCategory(categories,state.activeHouseholdId,type,categoryId);
+    setCategoryId(selected?.id||'');setCategoryName(selected?.name||'');
+  },[isOpen,type,categories,state.activeHouseholdId,categoryId]);
+  const changeType=(next:TransactionType)=>{
+    setType(next);setErrorMsg('');setCategorySearch('');setIsCreatingCategory(false);
+    const selected=selectTransactionCategory(categories,state.activeHouseholdId,next,categoryId);
+    setCategoryId(selected?.id||'');setCategoryName(selected?.name||'');
+  };
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+
+  const [attachmentUploading,setAttachmentUploading] = useState(false);
   if (!isOpen) return null;
+
+  const resetForm=()=>{
+    const nextType=initialType||'expense';
+    const dateTime=jakartaDateTime();setTransactionDate(dateTime.date);setTransactionTime(dateTime.time);
+    setType(nextType);setAmountStr('');setFeeStr('');setDescription('');setSelectedLabel('');setReceiptImage('');
+    setSourceWalletId(wallets[0]?.id||'');setDestinationWalletId(wallets[1]?.id||wallets[0]?.id||'');
+    const selected=selectTransactionCategory(categories,state.activeHouseholdId,nextType);
+    setCategoryId(selected?.id||'');setCategoryName(selected?.name||'');
+    setCategorySearch('');setNewCatName('');setNewLabelText('');setIsCreatingCategory(false);
+    setIsCategoryPickerOpen(false);setIsWalletPickerOpen(false);setIsLabelPickerOpen(false);
+    setErrorMsg('');setSuccessToast('Form dikosongkan.');setShowKeypad(true);
+  };
 
   // Filter kategori sesuai tipe & search
   const availableCategories = categories.filter(c => {
@@ -108,7 +143,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
   const selectedSourceWallet = wallets.find(w => w.id === sourceWalletId) || wallets[0];
   const selectedDestWallet = wallets.find(w => w.id === destinationWalletId) || wallets[1] || wallets[0];
-  const selectedCategory = categories.find(c => c.id === categoryId);
+  const selectedCategory = categories.find(c => c.id === categoryId && c.type === type && c.householdId === state.activeHouseholdId);
 
   // Keypad Calculator Handler
   const handleKeypadPress = (val: string) => {
@@ -144,19 +179,17 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   };
 
   // Lampiran Struk Handler (Murni membaca file gambar)
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setReceiptImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file=e.target.files?.[0];if(!file||attachmentUploading)return;
+    setAttachmentUploading(true);setErrorMsg('');
+    try { const reference=await uploadReceiptPhoto(file,state.activeHouseholdId,state.currentUser);setReceiptImage(reference); }
+    catch(error){setErrorMsg(error instanceof Error?error.message:'Unggah lampiran gagal.');}
+    finally{setAttachmentUploading(false);e.target.value='';}
   };
 
   // Simpan Transaksi Core Function
-  const executeSave = (isAddMore: boolean) => {
+  const executeSave = async (isAddMore: boolean) => {
+    if(attachmentUploading){setErrorMsg('Tunggu lampiran selesai diunggah.');return;}
     setErrorMsg('');
     const amount = parseInt(amountStr.replace(/[^0-9]/g, ''), 10) || 0;
     if (amount <= 0) {
@@ -176,16 +209,21 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
         return false;
       }
     } else {
-      if (!categoryId) {
+      if (!selectedCategory) {
         setErrorMsg('Silakan pilih salah satu kategori.');
         return false;
       }
     }
 
+    let effectiveAt:string;
+    try{effectiveAt=jakartaDateTimeToISO(transactionDate,transactionTime);}catch(error){setErrorMsg((error as Error).message);return;}
     const incomeWalletId = destinationWalletId || sourceWalletId;
     const incomeWallet = wallets.find(w => w.id === incomeWalletId) || selectedDestWallet;
 
-    const res = addTransaction({
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    const res = await addTransaction({
       type,
       amount,
       fee: fee > 0 ? fee : undefined,
@@ -199,8 +237,11 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
       description: description.trim() || (type === 'transfer' ? 'Transfer Antar Dompet' : categoryName) || 'Transaksi',
       imageUrl: receiptImage || undefined,
       addedBy,
-      effectiveAt: new Date().toISOString()
+      effectiveAt,
+      dateStr:transactionDate
     });
+    savingRef.current = false;
+    setSaving(false);
 
     if (res.success) {
       if (isAddMore) {
@@ -222,16 +263,18 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   };
 
   // Buat Kategori Baru dari Picker
-  const handleCreateCategory = (e: React.FormEvent) => {
+  const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
 
-    const created = addCategory(
+    const result = await addCategory(
       newCatName.trim(),
       type === 'income' ? 'income' : 'expense',
       newCatIcon,
       newCatColor
     );
+    if(!result.success||!result.category){setErrorMsg(result.error||'Kategori belum tersimpan.');return;}
+    const created=result.category;
     setCategoryId(created.id);
     setCategoryName(created.name);
     setNewCatName('');
@@ -253,7 +296,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[96vh] animate-in slide-in-from-bottom duration-200 overflow-hidden"
+        className="entry-sheet w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[96vh] animate-in slide-in-from-bottom duration-200 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header Tabs: Pengeluaran, Pemasukan, Transfer */}
@@ -262,12 +305,12 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
             <button
               type="button"
               onClick={() => {
-                setType('expense');
+                changeType('expense');
                 setErrorMsg('');
               }}
               className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
                 type === 'expense'
-                  ? 'bg-red-600 text-white shadow-xs'
+                  ? 'bg-teal-100 text-teal-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -278,12 +321,12 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
             <button
               type="button"
               onClick={() => {
-                setType('income');
+                changeType('income');
                 setErrorMsg('');
               }}
               className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
                 type === 'income'
-                  ? 'bg-emerald-600 text-white shadow-xs'
+                  ? 'bg-teal-100 text-teal-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -294,12 +337,12 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
             <button
               type="button"
               onClick={() => {
-                setType('transfer');
+                changeType('transfer');
                 setErrorMsg('');
               }}
               className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
                 type === 'transfer'
-                  ? 'bg-blue-600 text-white shadow-xs'
+                  ? 'bg-teal-100 text-teal-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -341,21 +384,22 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
           >
             <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
               <span>Nominal ({type === 'expense' ? 'Pengeluaran' : type === 'income' ? 'Pemasukan' : 'Transfer'})</span>
-              <span className="flex items-center gap-1 text-teal-700 font-bold">
-                <Calculator className="w-3 h-3" />
-                <span>Kalkulator Aktif</span>
-              </span>
+              <button type="button" disabled={saving||attachmentUploading} onClick={e=>{e.stopPropagation();resetForm();}} aria-label="Reset semua input transaksi" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-teal-700 hover:bg-teal-100 disabled:opacity-40"><RotateCcw className="w-3.5 h-3.5" />Reset</button>
             </div>
             <div className="flex items-baseline justify-center gap-1.5">
               <span className="text-lg font-bold text-slate-400">Rp</span>
               <span id="modal-nominal-amount" className={`text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
-                amountStr ? 'text-slate-900' : 'text-slate-300'
+                amountStr ? 'text-slate-900' : 'text-slate-500'
               }`}>
                 {amountStr ? parseInt(amountStr, 10).toLocaleString('id-ID') : '0'}
               </span>
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs font-semibold text-slate-600">Tanggal<input type="date" required disabled={saving || attachmentUploading} value={transactionDate} onInput={e=>setTransactionDate(e.currentTarget.value)} onChange={e=>setTransactionDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600" /></label>
+            <label className="text-xs font-semibold text-slate-600">Jam (WIB)<input type="time" required disabled={saving} value={transactionTime} onInput={e=>setTransactionTime(e.currentTarget.value)} onChange={e=>setTransactionTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600" /></label>
+          </div>
           {/* KEYPAD KALKULATOR NUMERIK TERPADU */}
           {showKeypad && (
             <div className="pt-1 select-none animate-in fade-in duration-100">
@@ -556,13 +600,13 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
               <Camera className="w-4 h-4 text-slate-500" />
               <div>
                 <span className="text-xs font-bold text-slate-800 block">Lampiran Struk (Opsional)</span>
-                <span className="text-[10px] text-slate-400">Simpan bukti foto tanpa proses AI</span>
+                <span className="text-[10px] text-slate-400">{attachmentUploading ? 'Mengunggah ke Supabase…' : 'Gambar / PDF, maksimal 10 MB'}</span>
               </div>
             </div>
 
             {receiptImage ? (
               <div className="flex items-center gap-2">
-                <img src={receiptImage} alt="Struk" className="w-8 h-8 rounded-lg object-cover border border-slate-300" />
+                <ReceiptAttachment reference={receiptImage} className="w-8 h-8 rounded-lg object-cover border border-slate-300" />
                 <button
                   type="button"
                   onClick={() => setReceiptImage('')}
@@ -580,7 +624,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                   <span>Kamera</span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
                     capture="environment"
                     onChange={handlePhotoUpload}
                     className="hidden"
@@ -593,7 +637,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                   <span>Galeri</span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
                     onChange={handlePhotoUpload}
                     className="hidden"
                   />
@@ -610,29 +654,31 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
           <button
             type="button"
             id="btn-tambah-lagi"
+            disabled={saving || attachmentUploading}
             onClick={() => executeSave(true)}
             className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs sm:text-sm rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-1 border border-slate-200"
             title="Simpan transaksi dan langsung lanjut input lagi"
           >
             <Plus className="w-4 h-4 stroke-[2.5] text-teal-700" />
-            <span>+ Lagi</span>
+            <span>{saving ? 'Menyimpan…' : '+ Lagi'}</span>
           </button>
 
           {/* Tombol 2: Catat (Proporsi 4) */}
           <button
             type="button"
             id="btn-catat-transaksi"
+            disabled={saving}
             onClick={() => executeSave(false)}
             className={`flex-[4] py-3 text-white font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 ${
               type === 'expense'
-                ? 'bg-red-600 hover:bg-red-700 shadow-red-600/25'
+                ? 'bg-teal-700 hover:bg-teal-800'
                 : type === 'income'
-                ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25'
-                : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/25'
+                ? 'bg-teal-700 hover:bg-teal-800'
+                : 'bg-teal-700 hover:bg-teal-800'
             }`}
           >
-            <Check className="w-5 h-5 stroke-[2.5]" />
-            <span>Catat</span>
+            {saving ? <RotateCcw className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5 stroke-[2.5]" />}
+            <span role={saving?'status':undefined}>{saving ? 'Menyimpan ke Supabase…' : attachmentUploading ? 'Mengunggah lampiran…' : 'Catat'}</span>
           </button>
         </div>
 
@@ -733,6 +779,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                     className="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-teal-600"
                     autoFocus
                   />
+                  <CategoryAppearancePicker icon={newCatIcon} color={newCatColor} onIcon={setNewCatIcon} onColor={setNewCatColor} />
                   <div className="flex gap-2">
                     <button
                       type="submit"
