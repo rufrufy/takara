@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { jakartaDateTime } from '../../lib/dateTime';
 import { CategoryIcon, categoryAppearance } from '../CategoryIcon';
-import { Eye, EyeOff, ArrowDownLeft, ArrowUpRight, Wallet, Plus, Search, SlidersHorizontal, Camera, FileUp, ChevronRight } from 'lucide-react';
+import { Eye, EyeOff, ArrowDownLeft, ArrowUpRight, Wallet, Plus, Search, SlidersHorizontal, Camera, ScanLine, FileUp, ChevronRight } from 'lucide-react';
 import type { ActiveTab } from '../BottomNav';
 import type { TransactionType } from '../../types';
 interface HomeViewProps {
@@ -37,7 +37,7 @@ export const HomeView: React.FC<HomeViewProps> = ({onOpenQuickAdd,onOpenAIScan,o
     <section className="balance-panel" aria-label="Saldo household">
       <p className="balance-label">Saldo tersedia</p>
       <div className="balance-main"><div className="balance-value"><strong>{showBalance?formatIDR(totalBalance):'Rp ••••••'}</strong><button className="balance-eye" onClick={()=>setShowBalance(!showBalance)} aria-label={showBalance?'Sembunyikan saldo':'Tampilkan saldo'}>{showBalance?<Eye size={19}/>:<EyeOff size={19}/>}</button></div>
-        <button className="record-button" onClick={()=>onOpenQuickAdd('expense')}><Plus size={19}/><span>Catat</span></button>
+        <button className="record-button" onClick={onOpenAIScan} aria-label="Scan struk"><ScanLine size={20}/><span>Scan</span></button>
       </div>
       <div className="balance-flows">
         <button onClick={()=>onOpenQuickAdd('income')} aria-label="Catat pemasukan"><ArrowDownLeft size={17}/><span>Masuk <b>{showBalance?formatIDR(periodIncome):'••••••'}</b></span></button>

@@ -187,7 +187,7 @@ Date headings use pale cyan capsules and navy text. Filters retain expanded stat
 The dark navy balance contrasts with the light application canvas. Wallet, transaction, report, settings, and administration containers retain rounded glass. Shared summaries use pale cyan. Avoid redundant card containers around the home feed.
 
 ### Inputs / Fields
-Shared fields use rounded light surfaces; home search is a white capsule beside a circular filter control. Authentication uses a white/cyan background, fields of at least 48px, and capsule controls. Preserve loading, error, retry, empty, selected, and focus states.
+Shared fields use rounded light surfaces; home search is borderless beside a circular filter control, with an outline only while focused. Authentication uses a white/cyan background, fields of at least 48px, and capsule controls. Preserve loading, error, retry, empty, selected, and focus states.
 
 ### Navigation
 Five Lucide destinations remain Beranda, Transaksi, Dompet, Laporan, and Setelan. Dock icons are 23px at 1.65 stroke, with captions below. Active destination uses `aria-current="page"` and pale cyan fill. Wallet tabs are Aset, Utang, and Pemasukan, using `role="tab"` and `aria-selected`; selected fills are white, pink tint `#fff0f4`, and yellow tint `#fff3cf` respectively.
@@ -210,3 +210,5 @@ The live product now uses Supabase Auth with ten migrated real profiles. Private
 - **Don't** describe historical screenshots, static checks, or integration checks as a fresh rendered visual pass.
 
 The final admin keypad uses white numbered keys with navy text, pink clear/delete keys, pale yellow context and a mint submit action. Home search uses one visible boundary and a dark focus-within outline.
+
+Transaction choice panels are contained inside the entry sheet with a 28px radius and a content-driven height capped at min(52dvh, 440px). Date/time fields use minmax(0,1fr) columns, switching to one column at 340px. The balance action opens receipt scanning; the floating plus remains the transaction entry action.

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-16T09:04:57.337Z",
+  "generatedAt": "2026-11-16T10:37:22.601Z",
   "title": "Design System: Takara — Tropical Green Paradise",
   "extensions": {
     "shadows": [
@@ -228,6 +228,16 @@
       "secondary": "#C0E8F0",
       "action": "#06D6A0",
       "outgoingIcon": "#FFD166"
+    },
+    "compactEntryPicker": {
+      "borderRadius": "28px",
+      "maxHeight": "min(52dvh,440px)",
+      "height": "content",
+      "background": "#ffffff"
+    },
+    "entryDateTime": {
+      "columns": "repeat(2,minmax(0,1fr))",
+      "singleColumnBreakpoint": "340px"
     }
   },
   "components": [

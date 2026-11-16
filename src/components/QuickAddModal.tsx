@@ -402,7 +402,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="entry-datetime">
             <label className="text-xs font-semibold text-slate-600">Tanggal<input type="date" required disabled={saving || attachmentUploading} value={transactionDate} onInput={e=>setTransactionDate(e.currentTarget.value)} onChange={e=>setTransactionDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600" /></label>
             <label className="text-xs font-semibold text-slate-600">Jam (WIB)<input type="time" required disabled={saving} value={transactionTime} onInput={e=>setTransactionTime(e.currentTarget.value)} onChange={e=>setTransactionTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600" /></label>
           </div>
@@ -692,8 +692,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
         {/* POP-UP MODAL 1: PICKER DOMPET             */}
         {/* ========================================= */}
         {isWalletPickerOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex flex-col justify-end animate-in fade-in">
-            <div className="bg-white rounded-t-3xl p-4 space-y-3 max-h-[70vh] overflow-y-auto animate-in slide-in-from-bottom-5">
+          <div className="entry-picker-backdrop" onClick={e=>{if(e.target===e.currentTarget)setIsWalletPickerOpen(false);}}>
+            <div className="entry-picker p-4 space-y-3" role="dialog" aria-modal="true" aria-label="Pilih dompet">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <div className="flex items-center gap-1.5">
                   <WalletIcon className="w-4 h-4 text-teal-700" />
@@ -704,6 +704,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                 <button
                   type="button"
                   onClick={() => setIsWalletPickerOpen(false)}
+                  aria-label="Tutup pilihan dompet"
                   className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
                 >
                   <X className="w-4 h-4" />
@@ -752,8 +753,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
         {/* POP-UP MODAL 2: PICKER KATEGORI           */}
         {/* ========================================= */}
         {isCategoryPickerOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex flex-col justify-end animate-in fade-in">
-            <div className="bg-white rounded-t-3xl p-4 space-y-3 max-h-[82vh] overflow-y-auto animate-in slide-in-from-bottom-5">
+          <div className="entry-picker-backdrop" onClick={e=>{if(e.target===e.currentTarget){setIsCategoryPickerOpen(false);setIsCreatingCategory(false);}}}>
+            <div className="entry-picker p-4 space-y-3" role="dialog" aria-modal="true" aria-label="Pilih kategori">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <div className="flex items-center gap-1.5">
                   <FolderOpen className="w-4 h-4 text-teal-700" />
@@ -767,6 +768,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                     setIsCategoryPickerOpen(false);
                     setIsCreatingCategory(false);
                   }}
+                  aria-label="Tutup pilihan kategori"
                   className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
                 >
                   <X className="w-4 h-4" />
