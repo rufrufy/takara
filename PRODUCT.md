@@ -1,7 +1,7 @@
-# PRODUCT.md — DompetKita (Aplikasi Keuangan Rumah Tangga)
+# PRODUCT.md — Takara (Aplikasi Keuangan Rumah Tangga)
 
 ## Visi & Tujuan Produk
-Aplikasi pencatatan keuangan pribadi dan rumah tangga multi-household, multi-wallet dengan integritas akuntansi tinggi (double-entry ledger signed-amount), otentikasi cepat via Username + PIN 6-digit (tanpa repot OTP/email), serta dukungan langsung untuk impor data transaksi dari berkas ekspor Excel (`Keuangan-Maruf-transactions-2026-11-10.xlsx`).
+Aplikasi pencatatan keuangan pribadi dan rumah tangga multi-household, multi-wallet dengan integritas akuntansi tinggi (double-entry ledger signed-amount), autentikasi Username + PIN 5 digit melalui Supabase Auth, serta dukungan langsung untuk impor data transaksi dari berkas ekspor Excel (`Keuangan-Maruf-transactions-2026-11-10.xlsx`).
 
 ## Persona Pengguna
 1. **Maruf H (Owner / Pencatat Utama)**: Mengelola arus kas keluarga, transfer antar rekening (Bank Jateng, Bank Jago, Cash), memantau belanja bulanan, jajan, dan ART.
@@ -22,6 +22,8 @@ Aplikasi pencatatan keuangan pribadi dan rumah tangga multi-household, multi-wal
    - `Expense`: Mengurangi saldo wallet sumber, dihitung dalam laporan pengeluaran.
    - `Transfer Fee`: Bila ada biaya admin, tercatat sekali sebagai pengeluaran terpisah.
 5. **Autentikasi**:
-   - Username + PIN (min 6 digit), salt + hash aman, recovery codes saat daftar.
+   - Username + PIN tepat 5 digit menggunakan sesi Supabase Auth. Verifikasi dan hash kredensial dikelola Supabase Auth; PIN tidak disimpan atau ditampilkan oleh klien.
+   - Perubahan PIN memverifikasi PIN saat ini, menunggu konfirmasi server, lalu berlaku untuk login berikutnya.
+   - Data finansial disimpan di Supabase dengan akses per household. Lampiran struk berada di bucket privat `receipts` dan dibuka memakai tautan sementara untuk anggota yang berhak.
 6. **Impor Excel Finansial**:
    - Mampu membaca berkas `.xlsx` (`Keuangan-Maruf-transactions-2026-11-10.xlsx`), memvalidasi ringkasan (Total Pemasukan Rp5.795.000, Pengeluaran Rp4.374.462, Saldo Bersih Rp1.420.538, 74 transaksi, 6 transfer), auto-generate dompet & kategori terkait.

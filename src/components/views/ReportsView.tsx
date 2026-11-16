@@ -22,19 +22,7 @@ import {
   Lightbulb
 } from 'lucide-react';
 
-const CHART_COLORS = [
-  '#0F766E', // Teal
-  '#2563EB', // Blue
-  '#F59E0B', // Amber
-  '#EC4899', // Pink
-  '#8B5CF6', // Purple
-  '#10B981', // Emerald
-  '#06B6D4', // Cyan
-  '#F97316', // Orange
-  '#6366F1', // Indigo
-  '#14B8A6', // Mint
-  '#64748B'  // Slate fallback
-];
+const CHART_COLORS = ['#06D6A0', '#1B9AAA', '#EF476F', '#FFD166', '#073B4C'];
 
 interface AIAnalysisResult {
   financialScore: number;
@@ -182,7 +170,7 @@ export const ReportsView: React.FC = () => {
   }, [transactions]);
 
   return (
-    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="reports-view screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Title */}
       <div className="flex items-center justify-between">
         <div>
@@ -327,8 +315,8 @@ export const ReportsView: React.FC = () => {
                     cy="95"
                     r={donutRadius}
                     fill="none"
-                    stroke="#F1F5F9"
-                    strokeWidth="24"
+                    stroke="#073B4C"
+                    strokeWidth="32"
                   />
 
                   {/* Slices */}

@@ -1,57 +1,60 @@
 ---
-name: Takara — Catatan Harian
-description: Airy household finance in soft green and white liquid glass.
+name: Takara — Tropical Green Paradise
+description: Airy household finance with white/cyan glass, navy balance, and Tropical accents.
 colors:
-  canvas: "#f1f6f1"
+  canvas: "#FFFFFF"
   white: "#ffffff"
-  ink: "#193727"
-  muted: "#61705c"
-  leaf: "#daebcd"
-  action: "#cfe3bc"
-  action-ink: "#36522e"
-  primary: "#426638"
-  glass: "rgba(255,255,255,.72)"
-  line: "#dee7d9"
-  active: "#dce9ce"
-  income: "#557d41"
-  expense: "#a55444"
-  transfer: "#55756b"
+  ink: "#073B4C"
+  muted: "#365664"
+  leaf: "#B8F4E5"
+  action: "#06D6A0"
+  action-ink: "#073B4C"
+  primary: "#073B4C"
+  glass: "rgba(255,255,255,.86)"
+  line: "#d9e9ee"
+  active: "#d9f1f3"
+  income: "#087A60"
+  expense: "#c82e54"
+  transfer: "#14737F"
+  information: "#1B9AAA"
+  highlight-pink: "#EF476F"
+  highlight-yellow: "#FFD166"
 typography:
   display:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: "clamp(36px,7vw,60px)"
     fontWeight: 650
     lineHeight: 1.17
     letterSpacing: "-.04em"
   balance:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: "clamp(24px,6.6vw,34px)"
     fontWeight: 700
-    letterSpacing: "-.045em"
+    letterSpacing: "-.035em"
   wordmark:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: "28px"
     fontWeight: 750
     lineHeight: 1.1
     letterSpacing: "-.04em"
   headline:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: "23px"
     fontWeight: 650
     letterSpacing: "-.035em"
   body:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: ".9375rem"
     lineHeight: 1.5
   transaction:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: "14px"
     fontWeight: 600
   label:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: "12px"
   dock-label:
-    fontFamily: "'Plus Jakarta Sans', sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif"
     fontSize: "10px"
     fontWeight: 500
 rounded:
@@ -84,14 +87,16 @@ components:
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.white}"
-    rounded: "{rounded.capsule}"
-    padding: "13px 18px"
+    rounded: "{rounded.circle}"
+    padding: "0"
+    height: "56px"
+    width: "56px"
   input:
     textColor: "{colors.ink}"
     rounded: "{rounded.field}"
     height: "44px"
   search:
-    backgroundColor: "#ffffffa8"
+    backgroundColor: "{colors.white}"
     textColor: "{colors.ink}"
     rounded: "{rounded.capsule}"
     padding: "0 17px"
@@ -101,13 +106,13 @@ components:
     rounded: "{rounded.screen-card}"
     padding: "16px"
   chip:
-    backgroundColor: "#e7efdf99"
-    textColor: "#52664a"
+    backgroundColor: "#e5f5f8"
+    textColor: "{colors.ink}"
     rounded: "{rounded.capsule}"
     padding: "8px 14px"
   dock-active:
     backgroundColor: "{colors.active}"
-    textColor: "#3c5f2f"
+    textColor: "{colors.ink}"
     rounded: "{rounded.capsule}"
     height: "58px"
 ---
@@ -118,86 +123,90 @@ components:
 
 **Creative North Star: "Catatan Harian"**
 
-An airy daily household ledger with soft green and white liquid glass. Rounded translucent surfaces, readable financial amounts, and quiet outlined icons make everyday recording approachable. The balance supports the working transaction area without turning the screen into a stack of dashboard cards.
+An airy daily household ledger with predominantly white and pale cyan glass, a dark navy balance panel, and distinct Tropical accents. Fully rounded containers, readable financial amounts, and Lucide outline icons support everyday recording without nested dashboard cards.
 
-This is the approved replacement visual world from image 2, extracted from the implemented application. The reference composition adapts to real household values and logical phone dimensions; it is not a claim of pixel reproduction. The automated hero comparison remains open/failed at 59.2. Documentation does not close that gate.
+The earlier image-2 sage composition is historical direction. Current source reflects the user's subsequent palette, native font, wallet navigation, recording, and receipt-scan refinements. Current browser captures verify the latest Home, admin login, desktop and 320px wallet layout; the earlier historical image-comparison gate at 59.2 remains open and is not claimed as pixel reproduction.
 
 **Key Characteristics:**
-- Soft green and white translucent material.
-- Fully rounded containers and capsule actions.
-- Airy lists with readable amounts and metadata.
-- One self-hosted sans family and Lucide outline icons.
+- White/cyan translucent material with dark navy balance.
+- Mint, teal, pink, and yellow accents with distinct roles.
+- Rounded containers, capsule controls, and circular floating actions.
+- Native system typography and tabular financial numerals.
 
 ## Colors
 
-The palette combines warm green-white neutrals, muted leaf actions, and dark forest text. Frontmatter values are normative; implementation authority is `src/index.css`.
+Frontmatter records current tokens; `src/index.css`, including its final overrides, is implementation authority. The pinned Tropical palette is mint `#06D6A0`, teal `#1B9AAA`, pink `#EF476F`, yellow `#FFD166`, and navy `#073B4C`.
 
 ### Primary
-- **Leaf and Action:** calm balance and recording surfaces. Stronger Primary supports committed actions and keyboard focus.
-- **Active:** quiet filled capsules mark the current navigation destination.
+- **Action:** mint recording and welcome actions with navy text.
+- **Primary / Ink:** navy text, committed buttons, and the balance panel. Balance figures are white; secondary text is `#C0E8F0`.
+- **Active:** pale cyan selected dock fill.
 
 ### Secondary
-- **Income, Expense, Transfer:** muted leaf, clay, and gray-green semantic accents in transaction/report views. Keep labels, signs, and icons so color is never the only cue. The home feed deliberately uses forest amounts with a lighter green income distinction.
+- **Income:** dark mint text; income icons on the balance panel use bright mint.
+- **Expense:** darker pink for semantic text, bright pink for highlights; outgoing balance icons use yellow.
+- **Transfer / Information:** dark teal text and brighter teal accents. Yellow supports warning and admin emphasis.
 
 ### Neutral
-- **Canvas:** warm green-white page base.
-- **Glass and White:** translucent containers and refractive top edges.
-- **Ink, Muted, Line:** primary content, supporting content, and low-contrast separation.
+- **Canvas / White:** white base, transitioning through `#F4FBFD` and `#EDF9FB` on the application canvas.
+- **Glass:** translucent white surfaces; **Muted / Line** support secondary text and separation.
 
-**The Quiet Material Rule.** Use green-white surfaces for structure; reserve stronger color for actions, selection, and financial meaning.
+Preserve exact saved household category backgrounds and icons. Select contrasting navy or white icons by luminance. Keep signs, labels, and icons alongside financial color cues. Avoid making every surface green.
 
 ## Typography
 
-The self-hosted variable Plus Jakarta Sans font (`public/fonts/plus-jakarta-sans.ttf`, weights 200–800) serves every role, with sans-serif fallback. Compressed tracking on wordmark, headings, and balance contrasts with ordinary readable labels. Use tabular numerals for amounts.
+Every role uses `-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif`. Apple supplies San Francisco natively; other platforms use their system fallback. No proprietary font file is bundled or downloaded.
 
-The hierarchy is encoded above. Welcome display belongs to the public welcome surface. Home heading becomes 27px and balance 40px from 640px; other screen headings use 25px/650. Home transaction titles and amounts are 14px/600 after the readability correction; metadata, wallet labels, and inline balance flows are 12px. Dock captions remain 10px. Below 360px, titles reduce to 13px and amounts to 12px. These are observed exceptions, not permission to shrink ordinary text.
+Frontmatter records the hierarchy. The home heading becomes 27px and balance 40px at 640px; other screen headings use 25px/650. Home titles and amounts are 14px/600, with 12px metadata; below 360px titles become 13px and amounts 12px. Wallet tabs use 13px labels and a separate 11px count line. Dock captions are 10px. Use tabular numerals for financial amounts.
 
 ## Layout
 
-Mobile is primary, with a 390×844 reference viewport. Header and home cap at 896px. Home uses 12px side gutters, increasing to 24px at 640px; related screens use 16px/24px gutters. A compact sticky header precedes a shallow balance panel, horizontal wallet strip, and date-grouped working feed. Search and a disclosure filter precede the list. Rows are at least 60px on mobile and 76px from 640px. Home previews the latest 12 matching transactions; the transaction destination exposes the full working history.
+Mobile is primary, with a 390×844 historical reference viewport. Header and home cap at 896px. Home uses 12px side gutters, increasing to 24px at 640px; related screens use 16px/24px gutters. A sticky header precedes the balance, wallet strip, and date-grouped feed. Search and disclosure filters precede the list. Home previews the latest 12 matching transactions; Transaksi exposes full history. Rows are at least 60px on mobile and 76px from 640px.
 
-The centered floating five-destination dock uses viewport width minus 16px, caps at 560px, and sits 12px plus safe-area inset above the bottom. Content reserves 112px plus that inset. Desktop widens the same application; the former desktop sidebar is superseded. Below 360px header, balance, and record action compress selectively.
+The five-destination floating dock uses viewport width minus 16px, caps at 560px, and sits 12px plus safe-area inset above the bottom. Content reserves 112px plus that inset. Desktop widens the same application. Wallet section navigation is three equal `minmax(0,1fr)` columns with `min-width:0`, vertical icon/label/count, nonshrinking icons, and 76px minimum height.
 
 ## Elevation & Depth
 
-Depth combines pale gradients, translucent white, blur, inset white edges, and restrained diffuse green shadows. Shared glass uses `0 8px 28px -18px #45623d40,inset 0 1px 0 #fff`. Header blur is 20px; balance blur 16px; dock and entry sheet blur 24px; modal backdrops blur 5px. Dock saturation is 1.1. Small utility shadows are removed; larger shared surfaces use `0 16px 50px -24px #34532e45`. Exact gradients and component snippets live in the sidecar.
+White/cyan glass combines blur, refractive white edges, and restrained shadows. Shared glass uses `0 8px 28px -18px #365c6940,inset 0 1px 0 #fff`. Balance uses `inset 0 1px 0 #ffffff26,0 10px 30px -22px #073b4c70`. Header blur is 20px; balance 16px; dock and entry sheet 24px; modal backdrops 5px. Dock saturation is 1.1. Larger shared overlays use `0 16px 50px -24px #2c4b5545`.
 
-Navigation color/background transitions take .2s ease. Reduced-motion preference disables animation and transitions. Global keyboard focus uses a 2px Primary outline with 4px offset.
+Navigation transitions take .2s ease. Reduced-motion preference disables animation and transitions. Global keyboard focus uses a 2px navy outline with 4px offset. Exact materials and snippets live in the sidecar.
 
 ## Shapes
 
-The normative radius vocabulary appears above. Capsules define buttons, search, date labels, household switch, and dock. Circles define profile/filter controls; panels have broad curves. Shared screen cards override generic utility radii to 24px/28px. Entry sheets have 32px corners, 8px exterior margin, and maximum height of viewport minus 16px. Top-only sheets retain their lower attachment where applicable. Inputs have 18px corners and at least 44px height. Some compact existing buttons remain 38–42px; core record/search controls meet or exceed 44px.
+Capsules define buttons, search, date labels, household switch, and dock. Circles define profile, scan, and floating recording controls. Shared cards use 24px/28px corners; balance uses 30px; entry sheets 32px with 8px exterior margin and maximum viewport height minus 16px. Inputs have 18px corners and at least 44px height. The floating plus action is exactly 56px square with 50% radius.
 
 ## Components
 
 ### Buttons
-Home Catat is a pale leaf capsule with forest text. Non-home recording uses a stronger green floating capsule above the dock. Both open the existing transaction sheet; inline flow actions open the corresponding income/expense form. Shared utility buttons inherit capsule shapes. Keep icon-and-text labels and visible focus.
+Home Catat remains a mint capsule with navy text. A separate navy icon-only circular plus button, labelled `Tambah transaksi`, appears on Beranda, Transaksi, and Dompet. Both open the existing transaction sheet. The camera button beside Catatan Harian is labelled `Scan struk otomatis` and opens receipt scanning. Preserve visible keyboard focus.
 
 ### Chips
-Date headings are broad translucent sage capsules. Filters use selected fills and labels; disclosure retains expanded state and active tint. Household selection truncates within a capsule with house icon and chevron.
+Date headings use pale cyan capsules and navy text. Filters retain expanded state and selected tint. Household selection truncates within a capsule with house icon and chevron.
 
 ### Cards / Containers
-Balance is a shallow gradient panel with refractive top edge. Wallet, transaction, report, settings, and administration cards inherit glass and remapped green neutral tokens. Wallet/report summaries use the pale summary gradient. Avoid redundant card containers around the home feed.
+The dark navy balance contrasts with the light application canvas. Wallet, transaction, report, settings, and administration containers retain rounded glass. Shared summaries use pale cyan. Avoid redundant card containers around the home feed.
 
 ### Inputs / Fields
-Shared fields use rounded light surfaces; search is a capsule beside a circular filter action. Home search removes its local outline; its focus-visible behavior depends on the global rule and should be verified when changing styles. Authentication uses a light green-white screen, fields of at least 48px, and capsule controls through explicit overrides.
+Shared fields use rounded light surfaces; home search is a white capsule beside a circular filter control. Authentication uses a white/cyan background, fields of at least 48px, and capsule controls. Preserve loading, error, retry, empty, selected, and focus states.
 
 ### Navigation
-Five Lucide outline destinations are Beranda, Transaksi, Dompet, Laporan, and Setelan. Dock icons are 23px at 1.65 stroke, with captions below. Active destination uses `aria-current="page"`, sage fill, forest text, and inset light edge. Hover adds quiet fill. Wordmark and household selector stay in the sticky top header; account actions open from the circular profile control.
+Five Lucide destinations remain Beranda, Transaksi, Dompet, Laporan, and Setelan. Dock icons are 23px at 1.65 stroke, with captions below. Active destination uses `aria-current="page"` and pale cyan fill. Wallet tabs are Aset, Utang, and Pemasukan, using `role="tab"` and `aria-selected`; selected fills are white, pink tint `#fff0f4`, and yellow tint `#fff3cf` respectively.
 
 ### Daily ledger and sheets
-Date-grouped rows combine rounded category-icon tiles, truncated descriptions, time/author metadata, and right-aligned tabular amounts. Rows open existing transaction detail. Preserve live Supabase-backed balances, wallets, transactions, loading/error/retry states, empty states, search, and filters. Do not insert a Contoh badge or hardcode comp numbers.
+Date-grouped rows combine saved category-icon tiles, truncated descriptions, time/author metadata, and right-aligned tabular amounts. Rows open transaction detail. Data remains live Supabase household data; never hardcode reference balances.
 
-The visual refresh does not complete authentication migration or activate storage uploads; both remain dependent on the missing server-only Supabase Admin API key. PRODUCT.md contains preexisting DompetKita/PIN-6 drift and is outside this documentation change.
+The live product now uses Supabase Auth with ten migrated real profiles. Private receipt storage allows authorized household members and denies other households and anonymous callers; VIEWER members read only. Live application-module integration checks cover persistence and attachments. The browser form also passed an attachment upload and transaction save; operational detail lives in `docs/supabase-auth-status.md`.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** use soft green-white glass, rounded surfaces, and outlined icons consistently across screens and sheets.
-- **Do** keep real amounts readable with tabular numerals and reserve clearance for the floating dock.
-- **Do** preserve live values and loading, error, empty, selected, and keyboard-focus states.
+- **Do** preserve the pinned Tropical palette, white/cyan base, dark balance, full rounding, and glass.
+- **Do** keep amounts legible and reserve safe-area clearance for dock and floating action.
+- **Do** preserve real data, category colors, accessible labels, and application states.
 
 ### Don't:
-- **Don't** add nested dashboard cards, promotional badges, or decorative AI motifs to the daily ledger.
-- **Don't** reintroduce the former dark teal visual identity or desktop sidebar as the default system.
-- **Don't** describe reference comparison, authentication migration, or storage setup as complete without independent evidence.
+- **Don't** turn the interface into monotone green or restore the historical sage palette as authority.
+- **Don't** bundle unlicensed SF Pro font files or claim identical platform font rendering.
+- **Don't** describe historical screenshots, static checks, or integration checks as a fresh rendered visual pass.
+
+The final admin keypad uses white numbered keys with navy text, pink clear/delete keys, pale yellow context and a mint submit action. Home search uses one visible boundary and a dark focus-within outline.

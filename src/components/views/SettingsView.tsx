@@ -41,6 +41,7 @@ interface SettingsViewProps {
   onOpenInstall?: () => void;
 }
 export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpenAdmin, onOpenInstall }) => {
+  const [writeBusy,setWriteBusy]=useState(false);
   const {
     state,
     activeHousehold,
@@ -64,15 +65,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [isChangingPin, setIsChangingPin] = useState(false);
   const [newPin, setNewPin] = useState('');
+  const [currentPin,setCurrentPin]=useState('');
+  const [pinSaving,setPinSaving]=useState(false);
+  const [pinError,setPinError]=useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetError,setResetError]=useState('');
 
   // Invite Member Modal / Inline Form
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('MEMBER');
-  const [invitePin, setInvitePin] = useState('12345');
+  const [invitePin, setInvitePin] = useState('');
   const [inviteSuccessMsg, setInviteSuccessMsg] = useState('');
 
   // Reset Transaksi Bulan Ini State
@@ -87,7 +92,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
 
   const monthTxCount = React.useMemo(() => {
     return state.transactions.filter(t => {
-      if (t.householdId !== activeHousehold.id) return false;
+      if (t.householdId !== activeHousehold.id || t.status==='VOIDED') return false;
       const tDate = new Date(t.effectiveAt || t.createdAt);
       return !isNaN(tDate.getTime()) && tDate.getFullYear() === currentYear && tDate.getMonth() === currentMonth;
     }).length;
@@ -95,14 +100,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
 
   const handleExecuteResetMonth = async () => {
     setIsResetting(true);
-    setResetSuccessMsg('');
+    setResetSuccessMsg('');setResetError('');
     const res = await clearCurrentMonthTransactions();
     setIsResetting(false);
     setIsConfirmingReset(false);
     if (res.success) {
-      setResetSuccessMsg(`${res.count} transaksi bulan ${currentMonthLabel} berhasil dihapus.`);
+      setResetSuccessMsg(`${res.count} transaksi bulan ${currentMonthLabel} berhasil dibatalkan dan disimpan di Supabase.`);
       setTimeout(() => setResetSuccessMsg(''), 5000);
-    }
+    }else setResetError(res.error||'Pembatalan transaksi belum berhasil.');
   };
   const inviteCode = activeHousehold?.inviteCode || 'DK-KLRG-8921';
   const inviteLink = `https://dompetkita.app/join?code=${inviteCode}`;
@@ -115,43 +120,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
 
   const handleShareWhatsApp = () => {
     const text = encodeURIComponent(
-      `Halo! Yuk gabung ke pencatatan keuangan keluarga kita di DompetKita (${activeHousehold.name}).\n\nKode Undangan: ${inviteCode}\nTautan: ${inviteLink}\nPIN default: 12345`
+      `Halo! Yuk gabung ke pencatatan keuangan keluarga kita di Takara (${activeHousehold.name}).\n\nKode Undangan: ${inviteCode}\nTautan: ${inviteLink}`
     );
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
-  const handleSavePin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPin.length === 5) {
-      updatePIN(newPin);
-      setPinSuccess(true);
-      setTimeout(() => {
-        setIsChangingPin(false);
-        setPinSuccess(false);
-        setNewPin('');
-      }, 1500);
-    }
-  };
-
-  const handleAddMemberSubmit = (e: React.FormEvent) => {
+  const handleSavePin=async(e:React.FormEvent)=>{e.preventDefault();if(pinSaving)return;setPinError('');setPinSaving(true);try{const result=await updatePIN(newPin,currentPin);if(!result.success){setPinError(result.error||'PIN belum berhasil disimpan.');return;}setPinSuccess(true);setCurrentPin('');setNewPin('');setIsChangingPin(false);}catch(error){setPinError(error instanceof Error?error.message:'Gagal menyimpan PIN.');}finally{setPinSaving(false);}};
+  const handleAddMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     if (!inviteName.trim()) return;
 
-    const res = inviteMember(
+    const res = await inviteMember(
       inviteName.trim(),
       inviteUsername.trim() || inviteName.trim().toLowerCase().replace(/\s+/g, ''),
       inviteRole,
-      invitePin.trim() || '12345'
+      invitePin.trim()
     );
 
     if (res.success) {
       setInviteSuccessMsg(`✓ Anggota "${inviteName}" berhasil diundang!`);
       setInviteName('');
       setInviteUsername('');
-      setInvitePin('12345');
+      setInvitePin('');
       setIsAddingMember(false);
       setTimeout(() => setInviteSuccessMsg(''), 4000);
     }
+    }catch(error){setInviteSuccessMsg(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
   const handleExportJSON = () => {
@@ -168,6 +163,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
 
   return (
     <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+      {writeBusy&&<p role="status" className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] rounded-full bg-teal-700 px-5 py-3 text-sm text-white shadow-lg">Menyimpan ke Supabase…</p>}
       {/* Title */}
       <div>
         <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Pengaturan</h1>
@@ -251,6 +247,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         </div>
       </div>
 
+      {resetError&&<p role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-800">{resetError}</p>}
       {/* SEKSI: RESET TRANSAKSI BULAN INI */}
       <div className="bg-white rounded-3xl border border-red-200/80 p-5 shadow-2xs space-y-3">
         <div className="flex items-center justify-between">
@@ -484,7 +481,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
                 </span>
                 {members.length > 1 && m.displayName !== state.currentUser.displayName && (
                   <button
-                    onClick={() => removeMember(m.id)}
+                    onClick={async()=>{const result=await removeMember(m.id);if(!result.success)setInviteSuccessMsg(result.error||'Gagal menghapus anggota.');}}
                     className="p-1 text-slate-300 hover:text-red-600 rounded"
                     title="Keluarkan dari Household"
                   >
@@ -519,7 +516,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
           </div>
         ) : (
           <form onSubmit={handleSavePin} className="space-y-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-            <div className="text-xs font-semibold text-slate-700">Masukkan 5-Digit Kode Baru:</div>
+            <label className="block text-xs font-semibold text-slate-700">PIN saat ini<input type="password" inputMode="numeric" maxLength={5} autoComplete="current-password" value={currentPin} disabled={pinSaving} onChange={e=>setCurrentPin(e.target.value.replace(/[^0-9]/g,''))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3" required/></label><div className="text-xs font-semibold text-slate-700">Masukkan 5-Digit Kode Baru:</div>{pinError&&<p role="alert" className="text-sm text-red-700">{pinError}</p>}
             <input
               type="password"
               maxLength={5}
@@ -545,10 +542,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
               </button>
               <button
                 type="submit"
-                disabled={newPin.length !== 5}
+                disabled={newPin.length !== 5 || currentPin.length!==5 || pinSaving}
                 className="px-4 py-1.5 text-xs font-bold bg-teal-700 text-white rounded-lg disabled:opacity-50"
               >
-                Simpan Kode
+                {pinSaving?'Menyimpan…':'Simpan Kode'}
               </button>
             </div>
           </form>

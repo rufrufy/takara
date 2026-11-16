@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { jakartaDateTime } from '../../lib/dateTime';
-import { CategoryIcon } from '../CategoryIcon';
+import { CategoryIcon, categoryAppearance } from '../CategoryIcon';
 import { Eye, EyeOff, ArrowDownLeft, ArrowUpRight, Wallet, Plus, Search, SlidersHorizontal, Camera, FileUp, ChevronRight } from 'lucide-react';
 import type { ActiveTab } from '../BottomNav';
 import type { TransactionType } from '../../types';
@@ -49,14 +49,14 @@ export const HomeView: React.FC<HomeViewProps> = ({onOpenQuickAdd,onOpenAIScan,o
       {!wallets.length&&<button onClick={()=>onChangeTab('profil-keuangan')}><Plus size={16}/>Tambah dompet</button>}
     </div>
     <section className="daily-activity" aria-labelledby="daily-title">
-      <div className="activity-heading"><h1 id="daily-title">Catatan Harian</h1><button onClick={()=>onChangeTab('transaksi')} aria-label="Lihat semua transaksi"><ChevronRight size={20}/></button></div>
+      <div className="activity-heading"><h1 id="daily-title">Catatan Harian</h1><div className="activity-heading-actions"><button type="button" className="home-scan-button" onClick={onOpenAIScan} aria-label="Scan struk otomatis" title="Scan struk otomatis"><Camera size={20}/></button><button onClick={()=>onChangeTab('transaksi')} aria-label="Lihat semua transaksi"><ChevronRight size={20}/></button></div></div>
       <div className="activity-search"><label><Search size={20}/><input type="search" aria-label="Cari catatan harian" placeholder="Cari transaksi…" value={query} onChange={e=>setQuery(e.target.value)}/></label><button aria-label="Filter catatan harian" aria-expanded={filtersOpen} aria-controls="daily-filters" className={type!=='all'||walletId!=='all'?'has-filter':''} onClick={()=>setFiltersOpen(!filtersOpen)}><SlidersHorizontal size={21}/></button></div>
       {filtersOpen&&<div className="daily-filters" id="daily-filters"><label>Jenis transaksi<select value={type} onChange={e=>setType(e.target.value)}><option value="all">Semua jenis</option><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option><option value="transfer">Transfer</option></select></label><label>Dompet<select value={walletId} onChange={e=>setWalletId(e.target.value)}><option value="all">Semua dompet</option>{wallets.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label></div>}
       <div className="daily-list">
         {groups.map(([date,items])=><section key={date} className="day-group" aria-label={displayDate(date)}><h2>{displayDate(date)}</h2>{items.map(t=>{
-          const category=categories.find(c=>c.id===t.categoryId);
+          const category=categories.find(c=>c.householdId===t.householdId&&(c.id===t.categoryId||(c.type===t.type&&c.name.toLocaleLowerCase('id')===t.categoryName?.toLocaleLowerCase('id'))));
           return <button className="daily-row" key={t.id} onClick={()=>onOpenTransaction(t.id)} aria-label={`Lihat transaksi ${t.description||t.categoryName}, ${formatIDR(t.amount)}`}>
-            <span className="daily-icon"><CategoryIcon name={t.categoryName} type={t.type} icon={category?.icon} className="w-5 h-5"/></span>
+            <span className="daily-icon" style={categoryAppearance(category?.color)}><CategoryIcon name={t.categoryName} type={t.type} icon={category?.icon} className="w-5 h-5"/></span>
             <span className="daily-description"><strong>{t.description||t.categoryName||'Transfer antar dompet'}</strong><small>{t.time||jakartaDateTime(t.effectiveAt).time}{t.addedBy?` · ${t.addedBy.split(' ')[0]}`:''}</small></span>
             <span className={`daily-amount ${t.type==='income'?'is-income':''}`}>{t.type==='income'?'+':t.type==='expense'?'−':''}{formatIDR(t.amount)}</span>
           </button>;

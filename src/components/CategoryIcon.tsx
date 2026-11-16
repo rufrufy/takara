@@ -9,90 +9,74 @@ export interface IconOption {
 }
 
 /**
- * 20 Aesthetic Soft Pastel Background Colors
+ * Tropical palette followed by readable tints; existing saved colors stay unchanged.
  */
 export const AVAILABLE_COLORS = [
-  '#CCFBF1', // Pastel Teal / Mint
-  '#D1FAE5', // Pastel Emerald / Sage
-  '#E0F2FE', // Pastel Sky
-  '#BAE6FD', // Pastel Baby Blue
-  '#DBEAFE', // Pastel Soft Blue
-  '#E0E7FF', // Pastel Periwinkle
-  '#EDE9FE', // Pastel Lavender
-  '#F3E8FF', // Pastel Lilac
-  '#FAE8FF', // Pastel Orchid
-  '#FCE7F3', // Pastel Pink / Cotton Candy
-  '#FFE4E6', // Pastel Rose
-  '#FEE2E2', // Pastel Coral
-  '#FFEDD5', // Pastel Peach
-  '#FED7AA', // Pastel Apricot
-  '#FEF3C7', // Pastel Amber / Vanilla
-  '#FEF9C3', // Pastel Butter / Lemon
-  '#ECFCCB', // Pastel Lime / Matcha
-  '#F1F5F9', // Pastel Cloud
-  '#E2E8F0', // Pastel Mist
-  '#E0E7EB', // Pastel Pearl
+  '#06D6A0', '#1B9AAA', '#EF476F', '#FFD166', '#073B4C',
+  '#D7F7EE', '#D9F1F3', '#FFE0E8', '#FFF1CC', '#E6F0F4',
+  '#A4EFDB', '#A6DFE4', '#FFC0D0', '#FFE6A3', '#B8CCD6',
+  '#FFFFFF', '#F4FBFD', '#FFF2F5', '#FFFAF0', '#EDF9FB',
 ];
 
 export const AVAILABLE_ICONS: IconOption[] = [
   // Makanan & Minuman
-  { name: 'Utensils', label: 'Makanan / Resto', group: 'Makanan', defaultBg: '#FFEDD5' },
-  { name: 'Coffee', label: 'Kopi & Cafe', group: 'Makanan', defaultBg: '#FEF3C7' },
-  { name: 'Cake', label: 'Kue & Roti', group: 'Makanan', defaultBg: '#FCE7F3' },
-  { name: 'Pizza', label: 'Fastfood / Pizza', group: 'Makanan', defaultBg: '#FFEDD5' },
-  { name: 'Beer', label: 'Minuman & Jus', group: 'Makanan', defaultBg: '#E0F2FE' },
-  { name: 'Apple', label: 'Buah & Sayuran', group: 'Makanan', defaultBg: '#D1FAE5' },
+  { name: 'Utensils', label: 'Makanan / Resto', group: 'Makanan', defaultBg: '#FFD166' },
+  { name: 'Coffee', label: 'Kopi & Cafe', group: 'Makanan', defaultBg: '#FFD166' },
+  { name: 'Cake', label: 'Kue & Roti', group: 'Makanan', defaultBg: '#EF476F' },
+  { name: 'Pizza', label: 'Fastfood / Pizza', group: 'Makanan', defaultBg: '#FFD166' },
+  { name: 'Beer', label: 'Minuman & Jus', group: 'Makanan', defaultBg: '#1B9AAA' },
+  { name: 'Apple', label: 'Buah & Sayuran', group: 'Makanan', defaultBg: '#06D6A0' },
 
   // Belanja & Fashion
-  { name: 'ShoppingCart', label: 'Supermarket / Pasar', group: 'Belanja', defaultBg: '#FCE7F3' },
-  { name: 'ShoppingBag', label: 'Mall & Butik', group: 'Belanja', defaultBg: '#F3E8FF' },
-  { name: 'Shirt', label: 'Pakaian & Fashion', group: 'Belanja', defaultBg: '#DBEAFE' },
-  { name: 'Sparkles', label: 'Skincare & Kosmetik', group: 'Belanja', defaultBg: '#FEF9C3' },
-  { name: 'Scissors', label: 'Salon & Barbershop', group: 'Belanja', defaultBg: '#FFE4E6' },
-  { name: 'Package', label: 'Paket & Kurir', group: 'Belanja', defaultBg: '#FED7AA' },
+  { name: 'ShoppingCart', label: 'Supermarket / Pasar', group: 'Belanja', defaultBg: '#EF476F' },
+  { name: 'ShoppingBag', label: 'Mall & Butik', group: 'Belanja', defaultBg: '#D9F1F3' },
+  { name: 'Shirt', label: 'Pakaian & Fashion', group: 'Belanja', defaultBg: '#1B9AAA' },
+  { name: 'Sparkles', label: 'Skincare & Kosmetik', group: 'Belanja', defaultBg: '#FFD166' },
+  { name: 'Scissors', label: 'Salon & Barbershop', group: 'Belanja', defaultBg: '#EF476F' },
+  { name: 'Package', label: 'Paket & Kurir', group: 'Belanja', defaultBg: '#FFD166' },
 
   // Rumah Tangga & Utilitas
-  { name: 'Home', label: 'Rumah & Sewa', group: 'Rumah', defaultBg: '#D1FAE5' },
-  { name: 'Zap', label: 'Listrik & PLN', group: 'Rumah', defaultBg: '#FEF9C3' },
-  { name: 'Droplet', label: 'Air & PDAM', group: 'Rumah', defaultBg: '#E0F2FE' },
-  { name: 'Wifi', label: 'Internet & Wifi', group: 'Rumah', defaultBg: '#EDE9FE' },
-  { name: 'Trash', label: 'Kebersihan & Iuran', group: 'Rumah', defaultBg: '#E2E8F0' },
-  { name: 'Wrench', label: 'Perbaikan / Tukang', group: 'Rumah', defaultBg: '#E2E8F0' },
+  { name: 'Home', label: 'Rumah & Sewa', group: 'Rumah', defaultBg: '#06D6A0' },
+  { name: 'Zap', label: 'Listrik & PLN', group: 'Rumah', defaultBg: '#FFD166' },
+  { name: 'Droplet', label: 'Air & PDAM', group: 'Rumah', defaultBg: '#1B9AAA' },
+  { name: 'Wifi', label: 'Internet & Wifi', group: 'Rumah', defaultBg: '#D9F1F3' },
+  { name: 'Trash', label: 'Kebersihan & Iuran', group: 'Rumah', defaultBg: '#E6F0F4' },
+  { name: 'Wrench', label: 'Perbaikan / Tukang', group: 'Rumah', defaultBg: '#E6F0F4' },
 
   // Transportasi
-  { name: 'Fuel', label: 'Bensin & BBM', group: 'Transport', defaultBg: '#FEE2E2' },
-  { name: 'Car', label: 'Mobil & Taksi', group: 'Transport', defaultBg: '#E0F2FE' },
-  { name: 'Bike', label: 'Motor & Ojol', group: 'Transport', defaultBg: '#D1FAE5' },
-  { name: 'Bus', label: 'Bus & Angkutan', group: 'Transport', defaultBg: '#FED7AA' },
-  { name: 'Train', label: 'Kereta Api / KRL', group: 'Transport', defaultBg: '#EDE9FE' },
-  { name: 'Plane', label: 'Pesawat & Liburan', group: 'Transport', defaultBg: '#E0F2FE' },
-  { name: 'Parking', label: 'Parkir & Tol', group: 'Transport', defaultBg: '#E0E7EB' },
+  { name: 'Fuel', label: 'Bensin & BBM', group: 'Transport', defaultBg: '#EF476F' },
+  { name: 'Car', label: 'Mobil & Taksi', group: 'Transport', defaultBg: '#1B9AAA' },
+  { name: 'Bike', label: 'Motor & Ojol', group: 'Transport', defaultBg: '#06D6A0' },
+  { name: 'Bus', label: 'Bus & Angkutan', group: 'Transport', defaultBg: '#FFD166' },
+  { name: 'Train', label: 'Kereta Api / KRL', group: 'Transport', defaultBg: '#D9F1F3' },
+  { name: 'Plane', label: 'Pesawat & Liburan', group: 'Transport', defaultBg: '#1B9AAA' },
+  { name: 'Parking', label: 'Parkir & Tol', group: 'Transport', defaultBg: '#E6F0F4' },
 
   // Kesehatan & Keluarga
-  { name: 'Stethoscope', label: 'Dokter & RS', group: 'Kesehatan', defaultBg: '#FFE4E6' },
-  { name: 'Pill', label: 'Obat & Apotek', group: 'Kesehatan', defaultBg: '#FFE4E6' },
-  { name: 'Baby', label: 'Bayi & Anak', group: 'Kesehatan', defaultBg: '#FCE7F3' },
-  { name: 'Dog', label: 'Hewan Peliharaan', group: 'Kesehatan', defaultBg: '#FED7AA' },
-  { name: 'Heart', label: 'Donasi & Sedekah', group: 'Kesehatan', defaultBg: '#FCE7F3' },
+  { name: 'Stethoscope', label: 'Dokter & RS', group: 'Kesehatan', defaultBg: '#EF476F' },
+  { name: 'Pill', label: 'Obat & Apotek', group: 'Kesehatan', defaultBg: '#EF476F' },
+  { name: 'Baby', label: 'Bayi & Anak', group: 'Kesehatan', defaultBg: '#EF476F' },
+  { name: 'Dog', label: 'Hewan Peliharaan', group: 'Kesehatan', defaultBg: '#FFD166' },
+  { name: 'Heart', label: 'Donasi & Sedekah', group: 'Kesehatan', defaultBg: '#EF476F' },
 
   // Pendidikan & Hiburan
-  { name: 'GraduationCap', label: 'Pendidikan & Sekolah', group: 'Hiburan', defaultBg: '#E0E7FF' },
-  { name: 'BookOpen', label: 'Buku & Kursus', group: 'Hiburan', defaultBg: '#E0E7FF' },
-  { name: 'Tv', label: 'Bioskop & Streaming', group: 'Hiburan', defaultBg: '#E0F2FE' },
-  { name: 'Gamepad2', label: 'Game & Hobi', group: 'Hiburan', defaultBg: '#F3E8FF' },
-  { name: 'Music', label: 'Musik & Konser', group: 'Hiburan', defaultBg: '#FAE8FF' },
-  { name: 'Dumbbell', label: 'Gym & Olahraga', group: 'Hiburan', defaultBg: '#CCFBF1' },
+  { name: 'GraduationCap', label: 'Pendidikan & Sekolah', group: 'Hiburan', defaultBg: '#D9F1F3' },
+  { name: 'BookOpen', label: 'Buku & Kursus', group: 'Hiburan', defaultBg: '#D9F1F3' },
+  { name: 'Tv', label: 'Bioskop & Streaming', group: 'Hiburan', defaultBg: '#1B9AAA' },
+  { name: 'Gamepad2', label: 'Game & Hobi', group: 'Hiburan', defaultBg: '#D9F1F3' },
+  { name: 'Music', label: 'Musik & Konser', group: 'Hiburan', defaultBg: '#FFE0E8' },
+  { name: 'Dumbbell', label: 'Gym & Olahraga', group: 'Hiburan', defaultBg: '#06D6A0' },
 
   // Keuangan & Pemasukan
-  { name: 'Briefcase', label: 'Gaji Pokok', group: 'Keuangan', defaultBg: '#D1FAE5' },
-  { name: 'Coins', label: 'Bonus & THR', group: 'Keuangan', defaultBg: '#FEF3C7' },
-  { name: 'TrendingUp', label: 'Investasi & Saham', group: 'Keuangan', defaultBg: '#D1FAE5' },
-  { name: 'Building2', label: 'Bisnis & Usaha', group: 'Keuangan', defaultBg: '#DBEAFE' },
-  { name: 'PiggyBank', label: 'Tabungan & Emas', group: 'Keuangan', defaultBg: '#FCE7F3' },
-  { name: 'CreditCard', label: 'Cicilan & Utang', group: 'Keuangan', defaultBg: '#FEE2E2' },
-  { name: 'Wallet', label: 'Uang Tunai', group: 'Keuangan', defaultBg: '#FEF3C7' },
-  { name: 'Gift', label: 'Hadiah & Hibah', group: 'Keuangan', defaultBg: '#FFE4E6' },
-  { name: 'Tag', label: 'Lainnya / Umum', group: 'Lainnya', defaultBg: '#CCFBF1' },
+  { name: 'Briefcase', label: 'Gaji Pokok', group: 'Keuangan', defaultBg: '#06D6A0' },
+  { name: 'Coins', label: 'Bonus & THR', group: 'Keuangan', defaultBg: '#FFD166' },
+  { name: 'TrendingUp', label: 'Investasi & Saham', group: 'Keuangan', defaultBg: '#06D6A0' },
+  { name: 'Building2', label: 'Bisnis & Usaha', group: 'Keuangan', defaultBg: '#1B9AAA' },
+  { name: 'PiggyBank', label: 'Tabungan & Emas', group: 'Keuangan', defaultBg: '#EF476F' },
+  { name: 'CreditCard', label: 'Cicilan & Utang', group: 'Keuangan', defaultBg: '#EF476F' },
+  { name: 'Wallet', label: 'Uang Tunai', group: 'Keuangan', defaultBg: '#FFD166' },
+  { name: 'Gift', label: 'Hadiah & Hibah', group: 'Keuangan', defaultBg: '#EF476F' },
+  { name: 'Tag', label: 'Lainnya / Umum', group: 'Lainnya', defaultBg: '#06D6A0' },
 ];
 
 interface CategoryIconProps {
@@ -144,7 +128,16 @@ export const getIcons8ColorSlug = (name: string, icon: string, type?: string): s
 
 const iconSet: Record<string,LucideIcon> = {Utensils, Coffee, Cake, Pizza, Beer, Apple, ShoppingCart, ShoppingBag, Shirt, Sparkles, Scissors, Package, Home, Zap, Droplet, Wifi, Trash, Wrench, Fuel, Car, Bike, Bus, Train, Plane, Parking, Stethoscope, Pill, Baby, Dog, Heart, GraduationCap, BookOpen, Tv, Gamepad2, Music, Dumbbell, Briefcase, Coins, TrendingUp, Building2, PiggyBank, CreditCard, Wallet, Gift, Tag};
 const inferredIcons: Record<string,string> = {'receive-cash':'Briefcase',cafe:'Coffee',cutlery:'Utensils','shopping-cart--v1':'ShoppingCart','shopping-bag':'ShoppingBag',sparkling:'Sparkles','home--v1':'Home',electricity:'Zap',water:'Droplet',internet:'Wifi','gas-station':'Fuel','car--v1':'Car',bus:'Bus',train:'Train','airplane-take-off':'Plane','medical-doctor':'Stethoscope','baby-bottle':'Baby',dog:'Dog','graduation-cap':'GraduationCap',controller:'Gamepad2',coins:'Coins','money-box':'PiggyBank','bank-building':'Building2',debt:'CreditCard',bill:'CreditCard','wallet--v1':'Wallet',gift:'Gift',smartphone:'Wallet'};
+/** Keep a household's chosen category background, with legible icon contrast. */
+export function categoryAppearance(color?:string):React.CSSProperties|undefined {
+ if(!color||!/^#[0-9a-f]{6}$/i.test(color))return undefined;
+ const channels=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+ const luminance=.2126*channels[0]!+.7152*channels[1]!+.0722*channels[2]!;
+ const inkChannels=[7,59,76].map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+ const inkLuminance=.2126*inkChannels[0]!+.7152*inkChannels[1]!+.0722*inkChannels[2]!;
+ return {backgroundColor:color,color:(luminance+.05)/(inkLuminance+.05)>=1.05/(luminance+.05)?'#073B4C':'#FFFFFF'};
+}
 export const CategoryIcon:React.FC<CategoryIconProps> = ({name='',icon='',type='expense',bgColor,className='w-6 h-6'})=>{
  const Icon = iconSet[icon] || (type==='transfer'?ArrowLeftRight:iconSet[inferredIcons[getIcons8ColorSlug(name,'',type)] || 'Tag'] || Tag);
- return <Icon aria-hidden="true" className={className} strokeWidth={1.65} style={bgColor?{backgroundColor:bgColor,borderRadius:12,padding:3}:undefined}/>;
+ return <Icon aria-hidden="true" className={className} strokeWidth={1.65} style={bgColor?{...categoryAppearance(bgColor),borderRadius:12,padding:3}:undefined}/>;
 };

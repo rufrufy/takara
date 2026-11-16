@@ -16,6 +16,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
   const [isJoiningHousehold, setIsJoiningHousehold] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
+  const [householdSaving,setHouseholdSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>(getSyncStatus);
 
   useEffect(() => {
@@ -28,9 +29,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
   }, []);
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(householdSaving)return;
     setJoinError('');
     if (joinCode.trim()) {
-      const res = await joinHouseholdByCode(joinCode.trim());
+      setHouseholdSaving(true);
+      let res;
+      try {res=await joinHouseholdByCode(joinCode.trim());}
+      catch(error){res={success:false,error:error instanceof Error?error.message:'Gagal bergabung ke household.'};}
+      finally{setHouseholdSaving(false);}
       if (res.success) {
         setJoinCode('');
         setIsJoiningHousehold(false);
@@ -40,13 +46,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
       }
     }
   };
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(householdSaving)return;
     if (newHouseholdName.trim()) {
-      createHousehold(newHouseholdName.trim());
+      setHouseholdSaving(true);setJoinError('');
+      try {
+      const result=await createHousehold(newHouseholdName.trim());
+      if(!result.success){setJoinError(result.error||'Household belum tersimpan.');return;}
       setNewHouseholdName('');
       setIsCreatingHousehold(false);
       setDropdownOpen(false);
+      }catch(error){setJoinError(error instanceof Error?error.message:'Household belum tersimpan.');}
+      finally{setHouseholdSaving(false);}
     }
   };
 
@@ -137,6 +149,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
 
                   {isCreatingHousehold && (
                     <form onSubmit={handleCreate} className="p-2 space-y-2">
+                      {joinError&&<p role="alert" className="text-xs text-red-700">{joinError}</p>}
                       <input
                         type="text"
                         placeholder="Nama Household..."
@@ -154,10 +167,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
                           Batal
                         </button>
                         <button
-                          type="submit"
+                          type="submit" disabled={householdSaving}
                           className="px-2.5 py-1 text-xs bg-teal-700 text-white font-medium rounded-md hover:bg-teal-800"
                         >
-                          Simpan
+                          {householdSaving?'Menyimpan…':'Simpan'}
                         </button>
                       </div>
                     </form>
@@ -190,10 +203,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
                           Batal
                         </button>
                         <button
-                          type="submit"
+                          type="submit" disabled={householdSaving}
                           className="px-2.5 py-1 text-xs bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700"
                         >
-                          Gabung
+                          {householdSaving?'Menghubungkan…':'Gabung'}
                         </button>
                       </div>
                     </form>

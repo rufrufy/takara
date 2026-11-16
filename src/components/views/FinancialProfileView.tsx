@@ -40,6 +40,7 @@ interface FinancialProfileViewProps {
 }
 
 export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOpenQuickAdd }) => {
+  const [writeBusy,setWriteBusy]=useState(false);
   const {
     wallets,
     transactions,
@@ -126,7 +127,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     setEditError('');
   };
 
-  const handleSaveEditDebt = (e: React.FormEvent) => {
+  const handleSaveEditDebt = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     if (!editingDebt) return;
     const cleanTitle = editPersonOrEntity.trim();
@@ -145,7 +147,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     const monthly = editMonthlyStr ? parseInt(editMonthlyStr.replace(/[^0-9]/g, ''), 10) || 0 : 0;
     const dueDay = editDueDay ? parseInt(editDueDay, 10) || undefined : undefined;
 
-    updateDebt(editingDebt.id, {
+    const savedDebt=await updateDebt(editingDebt.id, {
       personOrEntity: cleanTitle,
       amount,
       remainingAmount: remaining,
@@ -157,7 +159,9 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       isSettled: editIsSettled || remaining <= 0
     });
 
+    if(!savedDebt.success){setEditError(savedDebt.error||'Gagal menyimpan utang.');return;}
     setEditingDebt(null);
+    }catch(error){setEditWalletError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
   // Kategori utang & pinjaman
@@ -253,7 +257,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
   };
 
   // Handle Add Wallet Submit
-  const handleAddWallet = (e: React.FormEvent) => {
+  const handleAddWallet = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     if (!walletName.trim()) return;
 
@@ -261,10 +266,11 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       ? parseInt(openingBalanceStr.replace(/[^0-9]/g, ''), 10) || 0
       : 0;
 
-    addWallet(walletName.trim(), walletType, openingBalance);
+    const saved=await addWallet(walletName.trim(), walletType, openingBalance);if(!saved.success){setEditWalletError(saved.error||'Gagal menyimpan dompet.');return;}
     setWalletName('');
     setOpeningBalanceStr('');
     setIsWalletModalOpen(false);
+    }catch(error){setEditWalletError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
   const handleOpenEditWallet = (w: Wallet) => {
     setEditingWallet(w);
@@ -274,7 +280,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     setEditWalletError('');
   };
 
-  const handleSaveEditWallet = (e: React.FormEvent) => {
+  const handleSaveEditWallet = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     if (!editingWallet) return;
     const clean = editWalletName.trim();
@@ -287,7 +294,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       ? parseInt(editWalletTargetBalanceStr.replace(/[^0-9-]/g, ''), 10)
       : undefined;
 
-    const res = updateWallet(editingWallet.id, {
+    const res = await updateWallet(editingWallet.id, {
       name: clean,
       type: editWalletType,
       targetBalance: isNaN(targetBal as number) ? undefined : targetBal
@@ -299,11 +306,13 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     }
 
     setEditingWallet(null);
+    }catch(error){setEditWalletError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
-  const handleDeleteWallet = (walletId: string) => {
+  const handleDeleteWallet = async (walletId: string) => {
+    if(writeBusy)return;setWriteBusy(true);try{
     if (!window.confirm('Yakin ingin menghapus atau mengarsipkan dompet ini?')) return;
-    const res = deleteWallet(walletId);
+    const res = await deleteWallet(walletId);
     if (!res.success) {
       setEditWalletError(res.error || 'Gagal menghapus dompet.');
       return;
@@ -312,6 +321,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     if (selectedWalletId === walletId) {
       setSelectedWalletId(null);
     }
+    }catch(error){setEditWalletError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
   // Step 1 -> Step 2 validation
@@ -418,6 +428,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
 
   return (
     <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+      {writeBusy&&<p role="status" className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] rounded-full bg-teal-700 px-5 py-3 text-sm text-white shadow-lg">Menyimpan ke Supabase…</p>}
       {/* Title */}
       <div className="flex items-center justify-between">
         <div>
@@ -437,9 +448,9 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       )}
 
       {/* Sub-Kategori Navigation Tabs (Dompet, Utang, Pemasukan) */}
-      <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+      <div className="wallet-tabs rounded-2xl" role="tablist" aria-label="Bagian keuangan">
         <button
-          onClick={() => setSubTab('dompet')}
+          role="tab" aria-selected={subTab === 'dompet'} data-wallet-tab="dompet" onClick={() => setSubTab('dompet')}
           className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
             subTab === 'dompet'
               ? 'bg-white text-teal-800 shadow-2xs'
@@ -447,11 +458,11 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
           }`}
         >
           <WalletIcon className="w-4 h-4" />
-          <span>Aset & Dompet ({wallets.length})</span>
+          <span className="wallet-tab-label">Aset<small className="wallet-tab-count">({wallets.length})</small></span>
         </button>
 
         <button
-          onClick={() => setSubTab('utang')}
+          role="tab" aria-selected={subTab === 'utang'} data-wallet-tab="utang" onClick={() => setSubTab('utang')}
           className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
             subTab === 'utang'
               ? 'bg-white text-teal-800 shadow-2xs'
@@ -459,11 +470,11 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
           }`}
         >
           <CreditCard className="w-4 h-4" />
-          <span>Utang & Piutang ({debts.length})</span>
+          <span className="wallet-tab-label">Utang<small className="wallet-tab-count">({debts.length})</small></span>
         </button>
 
         <button
-          onClick={() => setSubTab('pemasukan')}
+          role="tab" aria-selected={subTab === 'pemasukan'} data-wallet-tab="pemasukan" onClick={() => setSubTab('pemasukan')}
           className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
             subTab === 'pemasukan'
               ? 'bg-white text-teal-800 shadow-2xs'
@@ -471,7 +482,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
           }`}
         >
           <TrendingUp className="w-4 h-4" />
-          <span>Pemasukan ({incomeTransactions.length})</span>
+          <span className="wallet-tab-label">Pemasukan<small className="wallet-tab-count">({incomeTransactions.length})</small></span>
         </button>
       </div>
 
@@ -733,7 +744,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                     <div className="flex items-start gap-3">
                       {/* Settle full debt button */}
                       <button
-                        onClick={() => toggleDebtSettled(d.id)}
+                        onClick={async()=>{const result=await toggleDebtSettled(d.id);if(!result.success)setEditWalletError(result.error||'Gagal memperbarui utang.');}}
                         className={`w-6 h-6 rounded-lg flex items-center justify-center mt-0.5 transition-colors border shrink-0 ${
                           d.isSettled
                             ? 'bg-emerald-600 text-white border-emerald-600'
@@ -849,7 +860,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => deleteDebt(d.id)}
+                          onClick={async()=>{const result=await deleteDebt(d.id);if(!result.success)setEditWalletError(result.error||'Gagal menghapus utang.');}}
                           className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Hapus Catatan"
                         >

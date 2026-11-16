@@ -3,7 +3,7 @@ import {ReceiptAttachment} from '../ReceiptAttachment';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
-import { CategoryIcon } from '../CategoryIcon';
+import { CategoryIcon, categoryAppearance } from '../CategoryIcon';
 import {
   Search,
   Filter,
@@ -56,6 +56,7 @@ const safeDisplayDate = (dateStr?: string, effectiveAt?: string): string => {
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickAdd, initialTransactionId }) => {
   const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, state, supabaseSyncStatus, syncFromSupabase } = useApp();
+  const transactionCategory=(t:FinancialTransaction)=>categories.find(c=>c.householdId===t.householdId&&(c.id===t.categoryId||(c.type===t.type&&c.name.toLocaleLowerCase('id')===t.categoryName?.toLocaleLowerCase('id'))));
 
   // Search & Filter State (5 Kriteria: Tipe, Anggota, Aset, Kategori, Label)
   const [searchQuery, setSearchQuery] = useState('');
@@ -805,6 +806,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
             filteredTransactions.map(t => {
               const isIncome = t.type === 'income';
               const isTransfer = t.type === 'transfer';
+              const category = transactionCategory(t);
 
               return (
                 <div
@@ -814,6 +816,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                 >
                   <div className="flex items-center gap-3">
                     <div
+                      style={categoryAppearance(category?.color)}
                       className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
                         isIncome
                           ? 'bg-emerald-50 text-emerald-600'
@@ -822,7 +825,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                           : 'bg-red-50 text-red-600'
                       }`}
                     >
-                      <CategoryIcon name={t.categoryName} type={t.type} className="w-5 h-5" />
+                      <CategoryIcon name={t.categoryName} type={t.type} icon={category?.icon} className="w-5 h-5" />
                     </div>
 
                     <div>
@@ -915,6 +918,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
             <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
+                  style={categoryAppearance(transactionCategory(detailTransaction)?.color)}
                   className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
                     detailTransaction.type === 'income'
                       ? 'bg-emerald-50 text-emerald-600'
@@ -923,7 +927,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                       : 'bg-red-50 text-red-600'
                   }`}
                 >
-                  <CategoryIcon name={detailTransaction.categoryName} type={detailTransaction.type} className="w-5 h-5" />
+                  <CategoryIcon name={detailTransaction.categoryName} type={detailTransaction.type} icon={transactionCategory(detailTransaction)?.icon} className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-base">

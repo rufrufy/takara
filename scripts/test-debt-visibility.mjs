@@ -1,0 +1,12 @@
+import {readFileSync} from 'node:fs';
+import {stripTypeScriptTypes} from 'node:module';
+import assert from 'node:assert/strict';
+const source=stripTypeScriptTypes(readFileSync('src/lib/transactionVisibility.ts','utf8'));
+const {isDebtOpeningTransaction}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+assert.equal(isDebtOpeningTransaction({id:'tx-debt-12d51b71',type:'opening_balance',amount:410000000}),true);
+assert.equal(isDebtOpeningTransaction({type:'opening_balance',categoryName:'Pencatatan Utang / Piutang'}),true);
+assert.equal(isDebtOpeningTransaction({type:'opening_balance',description:'Piutang: keluarga'}),true);
+assert.equal(isDebtOpeningTransaction({type:'expense',description:'Cicilan utang',categoryName:'Utang'}),false);
+assert.equal(isDebtOpeningTransaction({type:'income',description:'Pembayaran piutang'}),false);
+assert.equal(isDebtOpeningTransaction({type:'opening_balance',description:'Saldo awal dompet'}),false);
+console.log('PASS: debt opening excluded; installments, receivable repayments and wallet openings preserved');

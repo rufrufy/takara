@@ -1,27 +1,27 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-15T00:00:05.443484+00:00",
-  "title": "Design System: Takara — Catatan Harian",
+  "generatedAt": "2026-11-16T09:04:57.337Z",
+  "title": "Design System: Takara — Tropical Green Paradise",
   "extensions": {
     "shadows": [
       {
         "name": "glass",
-        "value": "0 8px 28px -18px #45623d40,inset 0 1px 0 #fff",
+        "value": "0 8px 28px -18px #365c6940,inset 0 1px 0 #fff",
         "purpose": "Shared refractive pale glass."
       },
       {
         "name": "balance",
-        "value": "inset 0 1px 1px #fff,0 6px 24px -18px #607a5150",
-        "purpose": "Shallow balance panel."
+        "value": "inset 0 1px 0 #ffffff26,0 10px 30px -22px #073b4c70",
+        "purpose": "Dark navy balance panel."
       },
       {
         "name": "dock",
-        "value": "inset 0 1px 1px #fff,0 8px 28px -12px #46623a35",
+        "value": "inset 0 1px 1px #fff,0 8px 28px -12px #355a6735",
         "purpose": "Floating navigation."
       },
       {
         "name": "shared-elevated",
-        "value": "0 16px 50px -24px #34532e45",
+        "value": "0 16px 50px -24px #2c4b5545",
         "purpose": "Large shared overlays."
       }
     ],
@@ -50,19 +50,23 @@
     "materials": [
       {
         "name": "canvas",
-        "value": "linear-gradient(155deg,#fff 0,#f1f6f1 46%,#edf4e8 100%)"
+        "value": "linear-gradient(165deg,#fff 0%,#f4fbfd 65%,#edf9fb 100%)"
       },
       {
         "name": "balance",
-        "value": "linear-gradient(110deg,#e6efddba,#edf5e5a8);backdrop-filter:blur(16px)"
+        "value": "background:#073B4C;backdrop-filter:blur(16px)"
+      },
+      {
+        "name": "dock",
+        "value": "linear-gradient(140deg,#ffffffed,#eaf7fae6);backdrop-filter:blur(24px) saturate(1.1)"
       },
       {
         "name": "entry-sheet",
-        "value": "background:#f7faf3f5;backdrop-filter:blur(24px);margin:8px;max-height:calc(100dvh - 16px)"
+        "value": "background:#fafdfffa;backdrop-filter:blur(24px);margin:8px;max-height:calc(100dvh - 16px)"
       }
     ],
     "focus": {
-      "value": "2px solid #426638",
+      "value": "2px solid #073B4C",
       "offset": "4px"
     },
     "layout": {
@@ -75,200 +79,155 @@
     "colorMeta": {
       "canvas": {
         "role": "neutral",
-        "displayName": "Canvas",
-        "tonalRamp": [
-          "oklch(15% 0.00845 145.51)",
-          "oklch(26% 0.00845 145.51)",
-          "oklch(38% 0.00845 145.51)",
-          "oklch(49% 0.00845 145.51)",
-          "oklch(61% 0.00845 145.51)",
-          "oklch(72% 0.00845 145.51)",
-          "oklch(84% 0.00845 145.51)",
-          "oklch(95% 0.00845 145.51)"
-        ]
+        "displayName": "Canvas"
       },
       "white": {
         "role": "neutral",
-        "displayName": "White",
-        "tonalRamp": [
-          "oklch(15% 0.00000 89.88)",
-          "oklch(26% 0.00000 89.88)",
-          "oklch(38% 0.00000 89.88)",
-          "oklch(49% 0.00000 89.88)",
-          "oklch(61% 0.00000 89.88)",
-          "oklch(72% 0.00000 89.88)",
-          "oklch(84% 0.00000 89.88)",
-          "oklch(95% 0.00000 89.88)"
-        ]
+        "displayName": "White"
       },
       "ink": {
         "role": "neutral",
-        "displayName": "Ink",
-        "tonalRamp": [
-          "oklch(15% 0.04664 158.69)",
-          "oklch(26% 0.04664 158.69)",
-          "oklch(38% 0.04664 158.69)",
-          "oklch(49% 0.04664 158.69)",
-          "oklch(61% 0.04664 158.69)",
-          "oklch(72% 0.04664 158.69)",
-          "oklch(84% 0.04664 158.69)",
-          "oklch(95% 0.04664 158.69)"
-        ]
+        "displayName": "Ink"
       },
       "muted": {
         "role": "neutral",
-        "displayName": "Muted",
-        "tonalRamp": [
-          "oklch(15% 0.03562 137.89)",
-          "oklch(26% 0.03562 137.89)",
-          "oklch(38% 0.03562 137.89)",
-          "oklch(49% 0.03562 137.89)",
-          "oklch(61% 0.03562 137.89)",
-          "oklch(72% 0.03562 137.89)",
-          "oklch(84% 0.03562 137.89)",
-          "oklch(95% 0.03562 137.89)"
-        ]
+        "displayName": "Muted"
       },
       "leaf": {
         "role": "primary",
-        "displayName": "Leaf",
-        "tonalRamp": [
-          "oklch(15% 0.04384 131.51)",
-          "oklch(26% 0.04384 131.51)",
-          "oklch(38% 0.04384 131.51)",
-          "oklch(49% 0.04384 131.51)",
-          "oklch(61% 0.04384 131.51)",
-          "oklch(72% 0.04384 131.51)",
-          "oklch(84% 0.04384 131.51)",
-          "oklch(95% 0.04384 131.51)"
-        ]
+        "displayName": "Leaf"
       },
       "action": {
         "role": "primary",
-        "displayName": "Action",
-        "tonalRamp": [
-          "oklch(15% 0.05635 129.67)",
-          "oklch(26% 0.05635 129.67)",
-          "oklch(38% 0.05635 129.67)",
-          "oklch(49% 0.05635 129.67)",
-          "oklch(61% 0.05635 129.67)",
-          "oklch(72% 0.05635 129.67)",
-          "oklch(84% 0.05635 129.67)",
-          "oklch(95% 0.05635 129.67)"
-        ]
+        "displayName": "Action"
       },
       "action-ink": {
         "role": "neutral",
-        "displayName": "Action Ink",
-        "tonalRamp": [
-          "oklch(15% 0.06700 138.92)",
-          "oklch(26% 0.06700 138.92)",
-          "oklch(38% 0.06700 138.92)",
-          "oklch(49% 0.06700 138.92)",
-          "oklch(61% 0.06700 138.92)",
-          "oklch(72% 0.06700 138.92)",
-          "oklch(84% 0.06700 138.92)",
-          "oklch(95% 0.06700 138.92)"
-        ]
+        "displayName": "Action Ink"
       },
       "primary": {
         "role": "primary",
-        "displayName": "Primary",
-        "tonalRamp": [
-          "oklch(15% 0.08224 139.07)",
-          "oklch(26% 0.08224 139.07)",
-          "oklch(38% 0.08224 139.07)",
-          "oklch(49% 0.08224 139.07)",
-          "oklch(61% 0.08224 139.07)",
-          "oklch(72% 0.08224 139.07)",
-          "oklch(84% 0.08224 139.07)",
-          "oklch(95% 0.08224 139.07)"
-        ]
+        "displayName": "Primary"
       },
       "glass": {
         "role": "neutral",
-        "displayName": "Glass",
-        "tonalRamp": [
-          "oklch(15% 0.00000 89.88)",
-          "oklch(26% 0.00000 89.88)",
-          "oklch(38% 0.00000 89.88)",
-          "oklch(49% 0.00000 89.88)",
-          "oklch(61% 0.00000 89.88)",
-          "oklch(72% 0.00000 89.88)",
-          "oklch(84% 0.00000 89.88)",
-          "oklch(95% 0.00000 89.88)"
-        ]
+        "displayName": "Glass"
       },
       "line": {
         "role": "neutral",
-        "displayName": "Line",
-        "tonalRamp": [
-          "oklch(15% 0.02104 134.09)",
-          "oklch(26% 0.02104 134.09)",
-          "oklch(38% 0.02104 134.09)",
-          "oklch(49% 0.02104 134.09)",
-          "oklch(61% 0.02104 134.09)",
-          "oklch(72% 0.02104 134.09)",
-          "oklch(84% 0.02104 134.09)",
-          "oklch(95% 0.02104 134.09)"
-        ]
+        "displayName": "Line"
       },
       "active": {
         "role": "primary",
-        "displayName": "Active",
-        "tonalRamp": [
-          "oklch(15% 0.03854 128.22)",
-          "oklch(26% 0.03854 128.22)",
-          "oklch(38% 0.03854 128.22)",
-          "oklch(49% 0.03854 128.22)",
-          "oklch(61% 0.03854 128.22)",
-          "oklch(72% 0.03854 128.22)",
-          "oklch(84% 0.03854 128.22)",
-          "oklch(95% 0.03854 128.22)"
-        ]
+        "displayName": "Active"
       },
       "income": {
         "role": "secondary",
         "displayName": "Income",
         "tonalRamp": [
-          "oklch(15% 0.09857 136.00)",
-          "oklch(26% 0.09857 136.00)",
-          "oklch(38% 0.09857 136.00)",
-          "oklch(49% 0.09857 136.00)",
-          "oklch(61% 0.09857 136.00)",
-          "oklch(72% 0.09857 136.00)",
-          "oklch(84% 0.09857 136.00)",
-          "oklch(95% 0.09857 136.00)"
+          "#effbf8",
+          "#d7f7ee",
+          "#a4efdb",
+          "#67e5c4",
+          "#32ddb2",
+          "#06D6A0",
+          "#087A60",
+          "#07664f",
+          "#075342",
+          "#064534",
+          "#052e27"
         ]
       },
       "expense": {
         "role": "secondary",
         "displayName": "Expense",
         "tonalRamp": [
-          "oklch(15% 0.11041 32.45)",
-          "oklch(26% 0.11041 32.45)",
-          "oklch(38% 0.11041 32.45)",
-          "oklch(49% 0.11041 32.45)",
-          "oklch(61% 0.11041 32.45)",
-          "oklch(72% 0.11041 32.45)",
-          "oklch(84% 0.11041 32.45)",
-          "oklch(95% 0.11041 32.45)"
+          "#fff2f5",
+          "#ffe0e8",
+          "#ffc0d0",
+          "#ff96b0",
+          "#f87596",
+          "#EF476F",
+          "#c82e54",
+          "#ac2345",
+          "#8c213b",
+          "#731f34"
         ]
       },
       "transfer": {
         "role": "secondary",
         "displayName": "Transfer",
         "tonalRamp": [
-          "oklch(15% 0.04007 173.46)",
-          "oklch(26% 0.04007 173.46)",
-          "oklch(38% 0.04007 173.46)",
-          "oklch(49% 0.04007 173.46)",
-          "oklch(61% 0.04007 173.46)",
-          "oklch(72% 0.04007 173.46)",
-          "oklch(84% 0.04007 173.46)",
-          "oklch(95% 0.04007 173.46)"
+          "#eff9fa",
+          "#d9f1f3",
+          "#a6dfe4",
+          "#78cbd3",
+          "#49b6c0",
+          "#1B9AAA",
+          "#14737F",
+          "#0c6170",
+          "#0a4d5f",
+          "#073B4C"
         ]
+      },
+      "information": {
+        "role": "info",
+        "displayName": "Information",
+        "tonalRamp": [
+          "#eff9fa",
+          "#d9f1f3",
+          "#a6dfe4",
+          "#78cbd3",
+          "#49b6c0",
+          "#1B9AAA",
+          "#14737F",
+          "#0c6170",
+          "#0a4d5f",
+          "#073B4C"
+        ]
+      },
+      "highlight-yellow": {
+        "role": "warning",
+        "displayName": "Warning"
+      },
+      "highlight-pink": {
+        "role": "secondary",
+        "displayName": "Tropical Pink"
       }
+    },
+    "tropicalPalette": {
+      "mint": "#06D6A0",
+      "teal": "#1B9AAA",
+      "pink": "#EF476F",
+      "yellow": "#FFD166",
+      "ink": "#073B4C"
+    },
+    "nativeFont": {
+      "stack": "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif",
+      "apple": "San Francisco provided by the operating system",
+      "fallback": "Native platform UI face",
+      "downloadedFont": false
+    },
+    "mobileWalletTabs": {
+      "columns": "repeat(3,minmax(0,1fr))",
+      "fontSize": "13px",
+      "countFontSize": "11px",
+      "minHeight": "76px",
+      "labels": [
+        "Aset",
+        "Utang",
+        "Pemasukan"
+      ],
+      "minWidth": "0",
+      "iconSize": "18px",
+      "flow": "vertical icon, label, count"
+    },
+    "balanceContrast": {
+      "background": "#073B4C",
+      "text": "#FFFFFF",
+      "secondary": "#C0E8F0",
+      "action": "#06D6A0",
+      "outgoingIcon": "#FFD166"
     }
   },
   "components": [
@@ -276,17 +235,17 @@
       "name": "Record action",
       "kind": "button",
       "refersTo": "button-record",
-      "description": "Pale capsule opening the expense sheet.",
+      "description": "Mint capsule on the home balance panel.",
       "html": "<button class=\"ds-record\">+ Catat</button>",
-      "css": ".ds-record{font-family:var(--font-sans,\"Plus Jakarta Sans\",sans-serif);min-height:44px;padding:10px 16px;border:0;border-radius:999px;background:#cfe3bc;color:#36522e;font-size:14px;font-weight:600;box-shadow:inset 0 1px 0 #ffffff80}.ds-record:hover{filter:brightness(.98)}.ds-record:active{transform:scale(.98)}.ds-record:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+      "css": ".ds-record{font-family:var(--font-ui,-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif);min-height:44px;padding:10px 16px;border:0;border-radius:999px;background:#06D6A0;color:#073B4C;font-size:14px;font-weight:600;box-shadow:inset 0 1px 0 #ffffff80}.ds-record:hover{filter:brightness(.98)}.ds-record:active{transform:scale(.98)}.ds-record:focus-visible{outline:2px solid #073B4C;outline-offset:4px}"
     },
     {
       "name": "Primary action",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Floating recording action on other destinations.",
-      "html": "<button class=\"ds-primary\">Catat transaksi</button>",
-      "css": ".ds-primary{border:0;border-radius:999px;background:#426638;color:#fff;padding:13px 18px;font:600 14px \"Plus Jakarta Sans\",sans-serif;box-shadow:0 6px 24px -9px #29432660}.ds-primary:hover{filter:brightness(.96)}.ds-primary:active{transform:scale(.98)}.ds-primary:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+      "description": "Icon-only 56px floating recording action on Beranda, Transaksi, and Dompet.",
+      "html": "<button class=\"ds-primary\" aria-label=\"Tambah transaksi\"><svg width=\"25\" height=\"25\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 5v14M5 12h14\"/></svg></button>",
+      "css": ".ds-primary{border:0;border-radius:50%;background:#073B4C;color:#fff;display:flex;align-items:center;justify-content:center;width:56px;height:56px;padding:0;font:600 14px -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif;box-shadow:0 6px 24px -9px #243d4560}.ds-primary:hover{background:#0c5569}.ds-primary:active{transform:scale(.98)}.ds-primary:focus-visible{outline:2px solid #073B4C;outline-offset:4px}"
     },
     {
       "name": "Search",
@@ -294,7 +253,7 @@
       "refersTo": "search",
       "description": "Capsule search in the daily ledger; real filtering is supplied by the app.",
       "html": "<label class=\"ds-search\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input type=\"search\" aria-label=\"Cari catatan harian\" placeholder=\"Cari transaksi…\"></label>",
-      "css": ".ds-search{display:flex;align-items:center;gap:11px;padding:0 17px;min-height:48px;border-radius:999px;background:#ffffffa8;box-shadow:0 8px 28px -18px #45623d40,inset 0 1px 0 #fff;color:#7a8c70}.ds-search input{width:100%;min-width:0;background:transparent;border:0;color:var(--ink,#193727);font:14px \"Plus Jakarta Sans\",sans-serif}.ds-search:hover{background:#ffffffb8}.ds-search input:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+      "css": ".ds-search{display:flex;align-items:center;gap:11px;padding:0 17px;min-height:48px;border-radius:999px;background:#fff;box-shadow:0 4px 16px -12px #073b4c30,inset 0 0 0 1px #e0edf1;color:#5692a6}.ds-search input{width:100%;min-width:0;background:transparent;border:0;color:var(--ink,#073B4C);font:14px -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif}.ds-search:hover{background:#ffffffb8}.ds-search input:focus-visible{outline:2px solid #073B4C;outline-offset:4px}"
     },
     {
       "name": "Glass card",
@@ -302,7 +261,7 @@
       "refersTo": "card",
       "description": "Shared translucent wallet/settings container.",
       "html": "<section class=\"ds-card\"><strong>Dompet</strong><p>Saldo household</p></section>",
-      "css": ".ds-card{padding:16px;border:1px solid #dce5d8;border-radius:24px;background:var(--glass,rgba(255,255,255,.72));color:var(--ink,#193727);font:15px/1.5 \"Plus Jakarta Sans\",sans-serif}.ds-card p{color:var(--muted,#61705c);margin:8px 0 0}"
+      "css": ".ds-card{padding:16px;border:1px solid #d9e9ee;border-radius:24px;background:var(--glass,rgba(255,255,255,.86));color:var(--ink,#073B4C);font:15px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif}.ds-card p{color:var(--muted,#365664);margin:8px 0 0}"
     },
     {
       "name": "Date capsule",
@@ -310,7 +269,7 @@
       "refersTo": "chip",
       "description": "Date grouping label; not an interactive filter.",
       "html": "<h2 class=\"ds-date\">Hari ini</h2>",
-      "css": ".ds-date{margin:0;padding:8px 14px;border-radius:999px;background:#e7efdf99;color:#52664a;font:650 13px \"Plus Jakarta Sans\",sans-serif}"
+      "css": ".ds-date{margin:0;padding:8px 14px;border-radius:999px;background:#e5f5f8;color:#073B4C;font:650 13px -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif}"
     },
     {
       "name": "Floating dock",
@@ -318,7 +277,7 @@
       "refersTo": "dock-active",
       "description": "Five-item capsule dock. Preview uses a house glyph; application uses distinct Lucide icons per destination.",
       "html": "<nav class=\"ds-dock\" aria-label=\"Navigasi utama\"><button aria-current=\"page\"><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Beranda</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Transaksi</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Dompet</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Laporan</span></button><button><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.65\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg><span>Setelan</span></button></nav>",
-      "css": ".ds-dock{display:flex;max-width:560px;padding:8px 7px;border-radius:999px;background:linear-gradient(135deg,#fffffff0,#e8f0decc);backdrop-filter:blur(24px) saturate(1.1);box-shadow:inset 0 1px 1px #fff,0 8px 28px -12px #46623a35}.ds-dock button{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:58px;border:0;border-radius:999px;background:transparent;color:#63715b;font:500 10px \"Plus Jakarta Sans\",sans-serif;transition:background .2s ease,color .2s ease}.ds-dock button[aria-current=page]{background:#dce9ce;color:#3c5f2f;box-shadow:inset 0 1px 1px #ffffff80}.ds-dock button:hover{background:#e5eedc}.ds-dock button:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+      "css": ".ds-dock{display:flex;max-width:560px;padding:8px 7px;border-radius:999px;background:linear-gradient(140deg,#ffffffed,#eaf7fae6);backdrop-filter:blur(24px) saturate(1.1);box-shadow:inset 0 1px 1px #fff,0 8px 28px -12px #355a6735}.ds-dock button{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:58px;border:0;border-radius:999px;background:transparent;color:#457687;font:500 10px -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif;transition:background .2s ease,color .2s ease}.ds-dock button[aria-current=page]{background:#d9f1f3;color:#073B4C;box-shadow:inset 0 1px 1px #ffffff80}.ds-dock button:hover{background:#daf0eb}.ds-dock button:focus-visible{outline:2px solid #073B4C;outline-offset:4px}"
     },
     {
       "name": "Shared field",
@@ -326,34 +285,41 @@
       "refersTo": "input",
       "description": "Rounded shared transaction/settings field.",
       "html": "<label class=\"ds-field\">Catatan<input placeholder=\"Catatan transaksi\"></label>",
-      "css": ".ds-field{display:grid;gap:6px;color:#61705c;font:13px \"Plus Jakarta Sans\",sans-serif}.ds-field input{min-height:44px;padding:10px 12px;border:1px solid #dce5d8;border-radius:18px;background:var(--glass,rgba(255,255,255,.72));color:var(--ink,#193727);font:15px \"Plus Jakarta Sans\",sans-serif}.ds-field input:hover{border-color:#c1ceba}.ds-field input:focus-visible{outline:2px solid #426638;outline-offset:4px}"
+      "css": ".ds-field{display:grid;gap:6px;color:#365664;font:13px -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif}.ds-field input{min-height:44px;padding:10px 12px;border:1px solid #d9e9ee;border-radius:18px;background:var(--glass,rgba(255,255,255,.86));color:var(--ink,#073B4C);font:15px -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Segoe UI', sans-serif}.ds-field input:hover{border-color:#aaded1}.ds-field input:focus-visible{outline:2px solid #073B4C;outline-offset:4px}"
+    },
+    {
+      "name": "Wallet section tabs",
+      "kind": "nav",
+      "description": "Equal-width vertical Aset, Utang, and Pemasukan navigation with separate counts.",
+      "html": "<div class=\"ds-wallet-tabs\" role=\"tablist\" aria-label=\"Bagian keuangan\"><button role=\"tab\" aria-selected=\"true\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M4 5h14v4H4zM4 9h17v11H4zM16 13h5\"/></svg><span>Aset</span><small>(3)</small></button><button role=\"tab\" aria-selected=\"false\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M4 5h16v14H4zM8 9h8M8 13h5\"/></svg><span>Utang</span><small>(2)</small></button><button role=\"tab\" aria-selected=\"false\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 3v18M8 7h6a3 3 0 0 1 0 6h-4a3 3 0 0 0 0 6h6\"/></svg><span>Pemasukan</span><small>(4)</small></button></div>",
+      "css": ".ds-wallet-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;min-width:0;max-width:100%;padding:4px;border-radius:24px;background:#edf7fa}.ds-wallet-tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:76px;padding:8px 3px;border:0;border-radius:20px;background:transparent;color:#365664;font:600 13px/1.25 var(--font-ui,system-ui,sans-serif)}.ds-wallet-tabs svg{flex-shrink:0}.ds-wallet-tabs small{font-size:11px;font-weight:500;line-height:1.2}.ds-wallet-tabs [aria-selected=true]{background:#fff;color:#073B4C;box-shadow:0 2px 10px -7px #073b4c30}.ds-wallet-tabs button:hover{background:#fff}.ds-wallet-tabs button:focus-visible{outline:2px solid #073B4C;outline-offset:4px}"
     }
   ],
   "narrative": {
     "northStar": "Catatan Harian",
-    "overview": "An airy dailyhousehold ledger with soft green and white liquid glass. Rounded translucent surfaces, readable financial amounts, and quiet outlined icons make everyday recording approachable. The balance supports the working transaction area without turning the screen into a stack of dashboard cards.\n\nThis is the approved replacement visual world from image 2, extracted from the implemented application. The reference composition adapts to real household values and logical phone dimensions; it is not a claim of pixel reproduction. The automated hero comparison remains open/failed at 59.2. Documentation does not close that gate.",
+    "overview": "Airy household finance with white/cyan glass, a navy balance panel, native system typography, and distinct pinned Tropical accents. Full rounding and readable live financial data remain central. Historical sage screenshots do not validate the current refinement; no new rendered visual pass was available and the earlier comparison gate remains open.",
     "keyCharacteristics": [
-      "Soft green and white translucent material.",
-      "Fully rounded containers and capsule actions.",
-      "Airy lists with readable amounts and metadata.",
-      "One self-hosted sans family and Lucide outline icons."
+      "White/cyan translucent material and dark navy balance.",
+      "Mint, teal, pink, and yellow accents with distinct roles.",
+      "Rounded controls, a 56px floating plus, and vertical wallet tabs.",
+      "Native system font stack and Lucide outline icons."
     ],
     "rules": [
       {
-        "name": "The Quiet Material Rule",
-        "body": "Use green-white surfaces for structure; reserve stronger color for actions, selection, and financial meaning.",
+        "name": "Tropical Roles",
+        "body": "Use white/cyan for the ground, navy for balance and text, and pinned Tropical accents for actions and semantic highlights; avoid monotone green.",
         "section": "colors"
       }
     ],
     "dos": [
-      "**Do** use soft green-white glass, rounded surfaces, and outlined icons consistently across screens and sheets.",
-      "**Do** keep real amounts readable with tabular numerals and reserve clearance for the floating dock.",
-      "**Do** preserve live values and loading, error, empty, selected, and keyboard-focus states."
+      "Do preserve exact saved category backgrounds and real financial data.",
+      "Do preserve safe-area clearance and visible keyboard focus.",
+      "Do use native San Francisco on Apple and native system fallback elsewhere."
     ],
     "donts": [
-      "**Don't** add nested dashboard cards, promotional badges, or decorative AI motifs to the daily ledger.",
-      "**Don't** reintroduce the former dark teal visual identity or desktop sidebar as the default system.",
-      "**Don't** describe reference comparison, authentication migration, or storage setup as complete without independent evidence."
+      "Do not bundle unlicensed font files.",
+      "Do not claim static or integration checks are browser visual validation.",
+      "Do not treat the historical sage comp as current color authority."
     ]
   }
 }

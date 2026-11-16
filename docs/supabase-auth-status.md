@@ -1,24 +1,27 @@
-# Supabase storage and authentication
+# Supabase Auth, receipts, and persistence
 
-Financial records, wallet balances, categories and household membership are persisted in Supabase. The application waits for household data before showing the balance after login. Local application/session metadata is not the authoritative financial database.
+The live project now uses standard Supabase Auth for the existing accounts. Ten real profiles were migrated through the official Auth Admin API and linked through `app_users.auth_user_id`. Legacy plaintext PIN fields contain `AUTH_MANAGED`; the client does not read or persist PINs. Existing accounts retain the PIN that was actually saved in Supabase before migration.
 
-The private `receipts` bucket exists with a 10 MB limit. The upload client uses standard Supabase Auth and stores a storage reference in the transaction, then requests a short-lived signed URL to display it. Upload failures never silently turn into locally stored images.
+## Private receipt uploads
 
-## Pending activation
+The private `receipts` bucket permits images/PDFs up to 10 MB. Uploads require a verified Auth session and write access to the household, under `householdId/authUserId/random.ext`. Household members can read private files through short-lived signed URLs; other households and anonymous callers are denied. VIEWER membership grants reading only. Transaction rows store a storage reference, never temporary signed URLs or local Base64 fallbacks.
 
-Receipt uploads are **not yet active**. The main account login still uses the existing application PIN flow. Supabase Auth account migration and household access policies must be completed before enabling private uploads.
+Live tests exercised the actual application auth, attachment, and persistence modules: upload, signed download, shared member reading after login, foreign-household denial, transaction attachment readback, idempotent retries, edits, and wallet/ledger reconciliation. The same upload flow was subsequently tested through the browser form: loading appeared, a private file reference was persisted with one ledger entry, the transaction appeared on Home, and the wallet updated.
 
-1. Set `SUPABASE_SERVICE_ROLE_KEY` in the server `.env`; never use a `VITE_` prefix for this key and never commit it.
-2. Use the official Auth Admin API migration in `scripts/migrate-supabase-auth.mjs` after the mapping migration. For Node, load the environment explicitly, for example `node --env-file=.env scripts/migrate-supabase-auth.mjs`.
-3. Complete the application's standard Auth login/session lifecycle and secure household membership/account management. Existing permissive legacy database policies must be replaced before treating household membership as trusted authorization for private files.
-4. Add authenticated Storage access policies scoped to the verified household and Auth identity. Verify separate household isolation, shared member access, logout/relogin, and revoked membership before enabling uploads.
+## Saves and PIN changes
 
-Creating Auth users alone does not complete this activation. Do not deploy an anonymous endpoint with elevated access as a workaround.
+Financial mutations await Supabase confirmation before reporting success. Transaction, ledger, wallet balance, and installment debt updates use atomic RPCs. Monthly resets void audit records through authenticated writes and report partial failures accurately. Debounced household refresh and focus/visibility refresh keep shared data current without replacing a visible balance with zero.
 
-## AI model configuration
+Changing a PIN requires the current PIN, updates Supabase Auth on the server, and renews the session. The live test verified that the old PIN fails and the new PIN works after logout/login. A PIN change made by the former local-only implementation cannot be recovered if it never reached Supabase: use the previously persisted PIN, then change it again, or use the authorized admin reset flow.
 
-The scan server reads `AI_API_URL`, `AI_API_KEY`, and `AI_MODEL` from the server environment. Settings-based client configuration is a browser-specific fallback. The embedded fallback API credential has been removed from source; configure deployments with server environment variables. The local existing credential was moved into the ignored `.env` file.
+## Deployment
 
-## Validation
+Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the server environment. Never prefix the secret key with `VITE_` or commit it. The Vite development server and Bun production server share `server/auth.ts`; restart the server after updating account endpoints or environment values. Legacy local JSON account endpoints return 410.
 
-The local checks cover Supabase reads/writes and pagination, repeatable Excel import, category type/household selection, Jakarta date/time and report periods, and authenticated attachment behavior. The attachment checks use mocks and do not mean the pending live Auth setup is enabled.
+Applied SQL is recorded in `scripts/secure-household-auth.sql` and `scripts/preserve-membership-and-atomic-void.sql`; run in that order on a new environment after the base schema/mapping. Do not rerun the account migration to reset credentials. The migration skips already linked accounts and disposable legacy test accounts.
+
+AI scan server configuration uses `AI_API_URL`, `AI_API_KEY`, and `AI_MODEL`; browser settings are a per-device fallback. Existing local credentials remain in the ignored `.env`.
+
+## UI validation limits
+
+The current Tropical palette, SF system font stack, mobile wallet tab layout, icon-only floating action, and scan action were checked in source, by type/build checks and contrast calculations. Current browser checks covered Home, reports, wallet tabs at 320px (no tab/content overflow), desktop at 1280px, and admin login. Evidence is retained locally under `.impeccable/review/tropical-*.jpg`. Prior sage-palette screenshots and the earlier open image-comparison gate do not prove the new palette's rendered appearance. SF Pro is supplied natively on Apple platforms; other platforms use their system fallback unless a separately licensed font is provided.

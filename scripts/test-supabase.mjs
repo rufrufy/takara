@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { stripTypeScriptTypes } from 'node:module';
-const source = stripTypeScriptTypes(readFileSync('src/lib/supabase.ts', 'utf8'));
-const api = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+import {loadSource} from './test-source-loader.mjs';
+const api = await loadSource('src/lib/supabase.ts');
 const config = { url: 'https://test.supabase.co', anonKey: 'sb_publishable_test', bucket: 'receipts' };
 let mode = 'read';
 let calls = [];
@@ -24,5 +24,7 @@ mode = 'read-fail'; result = await api.pullAllDataFromSupabase(config, 'hh-test'
 assert.equal(result.success, false); assert.match(result.error, /transactions.*403/);
 mode = 'write-fail'; result = await api.syncTransactionToSupabase({id:'tx-test'},config); assert.equal(result.success,false);
 mode = 'write'; result = await api.syncTransactionToSupabase({id:'tx-test',householdId:'hh-test',type:'income',amount:123,destinationWalletId:'wallet-test'},config); assert.equal(result.success,true);
-assert(calls.some(c => c.url.endsWith('/ledger_entries') && c.options.method === 'POST'));
-console.log('PASS: Supabase pagination, household read, read error, rejected write, confirmed transaction and ledger write');
+const rpc=calls.filter(c=>c.url.endsWith('/rpc/save_financial_transaction')&&c.options.method==='POST');
+assert.equal(rpc.length,2);assert.equal(JSON.parse(rpc.at(-1).options.body).p_tx.household_id,'hh-test');
+assert.equal(calls.filter(c=>c.url.endsWith('/ledger_entries')&&c.options.method==='POST').length,0);
+console.log('PASS: Supabase pagination, household read, read error, rejected write, one atomic financial RPC per attempt, no separate ledger writes');

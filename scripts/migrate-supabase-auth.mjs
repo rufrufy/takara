@@ -25,7 +25,7 @@ for(const profile of profiles){
     if(created.error)throw new Error('Gagal memigrasikan '+profile.username+': '+created.error.message);
     user=created.data.user;
   }
-  const linked=await client.from('app_users').update({auth_user_id:user.id}).eq('id',profile.id);
+  const linked=await client.from('app_users').update({auth_user_id:user.id,pin_hash:'AUTH_MANAGED'}).eq('id',profile.id);
   if(linked.error)throw new Error(linked.error.message);
   console.log(profile.username+': terhubung ke Supabase Auth');
 }

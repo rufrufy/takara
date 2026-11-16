@@ -64,7 +64,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   const [categorySearch, setCategorySearch] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCatName, setNewCatName] = useState('');
-  const [newCatColor,setNewCatColor]=useState('#CCFBF1');
+  const [newCatColor,setNewCatColor]=useState('#06D6A0');
   const [newCatIcon,setNewCatIcon]=useState('ShoppingCart');
   // Label creator in picker
   const [newLabelText, setNewLabelText] = useState('');
@@ -223,7 +223,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
-    const res = await addTransaction({
+    let res;
+    try {res = await addTransaction({
       type,
       amount,
       fee: fee > 0 ? fee : undefined,
@@ -239,9 +240,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
       addedBy,
       effectiveAt,
       dateStr:transactionDate
-    });
-    savingRef.current = false;
-    setSaving(false);
+    });}catch(error){res={success:false,error:error instanceof Error?error.message:'Transaksi belum tersimpan. Coba lagi.'};}
+    finally{savingRef.current=false;setSaving(false);}
 
     if (res.success) {
       if (isAddMore) {
@@ -283,14 +283,20 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   };
 
   // Buat Label Baru dari Picker
-  const handleCreateLabel = (e: React.FormEvent) => {
+  const handleCreateLabel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLabelText.trim()) return;
     const clean = newLabelText.trim().replace(/^#/, '');
-    addLabel(clean);
+    if(savingRef.current)return;
+    savingRef.current=true;setSaving(true);
+    try{
+    const result=await addLabel(clean);
+    if(!result.success){setErrorMsg(result.error||'Label belum tersimpan.');return;}
     setSelectedLabel(clean);
     setNewLabelText('');
     setIsLabelPickerOpen(false);
+    }catch(error){setErrorMsg(error instanceof Error?error.message:'Label belum tersimpan.');}
+    finally{savingRef.current=false;setSaving(false);}
   };
 
   return (
@@ -544,7 +550,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                     {selectedCategory ? (
                       <div
                         className="w-4 h-4 rounded-md flex items-center justify-center text-white shrink-0 text-[10px]"
-                        style={{ backgroundColor: selectedCategory.color || '#0F766E' }}
+                        style={{ backgroundColor: selectedCategory.color || '#06D6A0' }}
                       >
                         <CategoryIcon icon={selectedCategory.icon} name={selectedCategory.name} type={selectedCategory.type} className="w-2.5 h-2.5" />
                       </div>
@@ -823,7 +829,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-0.5">
                 {availableCategories.map(cat => {
                   const isSelected = categoryId === cat.id;
-                  const catColor = cat.color || '#0F766E';
+                  const catColor = cat.color || '#06D6A0';
                   return (
                     <button
                       key={cat.id}

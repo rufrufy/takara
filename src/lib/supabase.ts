@@ -1,3 +1,4 @@
+import {getAuthAccessToken,accountRequest} from './receiptAuth';
 import type {
   SupabaseConfig,
   FinancialTransaction,
@@ -98,7 +99,7 @@ const envUrl = ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUP
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   url: (envUrl && !envUrl.includes('gnjrysgmiqapbjroishz')) ? envUrl : 'https://xmtjesxmkcduirggmzam.supabase.co',
   anonKey: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) as string) || 'sb_publishable_3vfImmTVWfPlk9YsPQ64Mg_dAWg0jqT',
-  secretKey: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_SECRET_KEY) as string) || '',
+  secretKey: '',
   bucket: ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_BUCKET) as string) || 'receipts'
 };
 
@@ -126,9 +127,9 @@ export const resolveClientKey = (config: SupabaseConfig): string => {
 
 const buildAuthHeaders = (key: string): Record<string, string> => {
   if (!key) return {};
-  const headers: Record<string, string> = {
-    apikey: key
-  };
+  const headers: Record<string, string> = {apikey:key};
+  const token=getAuthAccessToken();
+  if(token){headers.Authorization='Bearer '+token;return headers;}
   // Only attach Bearer header for JWT keys (eyJ...); sb_publishable_ keys use apikey only
   if (key.split('.').length === 3) {
     headers.Authorization = `Bearer ${key}`;
@@ -171,35 +172,8 @@ const postSupabaseTable = async (
   }
 };
 
-export const syncUsersToSupabase = async (
-  users: User[],
-  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
-): Promise<{ success: boolean; error?: string }> => {
-  if (!config.url || !config.anonKey || !users.length) {
-    return { success: false, error: 'Config missing or empty users' };
-  }
-  const cleanUrl = config.url.replace(/\/+$/, '');
-  try {
-    await postSupabaseTable(
-      cleanUrl,
-      'app_users',
-      getHeaders(config),
-      users
-        .filter(u => u.username && u.username !== 'admin')
-        .map(u => ({
-          id: u.id,
-          username: u.username.toLowerCase(),
-          display_name: u.displayName,
-          pin_hash: u.pinHash || '12345',
-          role: u.role || 'MEMBER',
-          avatar_url: u.avatarUrl || null,
-          created_at: u.createdAt || new Date().toISOString()
-        }))
-    );
-    return { success: true };
-  } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : 'User sync failed' };
-  }
+export const syncUsersToSupabase = async (users:User[],config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;error?:string}>=>{
+ try{for(const user of users){const res=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/app_users?id=eq.'+encodeURIComponent(user.id),{method:'PATCH',headers:{...getHeaders(config),Prefer:'return=representation'},body:JSON.stringify({display_name:user.displayName,avatar_url:user.avatarUrl||null})});if(!res.ok)throw new Error('Profil belum tersimpan ('+res.status+').');if((await res.json()).length!==1)throw new Error('Profil tidak ditemukan atau akses ditolak.');}return {success:true};}catch(error){return {success:false,error:(error as Error).message};}
 };
 
 export const fetchUsersFromSupabase = async (
@@ -210,7 +184,7 @@ export const fetchUsersFromSupabase = async (
   }
   const cleanUrl = config.url.replace(/\/+$/, '');
   try {
-    const res = await fetch(`${cleanUrl}/rest/v1/app_users?select=*`, {
+    const res = await fetch(`${cleanUrl}/rest/v1/app_users?select=id,username,display_name,role,avatar_url,created_at`, {
       headers: getHeaders(config)
     });
     if (!res.ok) {
@@ -230,7 +204,7 @@ export const fetchUsersFromSupabase = async (
       id: r.id,
       username: r.username,
       displayName: r.display_name,
-      pinHash: r.pin_hash || '12345',
+      pinHash: '',
       role: r.role || 'MEMBER',
       avatarUrl: r.avatar_url || undefined,
       createdAt: r.created_at
@@ -310,49 +284,14 @@ export const testSupabaseConnection = async (
 };
 
 /** Recompute stored wallet balances from the authoritative Supabase ledger. */
-export const refreshHouseholdWalletBalances = async (householdId: string, config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG): Promise<void> => {
-  const base = config.url.replace(/\/+$/, '') + '/rest/v1/';
-  const headers = getHeaders(config);
-  const read = async (table: string, select: string): Promise<Array<Record<string, unknown>>> => {
-    const rows: Array<Record<string, unknown>> = [];
-    while (true) {
-      const response = await fetch(base + table + '?household_id=eq.' + encodeURIComponent(householdId) + '&select=' + select + '&order=id&limit=500&offset=' + rows.length, { headers });
-      if (!response.ok) throw new Error('Gagal menghitung saldo dompet dari ' + table + ': ' + response.status);
-      const page = await response.json(); rows.push(...page);
-      if (!page.length) return rows;
-    }
-  };
-  const [wallets, entries] = await Promise.all([read('wallets', 'id,balance'), read('ledger_entries', 'id,wallet_id,signed_amount')]);
-  const balances = new Map<string, number>();
-  for (const entry of entries) balances.set(String(entry.wallet_id), (balances.get(String(entry.wallet_id)) || 0) + Number(entry.signed_amount));
-  await Promise.all(wallets.map(async wallet => {
-    const balance = balances.get(String(wallet.id)) || 0;
-    if (Number(wallet.balance) === balance) return;
-    const response = await fetch(base + 'wallets?id=eq.' + encodeURIComponent(String(wallet.id)) + '&household_id=eq.' + encodeURIComponent(householdId), {
-      method: 'PATCH', headers, body: JSON.stringify({ balance, updated_at: new Date().toISOString() })
-    });
-    if (!response.ok) throw new Error('Gagal memperbarui saldo dompet di Supabase: ' + response.status);
-  }));
+export const refreshHouseholdWalletBalances=async(householdId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<void>=>{
+ const res=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/recompute_household_wallets',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_household:householdId})});if(!res.ok)throw new Error('Saldo dompet belum dihitung ulang ('+res.status+').');
 };
 
 /**
  * Sync transaction record to Supabase database table via PostgREST API
  */
-export const syncTransactionToSupabase = async (
-  tx: FinancialTransaction,
-  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG,
-  mode: 'insert' | 'update' = 'insert'
-): Promise<{ success: boolean; error?: string }> => {
-  if (!config.url || !config.anonKey) {
-    return { success: false, error: 'Supabase URL atau Anon Key belum dikonfigurasi' };
-  }
-
-  try {
-    const cleanUrl = config.url.replace(/\/+$/, '');
-    const res = await fetch(`${cleanUrl}/rest/v1/transactions${mode === 'update' ? '?id=eq.' + encodeURIComponent(tx.id) : ''}`, {
-      method: mode === 'update' ? 'PATCH' : 'POST',
-      headers: { ...getHeaders(config), Prefer: 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify({
+const transactionRow=(tx:FinancialTransaction)=>({
         id: tx.id,
         household_id: tx.householdId,
         no: tx.no || null,
@@ -382,148 +321,19 @@ export const syncTransactionToSupabase = async (
         status: tx.status || 'POSTED',
         created_at: tx.createdAt,
         updated_at: tx.updatedAt
-      })
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      return { success: false, error: `Supabase status ${res.status}: ${errText.slice(0, 100)}` };
-    }
-
-    if (mode === 'update') {
-      const changed = await res.json() as RawSupabaseTx[];
-      if (changed.length !== 1 || changed[0]?.id !== tx.id) return { success: false, error: 'Transaksi tidak ditemukan atau perubahan tidak diizinkan oleh Supabase.' };
-    }
-    // Sinkronkan juga buku besar (ledger_entries) yang sesuai untuk mutasi saldo otomatis
-    const ledgerRows: Array<Record<string, unknown>> = [];
-    if (tx.type === 'income') {
-      const wId = tx.destinationWalletId || tx.sourceWalletId;
-      if (wId) {
-        ledgerRows.push({
-          id: `led-${tx.id}-inc`,
-          household_id: tx.householdId,
-          transaction_id: tx.id,
-          wallet_id: wId,
-          signed_amount: Math.round(tx.amount),
-          entry_type: 'INCOME',
-          posted_at: tx.effectiveAt,
-          created_at: tx.createdAt
-        });
-      }
-    } else if (tx.type === 'expense') {
-      const wId = tx.sourceWalletId || tx.destinationWalletId;
-      if (wId) {
-        ledgerRows.push({
-          id: `led-${tx.id}-exp`,
-          household_id: tx.householdId,
-          transaction_id: tx.id,
-          wallet_id: wId,
-          signed_amount: -Math.round(tx.amount),
-          entry_type: 'EXPENSE',
-          posted_at: tx.effectiveAt,
-          created_at: tx.createdAt
-        });
-      }
-    } else if (tx.type === 'transfer') {
-      if (tx.sourceWalletId) {
-        ledgerRows.push({
-          id: `led-${tx.id}-tout`,
-          household_id: tx.householdId,
-          transaction_id: tx.id,
-          wallet_id: tx.sourceWalletId,
-          signed_amount: -Math.round(tx.amount),
-          entry_type: 'TRANSFER_OUT',
-          posted_at: tx.effectiveAt,
-          created_at: tx.createdAt
-        });
-      }
-      if (tx.destinationWalletId) {
-        ledgerRows.push({
-          id: `led-${tx.id}-tin`,
-          household_id: tx.householdId,
-          transaction_id: tx.id,
-          wallet_id: tx.destinationWalletId,
-          signed_amount: Math.round(tx.amount),
-          entry_type: 'TRANSFER_IN',
-          posted_at: tx.effectiveAt,
-          created_at: tx.createdAt
-        });
-      }
-      if (tx.fee && tx.fee > 0 && tx.sourceWalletId) {
-        ledgerRows.push({
-          id: `led-${tx.id}-fee`,
-          household_id: tx.householdId,
-          transaction_id: tx.id,
-          wallet_id: tx.sourceWalletId,
-          signed_amount: -Math.round(tx.fee),
-          entry_type: 'FEE',
-          posted_at: tx.effectiveAt,
-          created_at: tx.createdAt
-        });
-      }
-    } else if (tx.type === 'opening_balance') {
-      const wId = tx.destinationWalletId || tx.sourceWalletId;
-      if (wId) {
-        ledgerRows.push({
-          id: `led-${tx.id}-open`,
-          household_id: tx.householdId,
-          transaction_id: tx.id,
-          wallet_id: wId,
-          signed_amount: Math.round(tx.amount),
-          entry_type: 'OPENING',
-          posted_at: tx.effectiveAt,
-          created_at: tx.createdAt
-        });
-      }
-    }
-
-    if (tx.status === 'VOIDED') ledgerRows.length = 0;
-    if (ledgerRows.length > 0) {
-      const ledgerResult = await fetch(`${cleanUrl}/rest/v1/ledger_entries`, {
-        method: 'POST',
-        headers: getHeaders(config),
-        body: JSON.stringify(ledgerRows)
-      });
-      if (!ledgerResult.ok) throw new Error(`Transaksi tersimpan, buku besar gagal (${ledgerResult.status}): ${await ledgerResult.text()}`);
-    }
-
-    if (mode === 'update') {
-      const ids = ledgerRows.map(row => String(row.id));
-      const keep = ids.length ? '&id=not.in.(' + ids.map(id => '"' + id + '"').join(',') + ')' : '';
-      const cleanup = await fetch(cleanUrl + '/rest/v1/ledger_entries?transaction_id=eq.' + encodeURIComponent(tx.id) + keep, { method: 'DELETE', headers: getHeaders(config) });
-      if (!cleanup.ok) return { success: false, error: 'Transaksi berubah, tetapi pembaruan buku besar belum selesai. Simpan ulang.' };
-    }
-    await refreshHouseholdWalletBalances(tx.householdId, config);
-    return { success: true };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Unknown sync error';
-    return { success: false, error: msg };
-  }
-};
+});
+export const syncTransactionToSupabase = async (tx:FinancialTransaction,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG,_mode:'insert'|'update'='insert'):Promise<{success:boolean;error?:string}>=>saveAtomicTransaction(tx,undefined,config);
+export const syncDebtPaymentToSupabase = async (tx:FinancialTransaction,debtId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;error?:string}>=>saveAtomicTransaction(tx,debtId,config);
+async function saveAtomicTransaction(tx:FinancialTransaction,debtId:string|undefined,config:SupabaseConfig){
+ try{const res=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/save_financial_transaction',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_tx:transactionRow(tx),p_debt_id:debtId||null})});if(!res.ok)throw new Error('Transaksi belum tersimpan ('+res.status+'): '+(await res.text()).slice(0,160));return {success:true};}catch(error){return {success:false,error:(error as Error).message};}
+}
 
 /**
  * Delete transaction from Supabase
  */
-export const deleteTransactionFromSupabase = async (
-  txId: string,
-  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
-): Promise<{ success: boolean; error?: string }> => {
-  if (!config.url || !config.anonKey) return { success: false, error: 'Config missing' };
-  try {
-    const cleanUrl = config.url.replace(/\/+$/, '');
-    await Promise.all([
-      fetch(`${cleanUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(txId)}`, {
-        method: 'DELETE',
-        headers: getHeaders(config)
-      }),
-      fetch(`${cleanUrl}/rest/v1/ledger_entries?transaction_id=eq.${encodeURIComponent(txId)}`, {
-        method: 'DELETE',
-        headers: getHeaders(config)
-      })
-    ]);
-    return { success: true };
-  } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : 'Delete error' };
-  }
+/** Retain the audit record; void and recompute in one database transaction. */
+export const deleteTransactionFromSupabase=async(txId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;error?:string}>=>{
+ try{const response=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/void_financial_transaction',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_transaction_id:txId})});if(!response.ok)throw new Error('Transaksi belum dibatalkan ('+response.status+'): '+(await response.text()).slice(0,160));return {success:true};}catch(error){return {success:false,error:(error as Error).message};}
 };
 
 /**
@@ -656,19 +466,6 @@ export const pushAllDataToSupabase = async (
   const headers = getHeaders(config);
 
   try {
-    // 0. App Users
-    if (state.currentUser?.username && state.currentUser.username !== 'admin') {
-      await postSupabaseTable(cleanUrl, 'app_users', headers, [{
-        id: state.currentUser.id,
-        username: state.currentUser.username.toLowerCase(),
-        display_name: state.currentUser.displayName,
-        pin_hash: state.currentUser.pinHash || '12345',
-        role: state.currentUser.role || 'OWNER',
-        avatar_url: state.currentUser.avatarUrl || null,
-        created_at: state.currentUser.createdAt || new Date().toISOString()
-      }]);
-    }
-
     // 1. Households (Pastikan seluruh household ter-upsert sebelum members)
     const householdMap = new Map<string, Household>();
     for (const h of state.households || []) {
@@ -684,7 +481,7 @@ export const pushAllDataToSupabase = async (
       });
     }
 
-    const householdsList = Array.from(householdMap.values());
+    const householdsList = Array.from(householdMap.values()).filter(h=>state.currentUser?.role==='ADMIN'||h.createdById===state.currentUser?.id);
     if (householdsList.length) {
       await postSupabaseTable(
         cleanUrl,
@@ -761,64 +558,8 @@ export const pushAllDataToSupabase = async (
       );
     }
 
-    // 5. Transactions
-    if (state.transactions?.length) {
-      await postSupabaseTable(
-        cleanUrl,
-        'transactions',
-        headers,
-        state.transactions.map(tx => ({
-          id: tx.id,
-          household_id: tx.householdId,
-          no: tx.no || null,
-          type: tx.type,
-          amount: Math.round(tx.amount),
-          fee: tx.fee ? Math.round(tx.fee) : 0,
-          source_wallet_id: tx.sourceWalletId || null,
-          destination_wallet_id: tx.destinationWalletId || null,
-          category_id: tx.categoryId || null,
-          category_name: tx.categoryName || null,
-          category_type: tx.categoryType || null,
-          label: tx.label || null,
-          description: tx.description || null,
-          notes: tx.notes || null,
-          image_url: tx.imageUrl || null,
-          effective_at: tx.effectiveAt,
-          date_str: tx.dateStr || null,
-          day: tx.day || null,
-          time: tx.time || null,
-          source_asset: tx.sourceAsset || null,
-          source_asset_type: tx.sourceAssetType || null,
-          destination_asset: tx.destinationAsset || null,
-          added_by: tx.addedBy,
-          auto_income: tx.autoIncome || false,
-          from_savings: tx.fromSavings || false,
-          from_investment: tx.fromInvestment || false,
-          status: tx.status || 'POSTED',
-          created_at: tx.createdAt,
-          updated_at: tx.updatedAt
-        }))
-      );
-    }
-
-    // 6. Ledger entries
-    if (state.ledgerEntries?.length) {
-      await postSupabaseTable(
-        cleanUrl,
-        'ledger_entries',
-        headers,
-        state.ledgerEntries.map(le => ({
-          id: le.id,
-          household_id: le.householdId,
-          transaction_id: le.transactionId,
-          wallet_id: le.walletId,
-          signed_amount: Math.round(le.signedAmount),
-          entry_type: le.entryType,
-          posted_at: le.postedAt,
-          created_at: le.createdAt
-        }))
-      );
-    }
+    // Financial records are authoritative atomic RPC writes; never import client ledger snapshots.
+    for(const tx of state.transactions||[]){const saved=await syncTransactionToSupabase(tx,config);if(!saved.success)throw new Error(saved.error||'Transaksi impor belum tersimpan.');}
 
     // 7. Debts
     if (state.debts?.length) {
@@ -900,17 +641,18 @@ export const pullAllDataFromSupabase = async (
     };
     const filterQuery = householdId ? `?household_id=eq.${encodeURIComponent(householdId)}` : '';
 
-    const [txRes, walletsRes, catRes, debtsRes, houseRes, membersRes, ledgerRes] = await Promise.all([
+    const [txRes, walletsRes, catRes, debtsRes, houseRes, membersRes, ledgerRes, labelsRes] = await Promise.all([
       readAll(`${cleanUrl}/rest/v1/transactions${filterQuery}${filterQuery ? '&' : '?'}order=effective_at.desc`),
       readAll(`${cleanUrl}/rest/v1/wallets${filterQuery}`),
       readAll(`${cleanUrl}/rest/v1/categories${filterQuery}`),
       readAll(`${cleanUrl}/rest/v1/debts${filterQuery}`),
       readAll(`${cleanUrl}/rest/v1/households${householdId ? '?id=eq.' + encodeURIComponent(householdId) : ''}`),
       readAll(`${cleanUrl}/rest/v1/household_members${filterQuery}`),
-      readAll(`${cleanUrl}/rest/v1/ledger_entries${filterQuery}`)
+      readAll(`${cleanUrl}/rest/v1/ledger_entries${filterQuery}`),
+      readAll(`${cleanUrl}/rest/v1/household_labels${filterQuery}`)
     ]);
 
-    for (const [table, response] of [['transactions', txRes], ['wallets', walletsRes], ['categories', catRes], ['debts', debtsRes], ['households', houseRes], ['household_members', membersRes], ['ledger_entries', ledgerRes]] as const) {
+    for (const [table, response] of [['transactions', txRes], ['wallets', walletsRes], ['categories', catRes], ['debts', debtsRes], ['households', houseRes], ['household_members', membersRes], ['ledger_entries', ledgerRes],['household_labels', labelsRes]] as const) {
       if (!response.ok) throw new Error(`Gagal membaca ${table} (${response.status}): ${(await response.text()).slice(0, 180)}`);
     }
 
@@ -1032,6 +774,7 @@ export const pullAllDataFromSupabase = async (
         wallets,
         categories,
         debts,
+        labels:(await labelsRes.json() as Array<{name:string}>).map(l=>l.name),
         ...(members.length > 0 ? { members } : {}),
         ...(ledgerEntries.length > 0 ? { ledgerEntries } : {}),
         ...(households.length > 0 ? { households } : {})
@@ -1076,26 +819,7 @@ export const fetchUserHouseholds = async (userId: string, config: SupabaseConfig
   return { households: houses.map(h => ({id:h.id,name:h.name,createdById:h.created_by_id || '',inviteCode:h.invite_code,baseCurrency:'IDR',createdAt:h.created_at})), members };
 };
 
-export const joinSupabaseHousehold = async (code: string, user: User, config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG): Promise<Household> => {
-  const base = config.url.replace(/\/+$/, '') + '/rest/v1/';
-  const headers = getHeaders(config);
-  const response = await fetch(base + 'households?invite_code=eq.' + encodeURIComponent(code.trim().toUpperCase()), { headers });
-  if (!response.ok) throw new Error('Gagal memeriksa kode undangan di Supabase.');
-  const raw = (await response.json())[0];
-  if (!raw) throw new Error('Kode household tidak ditemukan.');
-  const memberUrl = base + 'household_members?household_id=eq.' + encodeURIComponent(raw.id) + '&user_id=eq.' + encodeURIComponent(user.id);
-  const existing = await fetch(memberUrl, { headers });
-  if (!existing.ok) throw new Error('Gagal memeriksa keanggotaan Supabase.');
-  if (!(await existing.json()).length) {
-    const saved = await fetch(base + 'household_members?on_conflict=id', {
-      method:'POST', headers, body:JSON.stringify({id:'mem-'+user.id+'-'+raw.id,household_id:raw.id,user_id:user.id,display_name:user.displayName,role:'MEMBER',joined_at:new Date().toISOString()})
-    });
-    if (!saved.ok) throw new Error('Keanggotaan belum tersimpan di Supabase (' + saved.status + ').');
-  }
-  const verified = await fetch(memberUrl, { headers });
-  if (!verified.ok || !(await verified.json()).length) throw new Error('Keanggotaan belum dapat diverifikasi.');
-  return {id:raw.id,name:raw.name,createdById:raw.created_by_id,inviteCode:raw.invite_code,createdAt:raw.created_at,baseCurrency:'IDR'};
-};
+export const joinSupabaseHousehold=async(code:string,_user:User,_config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<Household>=>{const result=await accountRequest('join-household',{code});if(!result.success)throw new Error(result.error);return result.household;};
 
 export const saveCategoryToSupabase = async (category:Category, mode:'create'|'update',config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<void> => {
   const base=config.url.replace(/\/+$/,'')+'/rest/v1/categories';

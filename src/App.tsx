@@ -19,7 +19,7 @@ import { AIScanModal } from './components/AIScanModal';
 import { Camera, Sparkles } from 'lucide-react';
 
 export const TakaraMainLayout: React.FC = () => {
-  const { state, isFinancialReady, supabaseSyncStatus, logoutUser } = useApp();
+  const { state, isAuthReady, isFinancialReady, supabaseSyncStatus, logoutUser } = useApp();
   const [activeTab, setActiveTab] = useState<ActiveTab>('beranda');
   const [selectedTransactionId,setSelectedTransactionId] = useState<string>();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -35,6 +35,7 @@ export const TakaraMainLayout: React.FC = () => {
     setIsQuickAddOpen(true);
   };
 
+  if(!isAuthReady)return <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6"><div role="status" className="text-center space-y-3"><h1 className="text-xl font-semibold text-slate-900">Membuka Takara</h1><p className="text-sm text-slate-600">Memulihkan sesi akun Anda…</p></div></main>;
   // Jika belum login, tampilkan Landing Page atau Login Page
   if (!state.isAuthenticated || state.isLocked) {
     if (authView === 'landing') {
@@ -116,7 +117,7 @@ export const TakaraMainLayout: React.FC = () => {
         activeTab={activeTab}
         onChangeTab={tab=>{setSelectedTransactionId(undefined);setActiveTab(tab);}}
       />
-      {(activeTab==='transaksi'||activeTab==='profil-keuangan')&&<div className="page-record-action"><button onClick={()=>handleOpenQuickAdd()} aria-label="Catat transaksi"><Plus size={23}/><span>Catat</span></button></div>}
+      {(activeTab==='beranda'||activeTab==='transaksi'||activeTab==='profil-keuangan')&&<div className="page-record-action"><button onClick={()=>handleOpenQuickAdd()} aria-label="Tambah transaksi"><Plus size={25}/></button></div>}
 
       {/* Quick Add Transaction Modal */}
       <QuickAddModal

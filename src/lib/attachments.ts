@@ -2,7 +2,7 @@ import type {User} from '../types';
 import {ensureReceiptAuth,getReceiptAuthClient} from './receiptAuth';
 const uploads=new Map<string,Promise<string>>();
 const extensions:Record<string,string>={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/heic':'heic','image/heif':'heif','application/pdf':'pdf'};
-export function clearReceiptSession(_userId:string){uploads.clear();getReceiptAuthClient().auth.signOut().catch(()=>{});}
+export function clearReceiptSession(_userId:string){uploads.clear();}
 export async function uploadReceiptPhoto(file:File|string,householdId:string,user:User):Promise<string>{
   if(typeof file==='string'&&file.startsWith('supabase-storage://receipts/')){
     if(!file.startsWith('supabase-storage://receipts/'+householdId+'/'))throw new Error('Lampiran berasal dari household berbeda.');

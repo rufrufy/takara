@@ -1,3 +1,4 @@
+import {handleAuthRequest} from './server/auth';
 import { serve } from "bun";
 import { resolve } from "path";
 import { mkdirSync, existsSync } from "fs";
@@ -75,6 +76,8 @@ serve({
   async fetch(req) {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
+    const authResponse=await handleAuthRequest(req,process.env);if(authResponse)return authResponse;
+    if(pathname.startsWith('/api/users')||pathname.startsWith('/api/user-data/'))return Response.json({success:false,error:'Gunakan Supabase Auth.'},{status:410});
 
     // Handle Preflight CORS
     if (req.method === "OPTIONS") {

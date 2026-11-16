@@ -1,3 +1,5 @@
+import {isDebtOpeningTransaction} from '../lib/transactionVisibility';
+import {inviteAccount,authenticateAccount,getCurrentAccount,changeAccountPin,registerAccount,adminCreateAccount,adminUpdateAccount,adminDeleteAccount,signOutAccount,getReceiptAuthClient} from '../lib/receiptAuth';
 import {jakartaDateTime} from '../lib/dateTime';
 import {loadUserFinancialData} from '../lib/financialBootstrap';
 import {uploadReceiptPhoto,clearReceiptSession} from '../lib/attachments';
@@ -29,12 +31,12 @@ import {
   fetchUserHouseholds,
   joinSupabaseHousehold,
   syncTransactionToSupabase,
+  syncDebtPaymentToSupabase,
   deleteTransactionFromSupabase,
   syncDebtToSupabase,
   deleteDebtFromSupabase,
   pushAllDataToSupabase,
   pullAllDataFromSupabase,
-  syncUsersToSupabase,
   fetchUsersFromSupabase,
   syncWalletToSupabase,
   deleteWalletFromSupabase,
@@ -42,19 +44,24 @@ import {
 } from '../lib/supabase';
 import { parseFinancialExcel } from '../lib/excelImporter';
 import {
-  discardHouseholdSync,
-  enqueueTransactionSync,
-  enqueueStateSync,
-  startSyncLoopWorker
+  discardHouseholdSync
 } from '../lib/syncEngine';
 const serializeSessionState = (value: Partial<AppState>) => JSON.stringify({
-  ...value, transactions: [], ledgerEntries: [], debts: [], wallets: [], categories: []
+  ...value, currentUser:value.currentUser?{...value.currentUser,pinHash:''}:undefined, transactions: [], ledgerEntries: [], debts: [], wallets: [], categories: []
 });
 const defaultDebts: DebtItem[] = [];
 const STORAGE_KEY = 'dompetkita_app_state_v2';
 const CURRENT_USER_KEY = 'dompetkita_active_username_v2';
 const REGISTERED_USERS_KEY = 'dompetkita_registered_users_v2';
 const MIGRATION_CLEAN_KEY = 'takara_v3_clean_users_migrated';
+if(typeof window!=='undefined'){
+  try{
+    for(const key of ['dompetkita_registered_users_v1','dompetkita_registered_users_v2'])localStorage.removeItem(key);
+    const keys=Array.from({length:localStorage.length},(_,i)=>localStorage.key(i)).filter((key):key is string=>Boolean(key&&((key.startsWith('dompetkita_app_state_user_'))||key==='dompetkita_app_state_v2')));
+    for(const key of keys){try{const old=JSON.parse(localStorage.getItem(key)||'{}');if(old.currentUser)old.currentUser.pinHash='';if(Array.isArray(old.registeredUsers))old.registeredUsers=old.registeredUsers.map((user:User)=>({...user,pinHash:''}));localStorage.setItem(key,JSON.stringify(old));}catch{}}
+  }catch{}
+}
+
 
 // Pembersihan otomatis data dummy lama saat startup
 if (typeof window !== 'undefined') {
@@ -104,6 +111,7 @@ interface NewTransactionInput {
 interface AppContextValue {
   state: AppState;
   isFinancialReady: boolean;
+  isAuthReady: boolean;
   activeHousehold: Household;
   households: Household[];
   wallets: Wallet[];
@@ -119,34 +127,34 @@ interface AppContextValue {
   editTransaction: (id: string, updatedFields: Partial<FinancialTransaction>) => Promise<{ success: boolean; error?: string }>;
   debts: DebtItem[];
   addDebt: (item: Omit<DebtItem, 'id' | 'householdId' | 'createdAt'>) => Promise<{ success: boolean; error?: string }>;
-  toggleDebtSettled: (id: string) => void;
-  toggleDebtPaidThisMonth: (id: string) => void;
+  toggleDebtSettled: (id: string) => Promise<{success:boolean;error?:string}>;
+  toggleDebtPaidThisMonth: (id: string) => Promise<{success:boolean;error?:string}>;
   payDebtInstallment: (id: string, walletId?: string, imageUrl?: string) => Promise<{ success: boolean; error?: string }>;
-  updateDebt: (id: string, updates: Partial<DebtItem>) => { success: boolean; error?: string };
-  deleteDebt: (id: string) => void;
+  updateDebt: (id: string, updates: Partial<DebtItem>) => Promise<{success:boolean;error?:string}>;
+  deleteDebt: (id: string) => Promise<{success:boolean;error?:string}>;
   addTransaction: (input: NewTransactionInput) => Promise<{ success: boolean; error?: string }>;
   voidTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
   clearCurrentMonthTransactions: () => Promise<{ success: boolean; count: number; error?: string }>;
-  addWallet: (name: string, type: WalletType, openingBalance?: number, color?: string) => void;
-  updateWallet: (walletId: string, updates: { name?: string; type?: WalletType; color?: string; institutionName?: string; targetBalance?: number }) => { success: boolean; error?: string };
-  deleteWallet: (walletId: string) => { success: boolean; error?: string };
+  addWallet: (name: string, type: WalletType, openingBalance?: number, color?: string) => Promise<{success:boolean;error?:string}>;
+  updateWallet: (walletId: string, updates: { name?: string; type?: WalletType; color?: string; institutionName?: string; targetBalance?: number }) => Promise<{success:boolean;error?:string}>;
+  deleteWallet: (walletId: string) => Promise<{success:boolean;error?:string}>;
   addCategory: (name: string, type: 'income' | 'expense' | 'transfer', icon?: string, color?: string) => Promise<{success:boolean;category?:Category;error?:string}>;
   updateCategory: (id: string, updates: Partial<Category>) => Promise<{success:boolean;error?:string}>;
   deleteCategory: (id:string) => Promise<{success:boolean;error?:string}>;
-  addLabel: (name: string) => void;
+  addLabel: (name: string) => Promise<{success:boolean;error?:string}>;
   switchHousehold: (householdId: string) => void;
-  createHousehold: (name: string) => void;
-  updateHousehold: (householdId: string, name: string) => void;
+  createHousehold: (name: string) => Promise<{success:boolean;error?:string}>;
+  updateHousehold: (householdId: string, name: string) => Promise<{success:boolean;error?:string}>;
   deleteHousehold: (householdId: string) => Promise<{ success: boolean; error?: string }>;
   importExcelFile: (file: File) => Promise<{ success: boolean; summary?: ExcelImportSummary; error?: string }>;
   resetToDefault: () => void;
-  verifyAndUnlock: (pin: string) => boolean;
+  verifyAndUnlock: (pin: string) => Promise<boolean>;
   loginUser: (username: string, code5Digit: string) => Promise<{ success: boolean; error?: string }>;
   lockApp: () => void;
-  updatePIN: (newPin: string) => void;
-  inviteMember: (displayName: string, username: string, role: UserRole, pin5Digit: string) => { success: boolean; error?: string };
-  updateMember: (memberId: string, updates: { displayName?: string; role?: UserRole; username?: string; pin5Digit?: string }) => { success: boolean; error?: string };
-  removeMember: (memberId: string) => void;
+  updatePIN: (newPin: string,currentPin:string) => Promise<{success:boolean;error?:string}>;
+  inviteMember: (displayName: string, username: string, role: UserRole, pin5Digit: string) => Promise<{success:boolean;error?:string}>;
+  updateMember: (memberId: string, updates: { displayName?: string; role?: UserRole; username?: string; pin5Digit?: string }) => Promise<{success:boolean;error?:string}>;
+  removeMember: (memberId: string) => Promise<{success:boolean;error?:string}>;
   updateAIConfig: (cfg: Partial<AIConfig>) => void;
   updateSupabaseConfig: (cfg: Partial<SupabaseConfig>) => void;
   syncAllToSupabase: () => Promise<{ success: boolean; message: string; count?: number }>;
@@ -157,13 +165,13 @@ interface AppContextValue {
   sessions: UserSession[];
   activeSession: UserSession | null;
   registeredUsers: User[];
-  registerUser: (displayName: string, username: string, pin5Digit: string, householdCode?: string) => { success: boolean; error?: string };
+  registerUser: (displayName: string, username: string, pin5Digit: string, householdCode?: string) => Promise<{ success: boolean; error?: string }>;
   joinHouseholdByCode: (inviteCode: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
-  adminCreateUser: (displayName: string, username: string, pin5Digit: string, role?: UserRole) => { success: boolean; error?: string };
-  updateRegisteredUser: (username: string, updates: { displayName?: string; pin5Digit?: string; role?: UserRole }) => { success: boolean; error?: string };
-  deleteUser: (username: string) => { success: boolean; error?: string };
-  addMemberToHousehold: (householdId: string, displayName: string, username: string, role?: UserRole) => { success: boolean; error?: string };
-  removeMemberFromHousehold: (memberId: string) => { success: boolean; error?: string };
+  adminCreateUser: (displayName: string, username: string, pin5Digit: string, role?: UserRole) => Promise<{ success: boolean; error?: string }>;
+  updateRegisteredUser: (username: string, updates: { displayName?: string; pin5Digit?: string; role?: UserRole }) => Promise<{ success: boolean; error?: string }>;
+  deleteUser: (username: string) => Promise<{ success: boolean; error?: string }>;
+  addMemberToHousehold: (householdId: string, displayName: string, username: string, role?: UserRole) => Promise<{success:boolean;error?:string}>;
+  removeMemberFromHousehold: (memberId: string) => Promise<{success:boolean;error?:string}>;
   allHouseholds: Household[];
   allMembers: HouseholdMember[];
 }
@@ -186,6 +194,7 @@ const reconstructMissingLedgers = (
   const defaultWalletId = wallets[0]?.id || '';
 
   for (const tx of transactions) {
+    if(isDebtOpeningTransaction(tx))continue;
     if (tx.householdId !== householdId || tx.status === 'VOIDED') continue;
     if (ledgerTxSet.has(tx.id)) continue;
     if (tx.type === 'opening_balance' && !tx.sourceWalletId && !tx.destinationWalletId) continue;
@@ -280,116 +289,19 @@ const reconstructMissingLedgers = (
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const financialVersion = useRef(0);
+  const activeMutationCount=useRef(0);
+  const duringWrite=async<T,>(job:()=>Promise<T>):Promise<T>=>{activeMutationCount.current++;financialVersion.current++;try{return await job();}finally{activeMutationCount.current--;financialVersion.current++;}};
   const loadedHousehold = useRef('');
   const [isFinancialReady,setIsFinancialReady] = useState(false);
-  const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
-    try {
-      const saved = localStorage.getItem(REGISTERED_USERS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return [
-      {
-        id: 'user-admin',
-        username: 'admin',
-        displayName: 'Super Administrator',
-        pinHash: '99999',
-        role: 'ADMIN',
-        createdAt: '2026-11-14T00:00:00.000Z'
-      }
-    ];
-  });
+  const [registeredUsers,setRegisteredUsers]=useState<User[]>([]);
+  const [authReady,setAuthReady]=useState(false);
+  const [state,setState]=useState<AppState>({...initialData,isAuthenticated:false,isLocked:true,transactions:[],ledgerEntries:[],wallets:[],categories:[],debts:[],members:[],households:[]});
+  useEffect(()=>{let live=true;(async()=>{try{const user=await getCurrentAccount();if(!live||!user)return;let next={...createFreshUserData(user.username,user.displayName,''),currentUser:user,isAuthenticated:true,isLocked:false,transactions:[] as FinancialTransaction[],ledgerEntries:[] as LedgerEntry[],wallets:[] as Wallet[],categories:[] as Category[],debts:[] as DebtItem[],members:[] as HouseholdMember[],households:[] as Household[]};if(user.role==='ADMIN'){const pulled=await pullAllDataFromSupabase(DEFAULT_SUPABASE_CONFIG);if(!pulled.success)throw new Error(pulled.error||'Gagal memuat admin.');next={...next,...pulled.data};}if(live)setState(next);}catch(error){if(live)setSupabaseSyncStatus({status:'error',error:error instanceof Error?error.message:'Sesi tidak dapat dipulihkan.'});}finally{if(live)setAuthReady(true);}})();return()=>{live=false;};},[]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(registeredUsers));
-      syncUsersToSupabase(registeredUsers, DEFAULT_SUPABASE_CONFIG)
-        .then(res => {
-          if (!res.success && res.error) {
-            setSupabaseSyncStatus(prev => ({ ...prev, status: 'error', error: res.error }));
-          }
-        })
-        .catch(() => {});
-    } catch {
-      // ignore
-    }
-  }, [registeredUsers]);
-
-  const [state, setState] = useState<AppState>(() => {
-    try {
-      const activeUser = localStorage.getItem(CURRENT_USER_KEY);
-      if (activeUser) {
-        const userKey = getUserStorageKey(activeUser);
-        const saved = localStorage.getItem(userKey);
-
-        if (saved) {
-          const parsed = JSON.parse(saved) as Partial<AppState>;
-          if (parsed.currentUser) {
-            const baseTemplate = createFreshUserData(
-              parsed.currentUser.username,
-              parsed.currentUser.displayName,
-              parsed.currentUser.pinHash
-            );
-
-            const resolvedHouseholds = parsed.households && parsed.households.length > 0
-              ? parsed.households
-              : baseTemplate.households;
-
-            const activeHId = parsed.activeHouseholdId || resolvedHouseholds[0]?.id || baseTemplate.activeHouseholdId;
-            const parsedTxs: FinancialTransaction[] = [];
-            const parsedWallets = parsed.wallets || baseTemplate.wallets;
-            const resolvedLedgers = reconstructMissingLedgers(
-              parsedTxs,
-              parsed.ledgerEntries || [],
-              activeHId,
-              parsedWallets
-            );
-
-            return {
-              ...baseTemplate,
-              ...parsed,
-              currentUser: parsed.currentUser,
-              households: resolvedHouseholds,
-              activeHouseholdId: activeHId,
-              members: parsed.members || baseTemplate.members,
-              wallets: parsedWallets,
-              categories: parsed.categories || baseTemplate.categories,
-              labels: parsed.labels || baseTemplate.labels,
-              transactions: parsedTxs,
-              ledgerEntries: resolvedLedgers,
-              debts: [],
-              aiConfig: getSystemAIConfig(),
-              supabaseConfig: DEFAULT_SUPABASE_CONFIG,
-              isLocked: false,
-              isAuthenticated: true,
-              activeSessionId: parsed.activeSessionId || baseTemplate.activeSessionId,
-              sessions: parsed.sessions || baseTemplate.sessions
-            };
-          }
-        }
-      }
-    } catch {
-      // Fallback
-    }
-    return {
-      ...initialData,
-      isLocked: true,
-      isAuthenticated: false
-    };
-  });
-
-  // Jalankan worker sinkronisasi looping otomatis ke Supabase (offline-first queue)
-  useEffect(() => {
-    startSyncLoopWorker(8000);
-  }, []);
+  // Legacy offline queue is retained for explicit recovery, never replayed over confirmed server records.
   // 1. Sync daftar pengguna terdaftar langsung dari Supabase saat aplikasi dimuat
   useEffect(() => {
+    if(!authReady||!state.isAuthenticated)return;
     fetchUsersFromSupabase(DEFAULT_SUPABASE_CONFIG)
       .then(res => {
         if (res.success && res.users.length > 0) {
@@ -407,10 +319,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       })
       .catch(() => {});
-  }, []);
+  }, [authReady,state.isAuthenticated]);
 
   useEffect(() => {
-    if (!state.isAuthenticated || !state.activeHouseholdId || state.currentUser.role === 'ADMIN') return;
+    if (!authReady || !state.isAuthenticated || !state.activeHouseholdId || state.currentUser.role === 'ADMIN') return;
     const userId=state.currentUser.id, householdId=state.activeHouseholdId;
     if(loadedHousehold.current===userId+':'+householdId)return;
     let cancelled=false;
@@ -424,7 +336,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsFinancialReady(true);setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
     }).catch(error=>{if(!cancelled)setSupabaseSyncStatus({status:'error',error:String(error)});});
     return()=>{cancelled=true;};
-  },[state.isAuthenticated,state.currentUser.id,state.activeHouseholdId]);
+  },[authReady,state.isAuthenticated,state.currentUser.id,state.activeHouseholdId]);
 
   // Sync state to LocalStorage cache (untuk sesi offline & PWA)
   useEffect(() => {
@@ -444,30 +356,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [state]);
 
-  const allHouseholds = useMemo(() => {
-    const list: Household[] = [...state.households];
-    const seenIds = new Set(list.map(h => h.id));
-
-    for (const u of registeredUsers) {
-      try {
-        const userSaved = localStorage.getItem(getUserStorageKey(u.username));
-        if (userSaved) {
-          const parsed = JSON.parse(userSaved);
-          if (Array.isArray(parsed.households)) {
-            for (const h of parsed.households) {
-              if (h?.id && !seenIds.has(h.id)) {
-                seenIds.add(h.id);
-                list.push(h);
-              }
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return list.length > 0 ? list : [FALLBACK_HOUSEHOLD];
-  }, [state.households, registeredUsers]);
+  const allHouseholds=useMemo(()=>state.households,[state.households]);
 
   // Keamanan Akses Household: Hanya tampilkan household milik pengguna atau di mana pengguna terdaftar sebagai anggota
   const userHouseholds = useMemo(() => {
@@ -486,8 +375,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     for (const m of state.members) {
       if (
         m.userId === currentUserId ||
-        (currentUserName && m.userId?.toLowerCase() === `user-${currentUserName}`) ||
-        (currentDisplayName && m.displayName?.toLowerCase() === currentDisplayName)
+        (currentUserName && m.userId?.toLowerCase() === `user-${currentUserName}`)
       ) {
         memberHouseholdIds.add(m.householdId);
       }
@@ -496,37 +384,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const allowed = state.households.filter(h =>
       h.createdById === currentUserId ||
       (currentUserName && h.createdById === `user-${currentUserName}`) ||
-      memberHouseholdIds.has(h.id) ||
-      h.id === state.activeHouseholdId
+      memberHouseholdIds.has(h.id)
     );
 
     return allowed.length > 0 ? allowed : (state.households.slice(0, 1).length > 0 ? state.households.slice(0, 1) : [FALLBACK_HOUSEHOLD]);
   }, [state.households, state.members, state.currentUser, state.activeHouseholdId]);
 
-  const allMembers = useMemo(() => {
-    const list: HouseholdMember[] = [...state.members];
-    const seenIds = new Set(list.map(m => m.id));
-
-    for (const u of registeredUsers) {
-      try {
-        const userSaved = localStorage.getItem(getUserStorageKey(u.username));
-        if (userSaved) {
-          const parsed = JSON.parse(userSaved);
-          if (Array.isArray(parsed.members)) {
-            for (const m of parsed.members) {
-              if (m?.id && !seenIds.has(m.id)) {
-                seenIds.add(m.id);
-                list.push(m);
-              }
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return list;
-  }, [state.members, registeredUsers]);
+  const allMembers=useMemo(()=>state.members,[state.members]);
 
   const activeHousehold = useMemo(() => {
     return userHouseholds.find(h => h.id === state.activeHouseholdId) || userHouseholds[0] || state.households[0] || FALLBACK_HOUSEHOLD;
@@ -534,8 +398,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Recalculate wallet balances dynamically from active ledger entries (Ledger Invariant)
   // Recalculate wallet balances dynamically from active ledger entries & transactions (Ledger Invariant)
   const wallets = useMemo(() => {
+    const excludedTxIds=new Set(state.transactions.filter(isDebtOpeningTransaction).map(t=>t.id));
     const householdLedgers = state.ledgerEntries.filter(
-      le => le.householdId === state.activeHouseholdId
+      le => le.householdId === state.activeHouseholdId && !excludedTxIds.has(le.transactionId)
     );
     const activeHouseholdTxs = state.transactions.filter(
       t => t.householdId === state.activeHouseholdId && t.status !== 'VOIDED'
@@ -605,7 +470,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const transactions = useMemo(() => {
     return state.transactions
-      .filter(t => t.householdId === state.activeHouseholdId && t.status !== 'VOIDED')
+      .filter(t => t.householdId === state.activeHouseholdId && t.status !== 'VOIDED' && !isDebtOpeningTransaction(t))
       .sort((a, b) => new Date(b.effectiveAt).getTime() - new Date(a.effectiveAt).getTime());
   }, [state.transactions, state.activeHouseholdId]);
 
@@ -774,8 +639,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       catch(error) { return {success:false,error:error instanceof Error?error.message:'Unggah lampiran gagal.'}; }
     }
     setSupabaseSyncStatus({ status: 'syncing' });
-    const prerequisites = await pushAllDataToSupabase({ ...state, transactions: [], ledgerEntries: [], debts: [] }, state.supabaseConfig);
-    const saved = prerequisites.success ? await syncTransactionToSupabase(newTx, state.supabaseConfig) : { success: false, error: prerequisites.error };
+    const saved = await syncTransactionToSupabase(newTx,state.supabaseConfig);
     if (!saved.success) {
       setSupabaseSyncStatus({ status: 'error', error: saved.error });
       return { success: false, error: saved.error || 'Transaksi belum tersimpan di Supabase. Coba lagi.' };
@@ -797,62 +661,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const voidTransaction = async (id: string) => editTransaction(id, { status: 'VOIDED' });
 
   const clearCurrentMonthTransactions = async (): Promise<{ success: boolean; count: number; error?: string }> => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-
-    const activeHId = state.activeHouseholdId;
-
-    const txsToDelete = state.transactions.filter(t => {
-      if (t.householdId !== activeHId) return false;
-      const tDate = new Date(t.effectiveAt || t.createdAt);
-      return !isNaN(tDate.getTime()) && tDate.getFullYear() === currentYear && tDate.getMonth() === currentMonth;
+    const householdId=state.activeHouseholdId,userId=state.currentUser.id;
+    const month=jakartaDateTime(new Date().toISOString()).date.slice(0,7);
+    const selected=state.transactions.filter(tx=>{
+      if(tx.householdId!==householdId||tx.status==='VOIDED'||isDebtOpeningTransaction(tx))return false;
+      try{return jakartaDateTime(tx.effectiveAt||tx.createdAt).date.slice(0,7)===month;}catch{return false;}
     });
-
-    if (txsToDelete.length === 0) {
-      return { success: true, count: 0 };
+    if(!selected.length)return {success:true,count:0};
+    setSupabaseSyncStatus({status:'syncing'});
+    const confirmedIds=new Set<string>();let failure:string|undefined;
+    for(const tx of selected){
+      try{
+        const result=await syncTransactionToSupabase({...tx,status:'VOIDED',updatedAt:new Date().toISOString()},state.supabaseConfig,'update');
+        if(!result.success){failure=result.error||'Supabase belum mengonfirmasi pembatalan transaksi.';break;}
+        confirmedIds.add(tx.id);
+      }catch(error){failure=error instanceof Error?error.message:'Koneksi ke Supabase terputus.';break;}
     }
-
-    const txIdsToDelete = new Set(txsToDelete.map(t => t.id));
-
-    setState(prev => {
-      const remainingTxs = prev.transactions.filter(t => !txIdsToDelete.has(t.id));
-      const remainingLedgers = prev.ledgerEntries.filter(le => !txIdsToDelete.has(le.transactionId));
-      const updated = {
-        ...prev,
-        transactions: remainingTxs,
-        ledgerEntries: remainingLedgers
-      };
-      const userKey = getUserStorageKey(prev.currentUser.username);
-      localStorage.setItem(userKey, serializeSessionState(updated));
-      return updated;
-    });
-
-    if (state.supabaseConfig?.url) {
-      try {
-        const cleanUrl = state.supabaseConfig.url.replace(/\/+$/, '');
-        const clientKey = state.supabaseConfig.anonKey || state.supabaseConfig.secretKey || '';
-        const headers = {
-          apikey: clientKey,
-          Authorization: `Bearer ${clientKey}`
-        };
-
-        const idsArray = Array.from(txIdsToDelete);
-        for (let i = 0; i < idsArray.length; i += 50) {
-          const chunk = idsArray.slice(i, i + 50);
-          const filter = `in.(${chunk.map(id => `"${id}"`).join(',')})`;
-          await Promise.all([
-            fetch(`${cleanUrl}/rest/v1/transactions?id=${filter}`, { method: 'DELETE', headers }),
-            fetch(`${cleanUrl}/rest/v1/ledger_entries?transaction_id=${filter}`, { method: 'DELETE', headers })
-          ]);
-        }
-      } catch (err) {
-        console.warn('Gagal menghapus transaksi dari Supabase:', err);
-      }
+    // Keep the audit rows and change only transactions confirmed by the atomic server RPC.
+    if(confirmedIds.size){
+      financialVersion.current++;
+      setState(prev=>prev.currentUser.id!==userId?prev:({...prev,transactions:prev.transactions.map(tx=>confirmedIds.has(tx.id)?{...tx,status:'VOIDED' as const}:tx),ledgerEntries:prev.ledgerEntries.filter(le=>!confirmedIds.has(le.transactionId)),wallets:prev.wallets.map(wallet=>selected.some(tx=>confirmedIds.has(tx.id)&&(tx.sourceWalletId===wallet.id||tx.destinationWalletId===wallet.id))?{...wallet,balance:prev.ledgerEntries.filter(le=>le.walletId===wallet.id&&!confirmedIds.has(le.transactionId)).reduce((sum,le)=>sum+le.signedAmount,0)}:wallet)}));
     }
-
-    return { success: true, count: txsToDelete.length };
+    // Reconcile balances and any concurrent household writes after a partial batch.
+    if(confirmedIds.size){
+      const reloaded=await pullAllDataFromSupabase(state.supabaseConfig,householdId);
+      if(reloaded.success&&reloaded.data)setState(prev=>prev.currentUser.id!==userId||prev.activeHouseholdId!==householdId?prev:({...prev,...reloaded.data,currentUser:prev.currentUser,activeHouseholdId:householdId}));
+    }
+    if(failure){const error=confirmedIds.size+' dari '+selected.length+' transaksi berhasil dibatalkan. '+failure;setSupabaseSyncStatus({status:'error',error});return {success:false,count:confirmedIds.size,error};}
+    setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
+    return {success:true,count:confirmedIds.size};
   };
+
   const editTransaction = async (id: string, updatedFields: Partial<FinancialTransaction>): Promise<{ success: boolean; error?: string }> => {
     const existingIndex = state.transactions.findIndex(t => t.id === id);
     if (existingIndex === -1) {
@@ -996,9 +835,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       catch(error) { return {success:false,error:error instanceof Error?error.message:'Unggah lampiran gagal.'}; }
     }
     const ledgers = reconstructMissingLedgers([tx], [], debt.householdId, state.wallets);
-    const snapshot = { ...state, transactions: [tx], ledgerEntries: ledgers, debts: [debt] };
-    const saved = await pushAllDataToSupabase(snapshot, state.supabaseConfig);
-    if (!saved.success) return { success: false, error: saved.error || saved.message };
+    const saved = await syncDebtPaymentToSupabase(tx,debt.id,state.supabaseConfig);
+    if (!saved.success) return { success: false, error: saved.error || 'Gagal menyimpan ke Supabase.' };
     financialVersion.current++;
     setState(prev => prev.currentUser.id !== state.currentUser.id ? prev : ({
       ...prev, debts: [debt, ...(prev.debts || []).filter(d => d.id !== debt.id)],
@@ -1008,75 +846,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true };
   };
 
-  const addDebt = async (item:Omit<DebtItem,'id'|'householdId'|'createdAt'>) => {
-    const newDebt:DebtItem={...item,id:crypto.randomUUID(),householdId:state.activeHouseholdId,createdAt:new Date().toISOString()};
-    const saved=await pushAllDataToSupabase({...state,transactions:[],ledgerEntries:[],debts:[newDebt]},state.supabaseConfig);
-    if(!saved.success)return {success:false,error:saved.error||saved.message};
-    setState(prev=>prev.currentUser.id!==state.currentUser.id?prev:({...prev,debts:[newDebt,...(prev.debts||[])]}));
-    return {success:true};
+  const addDebt=async(item:Omit<DebtItem,'id'|'householdId'|'createdAt'>)=>{
+    const debt:DebtItem={...item,id:crypto.randomUUID(),householdId:state.activeHouseholdId,createdAt:new Date().toISOString()};
+    const saved=await syncDebtToSupabase(debt,state.supabaseConfig);if(!saved.success)return saved;
+    setState(prev=>({...prev,debts:[debt,...(prev.debts||[])]}));return {success:true};
   };
-
-  const updateDebt = (id: string, updates: Partial<DebtItem>): { success: boolean; error?: string } => {
-    let updated: DebtItem | undefined;
-    setState(prev => {
-      const list = prev.debts || [];
-      const nextDebts = list.map(d => {
-        if (d.id !== id) return d;
-        updated = { ...d, ...updates };
-        return updated;
-      });
-      return {
-        ...prev,
-        debts: nextDebts
-      };
-    });
-    if (updated) {
-      syncDebtToSupabase(updated, state.supabaseConfig);
-      return { success: true };
-    }
-    return { success: false, error: 'Data utang tidak ditemukan' };
-  };
-
-  const toggleDebtSettled = (id: string) => {
-    let updated: DebtItem | undefined;
-    setState(prev => {
-      const list = prev.debts || [];
-      return {
-        ...prev,
-        debts: list.map(d => {
-          if (d.id === id) {
-            updated = { ...d, isSettled: !d.isSettled, remainingAmount: !d.isSettled ? 0 : d.amount };
-            return updated;
-          }
-          return d;
-        })
-      };
-    });
-    if (updated) syncDebtToSupabase(updated, state.supabaseConfig);
-  };
-
-  const toggleDebtPaidThisMonth = (id: string) => {
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    let updated: DebtItem | undefined;
-    setState(prev => {
-      const list = prev.debts || [];
-      return {
-        ...prev,
-        debts: list.map(d => {
-          if (d.id !== id) return d;
-          const willBePaid = !d.isPaidThisMonth;
-          updated = {
-            ...d,
-            isPaidThisMonth: willBePaid,
-            lastPaidMonth: willBePaid ? currentMonthKey : undefined
-          };
-          return updated;
-        })
-      };
-    });
-    if (updated) syncDebtToSupabase(updated, state.supabaseConfig);
-  };
+  const updateDebt=async(id:string,updates:Partial<DebtItem>)=>{const prior=(state.debts||[]).find(d=>d.id===id);if(!prior)return {success:false,error:'Data utang tidak ditemukan.'};const next={...prior,...updates,id:prior.id,householdId:prior.householdId};const saved=await syncDebtToSupabase(next,state.supabaseConfig);if(saved.success)setState(prev=>({...prev,debts:(prev.debts||[]).map(d=>d.id===id?next:d)}));return saved;};
+  const toggleDebtSettled=async(id:string)=>{const d=(state.debts||[]).find(d=>d.id===id);return d?updateDebt(id,{isSettled:!d.isSettled,remainingAmount:!d.isSettled?0:d.amount}):{success:false,error:'Utang tidak ditemukan.'};};
+  const toggleDebtPaidThisMonth=async(id:string)=>{const d=(state.debts||[]).find(d=>d.id===id);return d?updateDebt(id,{isPaidThisMonth:!d.isPaidThisMonth,lastPaidMonth:jakartaDateTime(new Date().toISOString()).date.slice(0,7)}):{success:false,error:'Utang tidak ditemukan.'};};
 
   const payDebtInstallment = async (id: string, walletId?: string, imageUrl?: string): Promise<{ success: boolean; error?: string }> => {
     const debt = (state.debts || []).find(d => d.id === id);
@@ -1097,19 +874,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const deleteDebt = (id: string) => {
-    setState(prev => {
-      const list = prev.debts || [];
-      return {
-        ...prev,
-        debts: list.filter(d => d.id !== id)
-      };
-    });
-    deleteDebtFromSupabase(id, state.supabaseConfig);
-  };
+  const deleteDebt=async(id:string)=>{const saved=await deleteDebtFromSupabase(id,state.supabaseConfig);if(saved.success)setState(prev=>({...prev,debts:(prev.debts||[]).filter(d=>d.id!==id)}));return saved;};
   const categoryWritable = () => state.households.some(h=>h.id===state.activeHouseholdId&&h.createdById===state.currentUser.id)
     || state.members.some(m=>m.householdId===state.activeHouseholdId&&m.userId===state.currentUser.id&&m.role!=='VIEWER');
-  const addCategory = async (name:string,type:'income'|'expense'|'transfer',icon='Tag',color='#0F766E') => {
+  const addCategory = async (name:string,type:'income'|'expense'|'transfer',icon='Tag',color='#06D6A0') => {
     if(!categoryWritable())return {success:false,error:'Anda tidak dapat mengubah kategori household ini.'};
     const clean=name.trim();if(!clean)return {success:false,error:'Nama kategori wajib diisi.'};
     const existing=state.categories.find(c=>c.householdId===state.activeHouseholdId&&!c.isArchived&&c.type===type&&c.name.trim().toLowerCase()===clean.toLowerCase());
@@ -1140,21 +908,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Add new Label directly
-  const addLabel = (name: string) => {
-    const cleanName = name.trim();
-    if (!cleanName) return;
-    setState(prev => {
-      const current = prev.labels || [];
-      if (current.includes(cleanName)) return prev;
-      return {
-        ...prev,
-        labels: [...current, cleanName]
-      };
-    });
-  };
+  const addLabel=async(name:string)=>{const clean=name.trim();if(!clean)return {success:false,error:'Nama label wajib diisi.'};const {error}=await getReceiptAuthClient().from('household_labels').upsert({id:state.activeHouseholdId+':'+clean,household_id:state.activeHouseholdId,name:clean});if(error)return {success:false,error:error.message};setState(prev=>({...prev,labels:[...new Set([...prev.labels,clean])]}));return {success:true};};
 
   // Add new wallet
-  const addWallet = (name: string, type: WalletType, openingBalance = 0, color = '#0F766E') => {
+  const addWallet = async (name: string, type: WalletType, openingBalance = 0, color = '#06D6A0') => {
     const walletId = `w-${Date.now()}`;
     const dateNow = new Date().toISOString();
 
@@ -1205,16 +962,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       });
     }
 
+    const saved=await syncWalletToSupabase(newWallet,state.supabaseConfig);if(!saved.success)return saved;
+    for(const tx of newTxs){const savedTx=await syncTransactionToSupabase(tx,state.supabaseConfig);if(!savedTx.success)return savedTx;}
     setState(prev => ({
       ...prev,
       wallets: [...prev.wallets, newWallet],
       transactions: [...newTxs, ...prev.transactions],
       ledgerEntries: [...prev.ledgerEntries, ...newLedgers]
     }));
+    return {success:true};
   };
 
   // Update existing wallet
-  const updateWallet = (
+  const updateWallet = async (
     walletId: string,
     updates: {
       name?: string;
@@ -1223,7 +983,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       institutionName?: string;
       targetBalance?: number;
     }
-  ): { success: boolean; error?: string } => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const target = state.wallets.find(w => w.id === walletId);
     if (!target) return { success: false, error: 'Dompet tidak ditemukan' };
 
@@ -1277,7 +1037,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           createdAt: dateNow
         });
 
-        syncTransactionToSupabase(adjTx, state.supabaseConfig);
+
       }
     }
 
@@ -1291,6 +1051,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updatedAt: dateNow
     };
 
+    const savedWallet=await syncWalletToSupabase(updatedWallet,state.supabaseConfig);if(!savedWallet.success)return savedWallet;
+    for(const tx of newTxs){const savedTx=await syncTransactionToSupabase(tx,state.supabaseConfig);if(!savedTx.success)return savedTx;}
     setState(prev => ({
       ...prev,
       wallets: prev.wallets.map(w => (w.id === walletId ? updatedWallet : w)),
@@ -1298,12 +1060,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ledgerEntries: newLedgers.length ? [...prev.ledgerEntries, ...newLedgers] : prev.ledgerEntries
     }));
 
-    syncWalletToSupabase(updatedWallet, state.supabaseConfig);
+
     return { success: true };
   };
 
   // Delete or archive wallet
-  const deleteWallet = (walletId: string): { success: boolean; error?: string } => {
+  const deleteWallet = async (walletId: string): Promise<{ success: boolean; error?: string }> => {
     const target = state.wallets.find(w => w.id === walletId);
     if (!target) return { success: false, error: 'Dompet tidak ditemukan' };
 
@@ -1317,6 +1079,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       t => t.sourceWalletId === walletId || t.destinationWalletId === walletId
     );
 
+    const saved=hasTransactions?await syncWalletToSupabase({...target,isArchived:true,updatedAt:new Date().toISOString()},state.supabaseConfig):await deleteWalletFromSupabase(walletId,state.supabaseConfig);if(!saved.success)return saved;
     setState(prev => {
       if (hasTransactions) {
         return {
@@ -1330,7 +1093,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
     });
 
-    deleteWalletFromSupabase(walletId, state.supabaseConfig);
+
     return { success: true };
   };
 
@@ -1346,32 +1109,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setState(prev => ({ ...prev, activeHouseholdId: householdId }));
     }
   };
-  const createHousehold = (name: string) => {
-    const id = `household-${Date.now()}`;
-    const code = 'DK-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
-    const newH: Household = {
-      id,
-      name: name.trim() || 'Rumah Tangga Baru',
-      baseCurrency: 'IDR',
-      createdById: state.currentUser.id,
-      inviteCode: code,
-      createdAt: new Date().toISOString()
-    };
-    setState(prev => ({
-      ...prev,
-      households: [...prev.households, newH],
-      activeHouseholdId: id
-    }));
-  };
-
-  const updateHousehold = (householdId: string, name: string) => {
-    const clean = name.trim();
-    if (!clean) return;
-    setState(prev => ({
-      ...prev,
-      households: prev.households.map(h => (h.id === householdId ? { ...h, name: clean } : h))
-    }));
-  };
+  const createHousehold=async(name:string)=>{const now=new Date().toISOString();const household:Household={id:crypto.randomUUID(),name:name.trim()||'Rumah Tangga',baseCurrency:'IDR',createdById:state.currentUser.id,inviteCode:'TK-'+crypto.randomUUID().slice(0,12).toUpperCase(),createdAt:now};const {error}=await getReceiptAuthClient().from('households').insert({id:household.id,name:household.name,base_currency:'IDR',created_by_id:household.createdById,invite_code:household.inviteCode,created_at:now});if(error)return {success:false,error:error.message};setState(prev=>({...prev,households:[...prev.households,household],activeHouseholdId:household.id}));return {success:true};};
+  const updateHousehold=async(id:string,name:string)=>{if(!name.trim())return {success:false,error:'Nama household wajib diisi.'};const {error}=await getReceiptAuthClient().from('households').update({name:name.trim()}).eq('id',id).select('id').single();if(error)return {success:false,error:error.message};setState(prev=>({...prev,households:prev.households.map(h=>h.id===id?{...h,name:name.trim()}:h)}));return {success:true};};
 
   const deleteHousehold = async (householdId: string): Promise<{ success: boolean; error?: string }> => {
     const target = allHouseholds.find(h => h.id === householdId);
@@ -1566,21 +1305,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setState(initialData);
     localStorage.removeItem(STORAGE_KEY);
   };
-  const verifyAndUnlock = (pin: string): boolean => {
-    if (state.currentUser.role === 'ADMIN' || state.currentUser.username === 'admin' || state.currentUser.username === 'superadmin') {
-      if (pin === '99999') {
-        setState(prev => ({ ...prev, isLocked: false }));
-        return true;
-      }
-      return false;
-    }
-    const currentPin = state.currentUser.pinHash || '12345';
-    if (pin === currentPin || pin === '12345') {
-      setState(prev => ({ ...prev, isLocked: false }));
-      return true;
-    }
-    return false;
-  };
+  const verifyAndUnlock = async(pin:string)=>{const result=await authenticateAccount(state.currentUser.username,pin);if(result.success)setState(prev=>({...prev,isLocked:false}));return result.success;};
   const getClientDeviceInfo = () => {
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown';
     let device = 'Laptop / PC';
@@ -1607,260 +1332,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return sessions.find(s => s.id === state.activeSessionId) || sessions.find(s => s.isCurrent) || sessions[0] || null;
   }, [sessions, state.activeSessionId]);
 
-  const loginUser = async (username: string, code5Digit: string): Promise<{ success: boolean; error?: string }> => {
-    const cleanUser = username.trim().toLowerCase();
-    const cleanCode = code5Digit.trim();
-
-    if (!cleanUser) {
-      return { success: false, error: 'Silakan isi username.' };
-    }
-    if (cleanCode.length !== 5) {
-      return { success: false, error: 'Kode unik harus 5 digit angka.' };
-    }
-
-    const { device, browser } = getClientDeviceInfo();
-    const now = new Date().toISOString();
-    const newSessionId = `sess-${Date.now()}`;
-
-    // ROLE 1: DEDICATED SUPERADMIN (Khusus kelola user, AI, Supabase, sesi - tidak ikut pencatatan)
-    if (cleanUser === 'admin' || cleanUser === 'superadmin') {
-      if (cleanCode !== '99999') {
-        return { success: false, error: 'Kode akses superadmin tidak cocok.' };
+  const loginUser=async(username:string,pin:string)=>{
+    const result=await authenticateAccount(username,pin);
+    if(!result.success||!result.user)return {success:false,error:result.error||'Login gagal.'};
+    const user=result.user;
+    try {
+      let next={...createFreshUserData(user.username,user.displayName,''),currentUser:user,isAuthenticated:true,isLocked:false};
+      if(user.role==='ADMIN'){const adminData=await pullAllDataFromSupabase(DEFAULT_SUPABASE_CONFIG);if(!adminData.success)throw new Error(adminData.error||'Gagal memuat data admin.');next={...next,...adminData.data,currentUser:user};}
+      if(user.role!=='ADMIN'){
+        const hydrated=await loadUserFinancialData(user.id,localStorage.getItem('takara_household_'+user.id));
+        next={...next,...hydrated.data,currentUser:user,activeHouseholdId:hydrated.householdId,ledgerEntries:reconstructMissingLedgers(hydrated.data.transactions||[],hydrated.data.ledgerEntries||[],hydrated.householdId,hydrated.data.wallets||[])};
+        loadedHousehold.current=user.id+':'+hydrated.householdId;
       }
-
-      const adminSession: UserSession = {
-        id: newSessionId,
-        userId: 'user-admin',
-        username: 'admin',
-        displayName: 'Super Administrator',
-        role: 'ADMIN',
-        device,
-        browser,
-        loginAt: now,
-        lastActiveAt: now,
-        ipAddress: '127.0.0.1 (Lokal)',
-        isCurrent: true
-      };
-
-      const updatedState: AppState = {
-        ...state,
-        currentUser: {
-          id: 'user-admin',
-          username: 'admin',
-          displayName: 'Super Administrator',
-          pinHash: '99999',
-          role: 'ADMIN',
-          createdAt: now
-        },
-        isAuthenticated: true,
-        isLocked: false,
-        activeSessionId: newSessionId,
-        sessions: [adminSession, ...(state.sessions || []).map(s => ({ ...s, isCurrent: false }))]
-      };
-
-      setState(updatedState);
-      localStorage.setItem(CURRENT_USER_KEY, 'admin');
-      return { success: true };
-    }
-
-    // ROLE 2: USER KELUARGA (Pencatatan Keuangan Rumah Tangga)
-    // Cek di daftar registeredUsers - TIDAK auto-register sembarangan di form login
-    const remoteUsers=await fetchUsersFromSupabase(DEFAULT_SUPABASE_CONFIG);
-    if(!remoteUsers.success)return {success:false,error:remoteUsers.error||'Supabase belum dapat dihubungi.'};
-    let userRecord=remoteUsers.users.find(u=>u.username.toLowerCase()===cleanUser);
-    if (!userRecord) {
-      return {
-        success: false,
-        error: `Username "${cleanUser}" belum terdaftar. Silakan buka tab "Daftar Baru" untuk membuat akun.`
-      };
-    }
-
-    const expectedPin = userRecord.pinHash;
-    if (cleanCode !== expectedPin) {
-      return { success: false, error: `PIN 5-digit tidak cocok untuk akun @${cleanUser}.` };
-    }
-
-    const freshTemplate = createFreshUserData(cleanUser, userRecord.displayName, cleanCode);
-    let targetState: AppState = freshTemplate;
-
-    const userKey = getUserStorageKey(cleanUser);
-    const saved = localStorage.getItem(userKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Partial<AppState>;
-        if (parsed && typeof parsed === 'object') {
-          targetState = {
-            ...freshTemplate,
-            ...parsed,
-            currentUser: {
-              ...freshTemplate.currentUser,
-              ...(parsed.currentUser || {})
-            },
-            households: (parsed.households && parsed.households.length > 0) ? parsed.households : freshTemplate.households,
-            activeHouseholdId: parsed.activeHouseholdId || freshTemplate.activeHouseholdId,
-            wallets: (parsed.wallets && parsed.wallets.length > 0) ? parsed.wallets : freshTemplate.wallets,
-            categories: (parsed.categories && parsed.categories.length > 0) ? parsed.categories : freshTemplate.categories,
-            labels: (parsed.labels && parsed.labels.length > 0) ? parsed.labels : freshTemplate.labels,
-            members: Array.isArray(parsed.members) && parsed.members.length > 0 ? parsed.members : freshTemplate.members,
-            sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-            transactions: [],
-            ledgerEntries: [],
-            debts: [],
-            aiConfig: getSystemAIConfig(),
-            supabaseConfig: DEFAULT_SUPABASE_CONFIG,
-          };
-        }
-      } catch {
-        targetState = freshTemplate;
-      }
-    }
-    const newSession: UserSession = {
-      id: newSessionId,
-      userId: targetState.currentUser.id,
-      username: cleanUser,
-      displayName: targetState.currentUser.displayName,
-      role: targetState.currentUser.role || 'OWNER',
-      device,
-      browser,
-      loginAt: now,
-      lastActiveAt: now,
-      ipAddress: '127.0.0.1 (Lokal)',
-      isCurrent: true
-    };
-
-    let hydrated: Awaited<ReturnType<typeof loadUserFinancialData>>;
-    try { hydrated=await loadUserFinancialData(userRecord.id,localStorage.getItem('takara_household_'+userRecord.id)); }
-    catch(error){return {success:false,error:error instanceof Error?error.message:'Gagal memuat saldo household.'};}
-    targetState={...targetState,...hydrated.data,currentUser:{...userRecord,pinHash:cleanCode},activeHouseholdId:hydrated.householdId,
-      ledgerEntries:reconstructMissingLedgers(hydrated.data.transactions||[],hydrated.data.ledgerEntries||[],hydrated.householdId,hydrated.data.wallets||[])};
-    loadedHousehold.current=userRecord.id+':'+hydrated.householdId;
-    setIsFinancialReady(true);
-    setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
-    const priorSessions = (targetState.sessions || []).map(s => ({ ...s, isCurrent: false }));
-
-    const updatedState: AppState = {
-      ...targetState,
-      isAuthenticated: true,
-      isLocked: false,
-      activeSessionId: newSessionId,
-      sessions: [newSession, ...priorSessions.slice(0, 15)]
-    };
-
-    setState(updatedState);
-    localStorage.setItem(userKey, serializeSessionState(updatedState));
-    localStorage.setItem(CURRENT_USER_KEY, cleanUser);
-    if (cleanUser !== 'admin') {
-      // Pastikan user terdaftar di tabel app_users Supabase
-      if (userRecord) {
-        syncUsersToSupabase([userRecord], updatedState.supabaseConfig).catch(() => {});
-      }
-
-
-    }
-
-    return { success: true };
+      setIsFinancialReady(true);setAuthReady(true);setState(next);localStorage.setItem(CURRENT_USER_KEY,user.username);
+      setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
+      return {success:true};
+    }catch(error){await signOutAccount();return {success:false,error:error instanceof Error?error.message:'Gagal memuat household.'};}
   };
-
-  const registerUser = (
-    displayName: string,
-    username: string,
-    pin5Digit: string,
-    householdCode?: string
-  ): { success: boolean; error?: string } => {
-    const cleanName = displayName.trim();
-    const cleanUser = username.trim().toLowerCase();
-    const cleanPin = pin5Digit.trim();
-    const cleanCode = (householdCode || '').trim().toUpperCase();
-
-    if (!cleanName) return { success: false, error: 'Nama lengkap wajib diisi.' };
-    if (!cleanUser || cleanUser.length < 3) return { success: false, error: 'Username minimal 3 karakter.' };
-    if (!/^[a-z0-9_-]+$/.test(cleanUser)) return { success: false, error: 'Username hanya boleh huruf kecil, angka, dan dash/underscore.' };
-    if (cleanUser === 'admin') return { success: false, error: 'Username "admin" khusus untuk Admin Dashboard.' };
-    if (cleanPin.length !== 5 || !/^\d{5}$/.test(cleanPin)) return { success: false, error: 'PIN harus berupa 5 digit angka.' };
-
-    if (registeredUsers.some(u => u.username.toLowerCase() === cleanUser)) {
-      return { success: false, error: `Username "${cleanUser}" sudah terdaftar. Silakan pilih username lain.` };
-    }
-
-    const now = new Date().toISOString();
-    let targetHousehold: Household | undefined;
-
-    // Jika user menginput kode household untuk gabung keluarga
-    if (cleanCode) {
-      targetHousehold = allHouseholds.find(h => (h.inviteCode || '').trim().toUpperCase() === cleanCode);
-      if (!targetHousehold) {
-        return {
-          success: false,
-          error: `Kode Household "${householdCode}" tidak ditemukan. Silakan periksa kembali kodenya atau kosongkan untuk membuat pembukuan keluarga baru.`
-        };
-      }
-    }
-
-    const assignedRole: UserRole = targetHousehold ? 'MEMBER' : 'OWNER';
-
-    const newUser: User = {
-      id: `user-${cleanUser}`,
-      username: cleanUser,
-      displayName: cleanName,
-      pinHash: cleanPin,
-      role: assignedRole,
-      createdAt: now
-    };
-
-    let freshState: AppState;
-
-    if (targetHousehold) {
-      const newMember: HouseholdMember = {
-        id: `mem-${cleanUser}-${Date.now()}`,
-        householdId: targetHousehold.id,
-        userId: `user-${cleanUser}`,
-        displayName: cleanName,
-        role: 'MEMBER',
-        joinedAt: now
-      };
-
-      let ownerState: Partial<AppState> | null = null;
-      try {
-        const ownerUserKey = getUserStorageKey(targetHousehold.createdById.replace('user-', ''));
-        const ownerSaved = localStorage.getItem(ownerUserKey);
-        if (ownerSaved) ownerState = JSON.parse(ownerSaved);
-      } catch {}
-
-      const base = createFreshUserData(cleanUser, cleanName, cleanPin);
-      freshState = {
-        ...base,
-        currentUser: newUser,
-        households: [targetHousehold],
-        activeHouseholdId: targetHousehold.id,
-        members: [...(ownerState?.members || []), newMember],
-        wallets: (ownerState?.wallets && ownerState.wallets.length > 0) ? ownerState.wallets : base.wallets,
-        categories: (ownerState?.categories && ownerState.categories.length > 0) ? ownerState.categories : base.categories,
-        labels: ownerState?.labels || base.labels,
-        transactions: ownerState?.transactions || [],
-        ledgerEntries: ownerState?.ledgerEntries || []
-      };
-    } else {
-      freshState = createFreshUserData(cleanUser, cleanName, cleanPin);
-    }
-
-    const userKey = getUserStorageKey(cleanUser);
-    localStorage.setItem(userKey, serializeSessionState(freshState));
-
-    setRegisteredUsers(prev => [...prev, newUser]);
-    setState(freshState);
-    localStorage.setItem(CURRENT_USER_KEY, cleanUser);
-
-    // Langsung kirim ke Supabase (dan masukkan antrean jika offline)
-    syncUsersToSupabase([newUser], freshState.supabaseConfig).catch(() => {});
-    pushAllDataToSupabase(freshState, freshState.supabaseConfig)
-      .then(res => {
-        if (!res.success) enqueueStateSync(freshState);
-      })
-      .catch(() => {
-        enqueueStateSync(freshState);
-      });
-
-    return { success: true };
+  const registerUser=async(displayName:string,username:string,pin:string,householdCode?:string)=>{
+    const result=await registerAccount(displayName,username,pin,householdCode);if(!result.success)return result;
+    return loginUser(username,pin);
   };
 
   const joinHouseholdByCode = async (inviteCode: string): Promise<{ success: boolean; error?: string }> => {
@@ -1883,150 +1374,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Gagal bergabung ke Supabase.' }; }
   };
 
-  const adminCreateUser = (
-    displayName: string,
-    username: string,
-    pin5Digit: string,
-    role: UserRole = 'OWNER'
-  ): { success: boolean; error?: string } => {
-    const cleanName = displayName.trim();
-    const cleanUser = username.trim().toLowerCase();
-    const cleanPin = pin5Digit.trim();
-
-    if (!cleanName) return { success: false, error: 'Nama lengkap wajib diisi.' };
-    if (!cleanUser || cleanUser.length < 3) return { success: false, error: 'Username minimal 3 karakter.' };
-    if (!/^[a-z0-9_-]+$/.test(cleanUser)) return { success: false, error: 'Username hanya boleh huruf kecil, angka, dan dash/underscore.' };
-    if (cleanUser === 'admin') return { success: false, error: 'Username "admin" khusus untuk Admin Dashboard.' };
-    if (cleanPin.length !== 5 || !/^\d{5}$/.test(cleanPin)) return { success: false, error: 'PIN harus berupa 5 digit angka.' };
-
-    if (registeredUsers.some(u => u.username.toLowerCase() === cleanUser)) {
-      return { success: false, error: `Username "${cleanUser}" sudah terdaftar.` };
-    }
-
-    const newUser: User = {
-      id: `user-${cleanUser}`,
-      username: cleanUser,
-      displayName: cleanName,
-      pinHash: cleanPin,
-      role,
-      createdAt: new Date().toISOString()
-    };
-
-    const freshState = createFreshUserData(cleanUser, cleanName, cleanPin);
-    freshState.currentUser.role = role;
-    const userKey = getUserStorageKey(cleanUser);
-    localStorage.setItem(userKey, serializeSessionState(freshState));
-
-    setRegisteredUsers(prev => [...prev, newUser]);
-
-    // Langsung kirim user & household baru ke Supabase
-    syncUsersToSupabase([newUser], freshState.supabaseConfig).catch(() => {});
-    pushAllDataToSupabase(freshState, freshState.supabaseConfig)
-      .then(res => {
-        if (!res.success) enqueueStateSync(freshState);
-      })
-      .catch(() => {
-        enqueueStateSync(freshState);
-      });
-
-    return { success: true };
+  const adminCreateUser=async(displayName:string,username:string,pin:string,role:UserRole='OWNER')=>{
+    const result=await adminCreateAccount(displayName,username,pin,role);if(result.success&&result.user)setRegisteredUsers(prev=>[...prev,result.user!]);return result;
   };
-
-  const updateRegisteredUser = (
-    targetUsername: string,
-    updates: { displayName?: string; pin5Digit?: string; role?: UserRole }
-  ): { success: boolean; error?: string } => {
-    const clean = targetUsername.trim().toLowerCase();
-    let found = false;
-
-    setRegisteredUsers(prev =>
-      prev.map(u => {
-        if (u.username.toLowerCase() !== clean) return u;
-        found = true;
-        return {
-          ...u,
-          displayName: updates.displayName?.trim() || u.displayName,
-          pinHash: updates.pin5Digit?.trim() || u.pinHash,
-          role: updates.role || u.role
-        };
-      })
-    );
-
-    if (!found) return { success: false, error: 'User tidak ditemukan.' };
-
-    const userKey = getUserStorageKey(clean);
-    const saved = localStorage.getItem(userKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.currentUser) {
-          parsed.currentUser.displayName = updates.displayName?.trim() || parsed.currentUser.displayName;
-          if (updates.pin5Digit?.trim()) parsed.currentUser.pinHash = updates.pin5Digit.trim();
-          if (updates.role) parsed.currentUser.role = updates.role;
-          localStorage.setItem(userKey, serializeSessionState(parsed));
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    return { success: true };
+  const updateRegisteredUser=async(username:string,updates:{displayName?:string;pin5Digit?:string;role?:UserRole})=>{
+    const user=registeredUsers.find(u=>u.username===username);if(!user)return {success:false,error:'User tidak ditemukan.'};
+    const result=await adminUpdateAccount(user.id,updates);if(result.success)setRegisteredUsers(prev=>prev.map(u=>u.id===user.id?{...u,displayName:updates.displayName||u.displayName,role:updates.role||u.role,pinHash:''}:u));return result;
   };
+  const deleteUser=async(username:string)=>{const user=registeredUsers.find(u=>u.username===username);if(!user)return {success:false,error:'User tidak ditemukan.'};const result=await adminDeleteAccount(user.id);if(result.success)setRegisteredUsers(prev=>prev.filter(u=>u.id!==user.id));return result;};
 
-  const deleteUser = (targetUsername: string): { success: boolean; error?: string } => {
-    const clean = targetUsername.trim().toLowerCase();
-    if (clean === 'admin') return { success: false, error: 'User admin tidak dapat dihapus.' };
-
-    setRegisteredUsers(prev => prev.filter(u => u.username.toLowerCase() !== clean));
-    localStorage.removeItem(getUserStorageKey(clean));
-    setState(prev => ({
-      ...prev,
-      members: prev.members.filter(m => m.userId !== `user-${clean}`)
-    }));
-
-    if (state.currentUser?.username.toLowerCase() === clean) {
-      logoutUser();
-    }
-    return { success: true };
-  };
-
-  const addMemberToHousehold = (
-    householdId: string,
-    displayName: string,
-    username: string,
-    role: UserRole = 'MEMBER'
-  ): { success: boolean; error?: string } => {
-    const cleanName = displayName.trim();
-    const cleanUser = username.trim().toLowerCase();
-    if (!householdId) return { success: false, error: 'ID household tidak valid.' };
-    if (!cleanName) return { success: false, error: 'Nama anggota wajib diisi.' };
-
-    const newMemId = `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const newMem: HouseholdMember = {
-      id: newMemId,
-      householdId,
-      userId: cleanUser ? `user-${cleanUser}` : `user-${Date.now()}`,
-      displayName: cleanName,
-      role,
-      joinedAt: new Date().toISOString()
-    };
-
-    setState(prev => ({
-      ...prev,
-      members: [...prev.members, newMem]
-    }));
-    return { success: true };
-  };
-
-  const removeMemberFromHousehold = (memberId: string): { success: boolean; error?: string } => {
-    setState(prev => ({
-      ...prev,
-      members: prev.members.filter(m => m.id !== memberId)
-    }));
-    return { success: true };
-  };
+  const addMemberToHousehold=async(householdId:string,displayName:string,username:string,role:UserRole='MEMBER')=>{const user=registeredUsers.find(u=>u.username===username.trim().toLowerCase());if(!user)return {success:false,error:'Akun belum terdaftar. Buat akun atau gunakan kode undangan.'};const mem:HouseholdMember={id:crypto.randomUUID(),householdId,userId:user.id,displayName:displayName.trim()||user.displayName,role,joinedAt:new Date().toISOString()};const {error}=await getReceiptAuthClient().from('household_members').insert({id:mem.id,household_id:mem.householdId,user_id:mem.userId,display_name:mem.displayName,role:mem.role,joined_at:mem.joinedAt});if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:[...prev.members,mem]}));return {success:true};};
+  const removeMemberFromHousehold=async(id:string)=>{const {error}=await getReceiptAuthClient().from('household_members').delete().eq('id',id);if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:prev.members.filter(m=>m.id!==id)}));return {success:true};};
 
   const logoutUser = () => {
+    void signOutAccount();
     loadedHousehold.current='';setIsFinancialReady(false);
     clearReceiptSession(state.currentUser.id);
     setState(prev => {
@@ -2067,90 +1428,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       sessions: (prev.sessions || initialData.sessions || []).filter(s => s.id !== sessionId)
     }));
   };
-  const inviteMember = (displayName: string, username: string, role: UserRole, pin5Digit: string): { success: boolean; error?: string } => {
-    const cleanName = displayName.trim();
-    const cleanUser = username.trim().toLowerCase();
-    const cleanPin = pin5Digit.trim();
-
-    if (!cleanName) return { success: false, error: 'Nama anggota keluarga wajib diisi.' };
-    if (cleanPin.length !== 5) return { success: false, error: 'Kode unik harus 5 digit angka.' };
-
-    const newMemId = `mem-${Date.now()}`;
-    const newUserId = `user-${cleanUser || Date.now()}`;
-
-    const newMember: HouseholdMember = {
-      id: newMemId,
-      householdId: state.activeHouseholdId,
-      userId: newUserId,
-      displayName: cleanName,
-      role: role || 'MEMBER',
-      joinedAt: new Date().toISOString()
-    };
-
-    setState(prev => ({
-      ...prev,
-      members: [...prev.members, newMember]
-    }));
-    if (cleanUser) {
-      setRegisteredUsers(prev => {
-        if (prev.some(u => u.username.toLowerCase() === cleanUser)) return prev;
-        const newUser: User = {
-          id: newUserId,
-          username: cleanUser,
-          displayName: cleanName,
-          pinHash: cleanPin,
-          role,
-          createdAt: new Date().toISOString()
-        };
-        return [...prev, newUser];
-      });
-    }
-
-    return { success: true };
-  };
-  const updateMember = (
-    memberId: string,
-    updates: { displayName?: string; role?: UserRole; username?: string; pin5Digit?: string }
-  ): { success: boolean; error?: string } => {
-    let updatedMem: HouseholdMember | undefined;
-    setState(prev => {
-      const nextMembers = prev.members.map(m => {
-        if (m.id !== memberId) return m;
-        const cleanName = updates.displayName?.trim() || m.displayName;
-        const cleanRole = updates.role || m.role;
-        updatedMem = {
-          ...m,
-          displayName: cleanName,
-          role: cleanRole
-        };
-        return updatedMem;
-      });
-
-      let nextCurrentUser = prev.currentUser;
-      if (prev.currentUser && (prev.currentUser.id === memberId || prev.currentUser.id === updatedMem?.userId)) {
-        nextCurrentUser = {
-          ...prev.currentUser,
-          displayName: updates.displayName?.trim() || prev.currentUser.displayName,
-          role: updates.role || prev.currentUser.role,
-          ...(updates.pin5Digit ? { pinHash: updates.pin5Digit.trim() } : {})
-        };
-      }
-
-      return {
-        ...prev,
-        members: nextMembers,
-        currentUser: nextCurrentUser
-      };
-    });
-    return { success: true };
-  };
-
-  const removeMember = (memberId: string) => {
-    setState(prev => ({
-      ...prev,
-      members: prev.members.filter(m => m.id !== memberId)
-    }));
-  };
+  const inviteMember=async(displayName:string,username:string,role:UserRole,pin:string)=>{const result=await inviteAccount(displayName,username,pin,state.activeHouseholdId,role);if(!result.success)return result;const membership=await fetchUserHouseholds(state.currentUser.id);setState(prev=>({...prev,members:membership.members,households:membership.households}));return {success:true};};
+  const updateMember=async(id:string,updates:{displayName?:string;role?:UserRole;username?:string;pin5Digit?:string})=>{const mem=state.members.find(m=>m.id===id);if(!mem)return {success:false,error:'Anggota tidak ditemukan.'};if(updates.pin5Digit||updates.username){const account=await adminUpdateAccount(mem.userId,updates);if(!account.success)return account;}const {error}=await getReceiptAuthClient().from('household_members').update({display_name:updates.displayName||mem.displayName,role:updates.role||mem.role}).eq('id',id);if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:prev.members.map(m=>m.id===id?{...m,displayName:updates.displayName||m.displayName,role:updates.role||m.role}:m)}));return {success:true};};
+  const removeMember=removeMemberFromHousehold;
 
   const updateAIConfig = (cfg: Partial<AIConfig>) => {
     const updated = saveSystemAIConfig(cfg);
@@ -2171,15 +1451,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setState(prev => ({ ...prev, isLocked: true }));
   };
 
-  const updatePIN = (newPin: string) => {
-    setState(prev => ({
-      ...prev,
-      currentUser: {
-        ...prev.currentUser,
-        pinHash: newPin
-      }
-    }));
+  const updatePIN=async(newPin:string,currentPin:string)=>{
+    if(!/^\d{5}$/.test(newPin))return {success:false,error:'PIN harus 5 digit angka.'};
+    const saved=await changeAccountPin(currentPin,newPin);if(!saved.success)return saved;
+    setState(prev=>({...prev,currentUser:{...prev.currentUser,pinHash:''}}));return {success:true};
   };
+
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<{
     status: 'idle' | 'syncing' | 'synced' | 'error';
     lastSynced?: string;
@@ -2228,11 +1505,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  useEffect(()=>{
+    if(!authReady||!state.isAuthenticated||!state.activeHouseholdId)return;
+    const householdId=state.activeHouseholdId,userId=state.currentUser.id,admin=state.currentUser.role==='ADMIN';
+    let disposed=false,refreshing=false,refreshTimer:ReturnType<typeof setTimeout>|undefined;
+    const refresh=async()=>{
+      if(disposed||refreshing||activeMutationCount.current||document.visibilityState==='hidden')return;
+      refreshing=true;const version=financialVersion.current;
+      try{
+        const pulled=await pullAllDataFromSupabase(DEFAULT_SUPABASE_CONFIG,admin?undefined:householdId);
+        if(disposed||activeMutationCount.current||version!==financialVersion.current)return;
+        if(!pulled.success||!pulled.data){setSupabaseSyncStatus({status:'error',error:pulled.error||'Pembaruan household belum tersedia.'});return;}
+        setState(prev=>prev.currentUser.id!==userId||prev.activeHouseholdId!==householdId?prev:({...prev,...pulled.data,currentUser:prev.currentUser,activeHouseholdId:householdId,ledgerEntries:reconstructMissingLedgers(pulled.data!.transactions||[],pulled.data!.ledgerEntries||[],householdId,pulled.data!.wallets||[])}));
+        setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
+      }catch{if(!disposed)setSupabaseSyncStatus({status:'error',error:'Belum dapat memperbarui household. Periksa koneksi Anda.'});}finally{refreshing=false;}
+    };
+    const schedule=()=>{if(refreshTimer)clearTimeout(refreshTimer);refreshTimer=setTimeout(refresh,400);};
+    const client=getReceiptAuthClient();let channel=client.channel('takara-household-'+householdId+'-'+userId);
+    for(const table of ['transactions','ledger_entries','wallets','categories','debts','household_members','household_labels'])channel=channel.on('postgres_changes',{event:'*',schema:'public',table,...(!admin?{filter:'household_id=eq.'+householdId}:{})},schedule);
+    channel.subscribe();
+    const interval=setInterval(refresh,30000);
+    window.addEventListener('focus',schedule);document.addEventListener('visibilitychange',schedule);
+    return()=>{disposed=true;if(refreshTimer)clearTimeout(refreshTimer);clearInterval(interval);window.removeEventListener('focus',schedule);document.removeEventListener('visibilitychange',schedule);void client.removeChannel(channel);};
+  },[authReady,state.isAuthenticated,state.activeHouseholdId,state.currentUser.id,state.currentUser.role]);
+
   return (
     <AppContext.Provider
       value={{
         state,
         isFinancialReady,
+        isAuthReady:authReady,
         activeHousehold,
         households: userHouseholds,
         wallets,
@@ -2245,40 +1547,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         periodIncome,
         periodExpense,
         netCashFlow,
-        addTransaction,
-        voidTransaction,
-        clearCurrentMonthTransactions,
-        editTransaction,
+        addTransaction:(...args)=>duringWrite(()=>addTransaction(...args)),
+        voidTransaction:(...args)=>duringWrite(()=>voidTransaction(...args)),
+        clearCurrentMonthTransactions:(...args)=>duringWrite(()=>clearCurrentMonthTransactions(...args)),
+        editTransaction:(...args)=>duringWrite(()=>editTransaction(...args)),
         debts,
-        addDebt,
-        toggleDebtSettled,
-        toggleDebtPaidThisMonth,
-        payDebtInstallment,
-        updateDebt,
-        deleteDebt,
-        addWallet,
-        updateWallet,
-        deleteWallet,
-        addCategory,
-        updateCategory,
-        deleteCategory,
-        addLabel,
+        addDebt:(...args)=>duringWrite(()=>addDebt(...args)),
+        toggleDebtSettled:(...args)=>duringWrite(()=>toggleDebtSettled(...args)),
+        toggleDebtPaidThisMonth:(...args)=>duringWrite(()=>toggleDebtPaidThisMonth(...args)),
+        payDebtInstallment:(...args)=>duringWrite(()=>payDebtInstallment(...args)),
+        updateDebt:(...args)=>duringWrite(()=>updateDebt(...args)),
+        deleteDebt:(...args)=>duringWrite(()=>deleteDebt(...args)),
+        addWallet:(...args)=>duringWrite(()=>addWallet(...args)),
+        updateWallet:(...args)=>duringWrite(()=>updateWallet(...args)),
+        deleteWallet:(...args)=>duringWrite(()=>deleteWallet(...args)),
+        addCategory:(...args)=>duringWrite(()=>addCategory(...args)),
+        updateCategory:(...args)=>duringWrite(()=>updateCategory(...args)),
+        deleteCategory:(...args)=>duringWrite(()=>deleteCategory(...args)),
+        addLabel:(...args)=>duringWrite(()=>addLabel(...args)),
         switchHousehold,
-        createHousehold,
-        updateHousehold,
-        deleteHousehold,
-        importExcelFile,
+        createHousehold:(...args)=>duringWrite(()=>createHousehold(...args)),
+        updateHousehold:(...args)=>duringWrite(()=>updateHousehold(...args)),
+        deleteHousehold:(...args)=>duringWrite(()=>deleteHousehold(...args)),
+        importExcelFile:(...args)=>duringWrite(()=>importExcelFile(...args)),
         resetToDefault,
         verifyAndUnlock,
         loginUser,
         lockApp,
-        updatePIN,
-        inviteMember,
-        updateMember,
-        removeMember,
+        updatePIN:(...args)=>duringWrite(()=>updatePIN(...args)),
+        inviteMember:(...args)=>duringWrite(()=>inviteMember(...args)),
+        updateMember:(...args)=>duringWrite(()=>updateMember(...args)),
+        removeMember:(...args)=>duringWrite(()=>removeMember(...args)),
         updateAIConfig,
         updateSupabaseConfig,
-        syncAllToSupabase,
+        syncAllToSupabase:(...args)=>duringWrite(()=>syncAllToSupabase(...args)),
         syncFromSupabase,
         supabaseSyncStatus,
         logoutUser,
@@ -2286,13 +1588,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         sessions,
         activeSession,
         registeredUsers,
-        registerUser,
-        joinHouseholdByCode,
-        updateRegisteredUser,
-        adminCreateUser,
-        deleteUser,
-        addMemberToHousehold,
-        removeMemberFromHousehold,
+        registerUser:(...args)=>duringWrite(()=>registerUser(...args)),
+        joinHouseholdByCode:(...args)=>duringWrite(()=>joinHouseholdByCode(...args)),
+        updateRegisteredUser:(...args)=>duringWrite(()=>updateRegisteredUser(...args)),
+        adminCreateUser:(...args)=>duringWrite(()=>adminCreateUser(...args)),
+        deleteUser:(...args)=>duringWrite(()=>deleteUser(...args)),
+        addMemberToHousehold:(...args)=>duringWrite(()=>addMemberToHousehold(...args)),
+        removeMemberFromHousehold:(...args)=>duringWrite(()=>removeMemberFromHousehold(...args)),
         allHouseholds,
         allMembers
       }}

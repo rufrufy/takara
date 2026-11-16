@@ -140,7 +140,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     finally{loginInFlight.current=false;setIsLoading(false);}
   };
 
-  const handleExecuteRegister = () => {
+  const handleExecuteRegister = async () => {
+    if(isLoading)return;
     setErrorMsg('');
     setSuccessMsg('');
 
@@ -163,15 +164,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      const res = registerUser(regFullName.trim(), cleanU, regPin, regHouseholdCode.trim());
+    try {
+      const res = await registerUser(regFullName.trim(), cleanU, regPin, regHouseholdCode.trim());
       if (!res.success) {
         setErrorMsg(res.error || 'Gagal mendaftarkan pengguna baru.');
-        setIsLoading(false);
       } else {
         setSuccessMsg(`Akun "${regFullName}" berhasil dibuat! Membuka aplikasi...`);
       }
-    }, 200);
+    } catch(error) {
+      setErrorMsg(error instanceof Error?error.message:'Gagal mendaftarkan pengguna baru.');
+    } finally {setIsLoading(false);}
   };
 
   return (
@@ -220,7 +222,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               setErrorMsg('');
               setCode('');
             }}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            aria-pressed={activeTab === 'login'} data-mode="login"
+            className={`auth-mode-tab flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'login'
                 ? 'bg-white text-teal-950 shadow-md ring-2 ring-teal-300'
                 : 'text-teal-200 hover:text-white'
@@ -237,7 +240,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               setErrorMsg('');
               setCode('');
             }}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            aria-pressed={activeTab === 'register'} data-mode="register"
+            className={`auth-mode-tab flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'register'
                 ? 'bg-emerald-400 text-slate-950 shadow-md ring-2 ring-emerald-200'
                 : 'text-emerald-200/90 hover:text-white'
@@ -254,7 +258,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               setErrorMsg('');
               setCode('');
             }}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            aria-pressed={activeTab === 'admin'} data-mode="admin"
+            className={`auth-mode-tab flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'admin'
                 ? 'bg-amber-300 text-slate-950 shadow-md ring-2 ring-amber-200'
                 : 'text-amber-300/80 hover:text-amber-200'
@@ -349,7 +354,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               type="button"
               disabled={isLoading || !username.trim()}
               onClick={() => handleExecuteLogin(username.trim(), code)}
-              className="mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-teal-950 font-extrabold text-sm rounded-xl shadow-lg shadow-teal-950/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
+              className="auth-submit mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-teal-950 font-extrabold text-sm rounded-xl shadow-lg shadow-teal-950/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
             >
               {isLoading ? (
                 <span>Memuat akun dan saldo…</span>
@@ -525,7 +530,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               type="button"
               disabled={isLoading}
               onClick={() => handleExecuteLogin('admin', code)}
-              className="mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
+              className="auth-submit mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
             >
               <Shield className="w-4 h-4 text-slate-950" />
               <span>Masuk Admin Dashboard</span>
@@ -535,14 +540,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
         {/* Error or Success Notification */}
         {errorMsg && (
-          <div className="mt-3 w-full p-2.5 rounded-xl bg-red-950/80 border border-red-500/60 text-red-200 text-xs flex items-center justify-center gap-2 animate-in fade-in">
+          <div role="alert" className="auth-message-error mt-3 w-full p-2.5 rounded-xl bg-red-950/80 border border-red-500/60 text-red-200 text-xs flex items-center justify-center gap-2 animate-in fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="mt-3 w-full p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-200 text-xs flex items-center justify-center gap-2 animate-in fade-in">
+          <div role="status" className="auth-message-success mt-3 w-full p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-200 text-xs flex items-center justify-center gap-2 animate-in fade-in">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
             <span>{successMsg}</span>
           </div>

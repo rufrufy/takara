@@ -38,6 +38,7 @@ interface AdminDashboardViewProps {
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }) => {
+  const [writeBusy,setWriteBusy]=useState(false);
   const {
     state,
     activeHousehold,
@@ -111,7 +112,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberUsername, setNewMemberUsername] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<UserRole>('OWNER');
-  const [newMemberPin, setNewMemberPin] = useState('12345');
+  const [newMemberPin, setNewMemberPin] = useState('');
   const [memberError, setMemberError] = useState('');
   const [memberSuccess, setMemberSuccess] = useState('');
 
@@ -120,7 +121,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   const [editMemberName, setEditMemberName] = useState('');
   const [editMemberUsername, setEditMemberUsername] = useState('');
   const [editMemberRole, setEditMemberRole] = useState<UserRole>('OWNER');
-  const [editMemberPin, setEditMemberPin] = useState('12345');
+  const [editMemberPin, setEditMemberPin] = useState('');
   const [editMemberError, setEditMemberError] = useState('');
   // Household Management State
   const [newHouseholdName, setNewHouseholdName] = useState('');
@@ -313,7 +314,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     }
   };
 
-  const handleAddMember = (e: React.FormEvent) => {
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     setMemberError('');
     setMemberSuccess('');
@@ -331,7 +333,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       return;
     }
 
-    const res = adminCreateUser(
+    const res = await adminCreateUser(
       newMemberName.trim(),
       cleanUser,
       newMemberPin.trim(),
@@ -346,9 +348,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     } else {
       setMemberError(res.error || 'Gagal menambahkan pengguna');
     }
+    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
-  const handleSaveEditMember = (e: React.FormEvent) => {
+  const handleSaveEditMember = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     if (!editingRegisteredUser) return;
     setEditMemberError('');
@@ -357,15 +361,15 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       setEditMemberError('Nama pengguna wajib diisi');
       return;
     }
-    if (editMemberPin.trim().length !== 5) {
+    if (editMemberPin.trim() && editMemberPin.trim().length !== 5) {
       setEditMemberError('PIN harus tepat 5 digit angka');
       return;
     }
 
-    const res = updateRegisteredUser(editingRegisteredUser.username, {
+    const res = await updateRegisteredUser(editingRegisteredUser.username, {
       displayName: editMemberName.trim(),
       role: editMemberRole,
-      pin5Digit: editMemberPin.trim()
+      pin5Digit: editMemberPin.trim() || undefined
     });
 
     if (res.success) {
@@ -375,9 +379,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     } else {
       setEditMemberError(res.error || 'Gagal memperbarui pengguna');
     }
+    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
-  const handleCreateNewHousehold = (e: React.FormEvent) => {
+  const handleCreateNewHousehold = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     setHouseholdError('');
     const clean = newHouseholdName.trim();
@@ -386,24 +392,28 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       return;
     }
 
-    createHousehold(clean);
+    const saved=await createHousehold(clean);if(!saved.success){setHouseholdError(saved.error||'Gagal menyimpan household.');return;}
     setNewHouseholdName('');
     setHouseholdSuccess(`✓ Household "${clean}" berhasil dibuat! Data tersendiri & terisolasi.`);
     setTimeout(() => setHouseholdSuccess(''), 4000);
+    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
-  const handleSaveEditHousehold = (e: React.FormEvent) => {
+  const handleSaveEditHousehold = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     if (!editingHousehold) return;
     const clean = editHouseholdName.trim();
     if (!clean) return;
 
-    updateHousehold(editingHousehold.id, clean);
+    const saved=await updateHousehold(editingHousehold.id, clean);if(!saved.success){setHouseholdError(saved.error||'Gagal menyimpan household.');return;}
     setHouseholdSuccess(`✓ Nama household berhasil diubah menjadi "${clean}"`);
     setTimeout(() => setHouseholdSuccess(''), 3000);
+    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
-  const handleAddMemberToEditingHousehold = (e: React.FormEvent) => {
+  const handleAddMemberToEditingHousehold = async (e: React.FormEvent) => {
+    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
     if (!editingHousehold) return;
     setHhMemberError('');
@@ -411,7 +421,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       setHhMemberError('Nama anggota keluarga wajib diisi.');
       return;
     }
-    const res = addMemberToHousehold(
+    const res = await addMemberToHousehold(
       editingHousehold.id,
       hhNewMemberName.trim(),
       hhNewMemberUsername.trim(),
@@ -426,10 +436,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       setHouseholdSuccess(`✓ Anggota "${hhNewMemberName}" berhasil ditambahkan ke ${editingHousehold.name}`);
       setTimeout(() => setHouseholdSuccess(''), 3000);
     }
+    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
   return (
     <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+      {writeBusy&&<p role="status" className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] rounded-full bg-teal-700 px-5 py-3 text-sm text-white shadow-lg">Menyimpan ke Supabase…</p>}
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -624,7 +636,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                           </span>
                         </td>
                         <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                          {u.pinHash || '12345'}
+                          •••••
                         </td>
                         <td className="py-2.5 px-3 text-slate-500 text-[11px]">
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-'}
@@ -638,7 +650,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                                 setEditMemberName(u.displayName);
                                 setEditMemberUsername(u.username);
                                 setEditMemberRole(u.role || 'OWNER');
-                                setEditMemberPin(u.pinHash || '12345');
+                                setEditMemberPin('');
                                 setEditMemberError('');
                               }}
                               className="p-1.5 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
@@ -648,9 +660,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={async () => {
                                 if (confirm(`Yakin ingin menghapus pengguna @${u.username}?`)) {
-                                  deleteUser(u.username);
+                                  const result=await deleteUser(u.username);if(!result.success)setMemberError(result.error||'Gagal menghapus pengguna.');
                                 }
                               }}
                               className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -1523,7 +1535,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
 
                           <button
                             type="button"
-                            onClick={() => removeMemberFromHousehold(m.id)}
+                            onClick={async()=>{const result=await removeMemberFromHousehold(m.id);if(!result.success)setHhMemberError(result.error||'Gagal menghapus anggota.');}}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Hapus / Keluarkan dari Household ini"
                           >

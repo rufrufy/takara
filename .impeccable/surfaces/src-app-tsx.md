@@ -2,18 +2,18 @@
 version: 1
 slug: "src-app-tsx"
 primary_target: "src/App.tsx"
-related_targets: ["src/index.css","src/components/BottomNav.tsx","src/components/Header.tsx","src/components/views/HomeView.tsx"]
+related_targets: ["src/index.css","src/components/BottomNav.tsx","src/components/Header.tsx","src/components/views/HomeView.tsx","src/components/views/FinancialProfileView.tsx"]
 ---
 
 # Takara mobile application
-Mode: Operate. Whole-app mobile redesign; preserve all authorized finance/account/category/report changes.
+Mode: Operate. Preserve authorized finance, account, category, report, authentication, and storage behavior.
 
 ## Direction contract
 THESIS: Catatan Harian makes daily household activity the working area while balance is immediately legible. Avoid nested dashboard cards, promotional badges, and decorative AI motifs.
-OWN-WORLD: Warm white #F1F6F1, soft sage glass #DAEBCD, muted leaf #8FB27F, dark forest #193727. Rounded translucent surfaces, consistent outlined icons, 44px controls, restrained refractive edges. One readable sans family.
-STORY: The user signs in with finances already loaded, checks balance, finds transactions, records or edits an entry, and sees wallets update from Supabase.
-FIRST VIEWPORT: At 390x844, compact brand/household header, shallow balance panel with Catat action and inline income/expense. A quiet wallet strip precedes Catatan Harian. Search with disclosure filter, date-grouped transaction rows, and a floating five-item rounded glass bottom dock. Sheets share the same rounded visual language.
-FORM: User chose image 2, Catatan Harian, over assigned candidate5 from seed f41ff5ca. Approved comp .impeccable/mocks/decision/activity.png; text/numbers are live household data, never hardcoded demo balances. Keep airy density, readable amounts, and soft green/white liquid glass as explicit user commitments.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+OWN-WORLD: Predominantly white and pale cyan glass (#FFFFFF, #F4FBFD, #EDF9FB), dark navy balance (#073B4C), and pinned Tropical accents: mint #06D6A0, teal #1B9AAA, pink #EF476F, yellow #FFD166. Preserve full rounding and translucent materials without monotone green. Native Apple SF system stack with native platform fallbacks; no proprietary font download.
+STORY: The user signs in with finances loaded, checks balance, finds transactions, records or edits an entry, scans a receipt, and sees wallets update from Supabase.
+FIRST VIEWPORT: Compact brand/household header, dark navy balance with mint Catat action and inline income/expense, quiet wallet strip, then Catatan Harian with an accessible camera scan button beside the heading. Search, disclosure filter, date-grouped rows, and floating five-item white/cyan glass dock remain. A 56px icon-only floating plus appears on Beranda, Transaksi, and Dompet. Sheets preserve the same rounded material language.
+FORM: The historical image-2 Catatan Harian comp at .impeccable/mocks/decision/activity.png established composition, then user refinements superseded its sage colors and font. Use live household amounts. Wallet Aset/Utang/Pemasukan tabs have three equal minmax(0,1fr) columns, min-width:0, nonshrinking icons, vertical labels/counts, 13px labels, 11px counts, and 76px minimum height. Selected tabs use white, pink, and yellow tints. Preserve exact saved category backgrounds and contrasting icons.
+FINISH: Source, type/build, static contrast, and real application-module integration checks are evidence only for their respective scopes. Fresh captures now cover Home, desktop, admin login, and 320px wallet tabs without overlap. Historical sage screenshots are reference only; the earlier pixel-comparison gate remains open.
 
-Auth migration remains blocked on the missing server-only Supabase Admin API key. Do not claim uploads active. Push to GitHub after completed authorized deliverables and disclose any remaining blocker.
+Supabase Auth is live with ten migrated real profiles. Private receipt storage is active for authorized household members, with VIEWER read-only and other households/anonymous denied. No missing-admin-key blocker remains. Operational status is documented in docs/supabase-auth-status.md. Browser form validation confirmed private receipt upload, loading state, confirmed save, new transaction visibility, and wallet update.
