@@ -109,3 +109,27 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{
 @media(max-width:340px){.entry-datetime{grid-template-columns:minmax(0,1fr);gap:10px}}
 .entry-sheet>.entry-picker-backdrop{background:#073b4c35!important;border-radius:inherit!important}
 @media(max-width:359px){.entry-sheet>div:first-child>div{min-width:0;flex:1;width:auto;margin-right:6px}.entry-sheet>div:first-child>div>button{min-width:0;font-size:12px;gap:3px;white-space:normal}.entry-sheet>div:first-child>div>button svg{flex-shrink:0;width:12px}}
+
+/* Search and disclosure filters share one rounded surface. */
+.home-search-panel,.transaction-search-panel{background:#fff;border-radius:28px;box-shadow:0 6px 22px -16px #073b4c50;padding:8px;margin-bottom:20px}
+.home-search-panel .activity-search{margin:0;padding:0;align-items:center}
+.home-search-panel .activity-search>button{width:44px;height:44px;box-shadow:none;background:#e5f5f8}
+.home-search-panel .daily-filters{margin:8px 4px 4px}
+.takara-app .transaction-search-panel input.transaction-search-input{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;min-height:44px;outline:none}
+.transaction-search-panel:focus-within,.home-search-panel:focus-within{outline:2px solid #14737F;outline-offset:3px}
+.home-search-panel .activity-search label:focus-within{outline:0}
+.transaction-month-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:16px;background:#e5f5f8;color:#073B4C;font-size:15px;font-weight:700}
+.transaction-month-heading span{font-size:11px;font-weight:500;white-space:nowrap}
+.transaction-month>div+div{border-top:1px solid #d9e9ee}
+/* Transaction kind remains visible in tabs, amount, and save action. */
+.entry-sheet[data-transaction-type=expense]{--entry-color:#9B1739;--entry-tint:#FFE0E8;--entry-fill:#BD2049;--entry-ink:#ffffff}
+.entry-sheet[data-transaction-type=income]{--entry-color:#075342;--entry-tint:#D7F7EE;--entry-fill:#06D6A0;--entry-ink:#073B4C}
+.entry-sheet[data-transaction-type=transfer]{--entry-color:#0B5966;--entry-tint:#D9F1F3;--entry-fill:#126F7B;--entry-ink:#ffffff}
+.entry-sheet [data-entry-type=expense]{color:#9B1739}.entry-sheet [data-entry-type=income]{color:#075342}.entry-sheet [data-entry-type=transfer]{color:#0B5966}
+.entry-sheet [data-entry-type][aria-pressed=true]{background:var(--entry-tint)!important;color:var(--entry-color)!important;box-shadow:inset 0 0 0 1px var(--entry-color)}
+.entry-sheet #modal-nominal-amount{color:var(--entry-color)}
+.takara-app .entry-sheet #btn-catat-transaksi{background:var(--entry-fill)!important;color:var(--entry-ink)!important}
+.takara-app .entry-sheet #btn-catat-transaksi:hover{background:var(--entry-color)!important;color:#fff!important}
+.entry-sheet #btn-tambah-lagi{flex:0 0 48px;width:48px;height:48px;align-self:center;padding:0;border-radius:50%;color:var(--entry-color);background:var(--entry-tint);border:0}
+
+.takara-app .home-search-panel .activity-search label input{border:0!important;box-shadow:none!important;background:transparent!important}

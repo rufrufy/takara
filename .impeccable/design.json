@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-16T10:37:22.601Z",
+  "generatedAt": "2026-11-16T20:03:01.916Z",
   "title": "Design System: Takara — Tropical Green Paradise",
   "extensions": {
     "shadows": [
@@ -238,6 +238,18 @@
     "entryDateTime": {
       "columns": "repeat(2,minmax(0,1fr))",
       "singleColumnBreakpoint": "340px"
+    },
+    "transactionHistory": {
+      "grouping": "Jakarta calendar month, descending",
+      "heading": "Indonesian month and year with filtered transaction count",
+      "search": "Borderless input within shared rounded 28px search/filter surface",
+      "homeWalletOrder": "Balance descending, name as tie-breaker",
+      "entryKinds": {
+        "expense": "#BD2049",
+        "income": "#06D6A0",
+        "transfer": "#126F7B"
+      },
+      "saveAndContinue": "48px circular plus, accessible name, spinner while saving"
     }
   },
   "components": [

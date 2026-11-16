@@ -45,13 +45,14 @@ export const HomeView: React.FC<HomeViewProps> = ({onOpenQuickAdd,onOpenAIScan,o
       </div>
     </section>
     <div className="wallet-strip no-scrollbar" aria-label="Saldo tiap dompet">
-      {wallets.map(w=><button key={w.id} onClick={()=>onChangeTab('profil-keuangan')}><Wallet size={16}/><span>{w.name}</span><b>{showBalance?formatIDR(w.balance):'••••••'}</b></button>)}
+      {[...wallets].sort((a,b)=>b.balance-a.balance||a.name.localeCompare(b.name,'id')).map(w=><button key={w.id} onClick={()=>onChangeTab('profil-keuangan')}><Wallet size={16}/><span>{w.name}</span><b>{showBalance?formatIDR(w.balance):'••••••'}</b></button>)}
       {!wallets.length&&<button onClick={()=>onChangeTab('profil-keuangan')}><Plus size={16}/>Tambah dompet</button>}
     </div>
     <section className="daily-activity" aria-labelledby="daily-title">
       <div className="activity-heading"><h1 id="daily-title">Catatan Harian</h1><div className="activity-heading-actions"><button type="button" className="home-scan-button" onClick={onOpenAIScan} aria-label="Scan struk otomatis" title="Scan struk otomatis"><Camera size={20}/></button><button onClick={()=>onChangeTab('transaksi')} aria-label="Lihat semua transaksi"><ChevronRight size={20}/></button></div></div>
-      <div className="activity-search"><label><Search size={20}/><input type="search" aria-label="Cari catatan harian" placeholder="Cari transaksi…" value={query} onChange={e=>setQuery(e.target.value)}/></label><button aria-label="Filter catatan harian" aria-expanded={filtersOpen} aria-controls="daily-filters" className={type!=='all'||walletId!=='all'?'has-filter':''} onClick={()=>setFiltersOpen(!filtersOpen)}><SlidersHorizontal size={21}/></button></div>
+      <div className="home-search-panel"><div className="activity-search"><label><Search size={20}/><input type="search" aria-label="Cari catatan harian" placeholder="Cari transaksi…" value={query} onChange={e=>setQuery(e.target.value)}/></label><button aria-label="Filter catatan harian" aria-expanded={filtersOpen} aria-controls="daily-filters" className={type!=='all'||walletId!=='all'?'has-filter':''} onClick={()=>setFiltersOpen(!filtersOpen)}><SlidersHorizontal size={21}/></button></div>
       {filtersOpen&&<div className="daily-filters" id="daily-filters"><label>Jenis transaksi<select value={type} onChange={e=>setType(e.target.value)}><option value="all">Semua jenis</option><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option><option value="transfer">Transfer</option></select></label><label>Dompet<select value={walletId} onChange={e=>setWalletId(e.target.value)}><option value="all">Semua dompet</option>{wallets.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label></div>}
+      </div>
       <div className="daily-list">
         {groups.map(([date,items])=><section key={date} className="day-group" aria-label={displayDate(date)}><h2>{displayDate(date)}</h2>{items.map(t=>{
           const category=categories.find(c=>c.householdId===t.householdId&&(c.id===t.categoryId||(c.type===t.type&&c.name.toLocaleLowerCase('id')===t.categoryName?.toLocaleLowerCase('id'))));

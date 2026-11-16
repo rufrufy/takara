@@ -210,6 +210,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     wallets
   ]);
 
+  const monthlyTransactions = useMemo(() => {
+    const months = new Map<string, typeof filteredTransactions>();
+    for (const transaction of [...filteredTransactions].sort((a,b) => Date.parse(b.effectiveAt)-Date.parse(a.effectiveAt))) {
+      const month = jakartaDateTime(transaction.effectiveAt).date.slice(0,7);
+      const items = months.get(month) || [];
+      items.push(transaction);
+      months.set(month, items);
+    }
+    return [...months].map(([month, items]) => ({
+      month, items,
+      label: new Date(`${month}-01T12:00:00+07:00`).toLocaleDateString('id-ID', {month:'long',year:'numeric',timeZone:'Asia/Jakarta'})
+    }));
+  }, [filteredTransactions]);
+
   // Recalculate income, expense, and net balance dynamically from filtered transactions
   // Default is the whole active month's total when no filter is applied
   const { filteredIncome, filteredExpense, filteredNet, isFiltered } = useMemo(() => {
@@ -529,7 +543,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       </div>
 
       {/* SEARCH BAR & 2-LINE COMPACT FILTER */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-2xs space-y-2.5">
+      <div className="transaction-search-panel bg-white rounded-3xl p-3 space-y-2.5">
         {/* Search Box */}
         <div className="flex items-center gap-2"><div className="relative min-w-0 flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -538,7 +552,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
             placeholder="Cari transaksi (keterangan, #label, dompet, anggota)..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-600 focus:bg-white"
+            aria-label="Cari transaksi"
+            className="transaction-search-input w-full pl-10 pr-8 py-2 text-xs sm:text-sm text-slate-900"
           />
           {searchQuery && (
             <button
@@ -803,7 +818,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
               Tidak ada transaksi yang cocok dengan filter pencarian.
             </div>
           ) : (
-            filteredTransactions.map(t => {
+            monthlyTransactions.map(({month,label,items}) => <section key={month} className="transaction-month" aria-label={label}>
+              <h2 className="transaction-month-heading">{label}<span>{items.length} transaksi</span></h2>
+              {items.map(t => {
               const isIncome = t.type === 'income';
               const isTransfer = t.type === 'transfer';
               const category = transactionCategory(t);
@@ -903,7 +920,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   </div>
                 </div>
               );
-            })
+            })}</section>)
           )}
       </div>
 

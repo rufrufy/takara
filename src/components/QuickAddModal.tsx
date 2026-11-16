@@ -302,6 +302,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div
+        data-transaction-type={type}
         className="entry-sheet w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[96vh] animate-in slide-in-from-bottom duration-200 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
@@ -310,6 +311,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
           <div className="flex bg-slate-100 p-1 rounded-2xl w-full mr-2">
             <button
               type="button"
+              data-entry-type="expense"
+              aria-pressed={type === 'expense'}
               onClick={() => {
                 changeType('expense');
                 setErrorMsg('');
@@ -326,6 +329,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
             <button
               type="button"
+              data-entry-type="income"
+              aria-pressed={type === 'income'}
               onClick={() => {
                 changeType('income');
                 setErrorMsg('');
@@ -342,6 +347,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
             <button
               type="button"
+              data-entry-type="transfer"
+              aria-pressed={type === 'transfer'}
               onClick={() => {
                 changeType('transfer');
                 setErrorMsg('');
@@ -654,19 +661,19 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
         </div>
 
-        {/* BOTTOM FIXED BAR: TOMBOL "+ LAGI" & "CATAT" DENGAN KOMPOSISI 1 : 4 */}
+        {/* Simpan dan lanjut input melalui tombol plus. */}
         <div className="sticky bottom-0 bg-white border-t border-slate-100 p-3 flex gap-2 shrink-0 shadow-lg">
           {/* Tombol 1: + Lagi (Proporsi 1) */}
           <button
             type="button"
             id="btn-tambah-lagi"
+            aria-label={saving ? 'Menyimpan transaksi' : 'Simpan dan tambah transaksi lagi'}
             disabled={saving || attachmentUploading}
             onClick={() => executeSave(true)}
             className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs sm:text-sm rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-1 border border-slate-200"
             title="Simpan transaksi dan langsung lanjut input lagi"
           >
-            <Plus className="w-4 h-4 stroke-[2.5] text-teal-700" />
-            <span>{saving ? 'Menyimpan…' : '+ Lagi'}</span>
+            {saving ? <RotateCcw className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 stroke-[2.5]" />}
           </button>
 
           {/* Tombol 2: Catat (Proporsi 4) */}

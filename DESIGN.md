@@ -178,7 +178,7 @@ Capsules define buttons, search, date labels, household switch, and dock. Circle
 ## Components
 
 ### Buttons
-Home Catat remains a mint capsule with navy text. A separate navy icon-only circular plus button, labelled `Tambah transaksi`, appears on Beranda, Transaksi, and Dompet. Both open the existing transaction sheet. The camera button beside Catatan Harian is labelled `Scan struk otomatis` and opens receipt scanning. Preserve visible keyboard focus.
+Home Scan is a mint capsule with navy text and a scan icon. A separate navy icon-only circular plus button, labelled `Tambah transaksi`, appears on Beranda, Transaksi, and Dompet. The plus opens the existing transaction sheet. The camera button beside Catatan Harian is labelled `Scan struk otomatis` and opens receipt scanning. Preserve visible keyboard focus.
 
 ### Chips
 Date headings use pale cyan capsules and navy text. Filters retain expanded state and selected tint. Household selection truncates within a capsule with house icon and chevron.
@@ -187,7 +187,7 @@ Date headings use pale cyan capsules and navy text. Filters retain expanded stat
 The dark navy balance contrasts with the light application canvas. Wallet, transaction, report, settings, and administration containers retain rounded glass. Shared summaries use pale cyan. Avoid redundant card containers around the home feed.
 
 ### Inputs / Fields
-Shared fields use rounded light surfaces; home search is borderless beside a circular filter control, with an outline only while focused. Authentication uses a white/cyan background, fields of at least 48px, and capsule controls. Preserve loading, error, retry, empty, selected, and focus states.
+Shared fields use rounded light surfaces; home search is borderless inside a shared 28px rounded search-and-filter panel, with an outline only while focused. Authentication uses a white/cyan background, fields of at least 48px, and capsule controls. Preserve loading, error, retry, empty, selected, and focus states.
 
 ### Navigation
 Five Lucide destinations remain Beranda, Transaksi, Dompet, Laporan, and Setelan. Dock icons are 23px at 1.65 stroke, with captions below. Active destination uses `aria-current="page"` and pale cyan fill. Wallet tabs are Aset, Utang, and Pemasukan, using `role="tab"` and `aria-selected`; selected fills are white, pink tint `#fff0f4`, and yellow tint `#fff3cf` respectively.
@@ -212,3 +212,5 @@ The live product now uses Supabase Auth with ten migrated real profiles. Private
 The final admin keypad uses white numbered keys with navy text, pink clear/delete keys, pale yellow context and a mint submit action. Home search uses one visible boundary and a dark focus-within outline.
 
 Transaction choice panels are contained inside the entry sheet with a 28px radius and a content-driven height capped at min(52dvh, 440px). Date/time fields use minmax(0,1fr) columns, switching to one column at 340px. The balance action opens receipt scanning; the floating plus remains the transaction entry action.
+
+Home wallets sort by descending balance, with name as the tie-breaker. Transaction history groups filtered results by Jakarta calendar month, newest first, with month/year headings and matching counts. Entry tabs, amount, and save action distinguish expense (pink), income (mint), and transfer (teal); darker pink/teal button shades keep white labels readable. The save-and-continue action uses a 48px circular plus with an accessible label. Verified with the live application at desktop, 390px, and 320px; no financial records were written during this UI pass.
