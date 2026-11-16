@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-16T20:03:01.916Z",
+  "generatedAt": "2026-11-16T20:08:13.741Z",
   "title": "Design System: Takara — Tropical Green Paradise",
   "extensions": {
     "shadows": [
@@ -249,7 +249,8 @@
         "income": "#06D6A0",
         "transfer": "#126F7B"
       },
-      "saveAndContinue": "48px circular plus, accessible name, spinner while saving"
+      "saveAndContinue": "48px circular plus, accessible name, spinner while saving",
+      "amountInput": "Native numeric keyboard entry, raw digits while focused, Indonesian grouping on blur, shared keypad state, 12-digit maximum"
     }
   },
   "components": [

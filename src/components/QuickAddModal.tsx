@@ -38,6 +38,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
   const [type, setType] = useState<TransactionType>('expense');
   const [amountStr, setAmountStr] = useState('');
+  const [amountFocused, setAmountFocused] = useState(false);
   const [sourceWalletId, setSourceWalletId] = useState(wallets[0]?.id || '');
   const [destinationWalletId, setDestinationWalletId] = useState(wallets[1]?.id || wallets[0]?.id || '');
   const [categoryId, setCategoryId] = useState('');
@@ -147,6 +148,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
   // Keypad Calculator Handler
   const handleKeypadPress = (val: string) => {
+    if (saving || attachmentUploading) return;
     setErrorMsg('');
     if (val === 'clear') {
       setAmountStr('');
@@ -167,7 +169,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
     // Angka 0-9
     setAmountStr(prev => {
-      if (prev.length > 10) return prev;
+      if (prev.length >= 12) return prev;
       if (!prev || prev === '0') return val;
       return prev + val;
     });
@@ -175,7 +177,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
   const handleQuickAddAmount = (addValue: number) => {
     const current = parseInt(amountStr.replace(/[^0-9]/g, ''), 10) || 0;
-    setAmountStr(String(current + addValue));
+    if (saving || attachmentUploading) return;
+    setAmountStr(String(Math.min(current + addValue, 999999999999)));
   };
 
   // Lampiran Struk Handler (Murni membaca file gambar)
@@ -396,16 +399,30 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
             className="p-3.5 bg-slate-50 hover:bg-slate-100/80 cursor-pointer rounded-2xl border border-slate-200/90 transition-all text-center group"
           >
             <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
-              <span>Nominal ({type === 'expense' ? 'Pengeluaran' : type === 'income' ? 'Pemasukan' : 'Transfer'})</span>
+              <label htmlFor="modal-nominal-amount">Nominal ({type === 'expense' ? 'Pengeluaran' : type === 'income' ? 'Pemasukan' : 'Transfer'})</label>
               <button type="button" disabled={saving||attachmentUploading} onClick={e=>{e.stopPropagation();resetForm();}} aria-label="Reset semua input transaksi" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-teal-700 hover:bg-teal-100 disabled:opacity-40"><RotateCcw className="w-3.5 h-3.5" />Reset</button>
             </div>
             <div className="flex items-baseline justify-center gap-1.5">
               <span className="text-lg font-bold text-slate-400">Rp</span>
-              <span id="modal-nominal-amount" className={`text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
-                amountStr ? 'text-slate-900' : 'text-slate-500'
-              }`}>
-                {amountStr ? parseInt(amountStr, 10).toLocaleString('id-ID') : '0'}
-              </span>
+              <input
+                id="modal-nominal-amount"
+                aria-label="Nominal transaksi"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={saving || attachmentUploading}
+                placeholder="0"
+                value={amountFocused ? amountStr : amountStr ? Number(amountStr).toLocaleString('id-ID') : ''}
+                onFocus={() => setAmountFocused(true)}
+                onBlur={() => setAmountFocused(false)}
+                onChange={e => {
+                  setAmountStr(e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '').slice(0, 12));
+                  setErrorMsg('');
+                }}
+                style={{width:`${Math.max((amountFocused ? amountStr : Number(amountStr || 0).toLocaleString('id-ID')).length,1)}ch`}}
+                className="entry-amount-input font-extrabold tracking-tight tabular-nums"
+              />
             </div>
           </div>
 
