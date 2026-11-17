@@ -139,7 +139,7 @@ interface AppContextValue {
   addTransaction: (input: NewTransactionInput) => Promise<{ success: boolean; error?: string }>;
   voidTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
   clearCurrentMonthTransactions: () => Promise<{ success: boolean; count: number; error?: string }>;
-  resetMonthlyBalances: () => Promise<{success:boolean;count?:number;alreadyReset?:boolean;error?:string}>;
+  resetMonthlyBalances: (period?:string) => Promise<{success:boolean;count?:number;alreadyReset?:boolean;error?:string}>;
   addWallet: (name: string, type: WalletType, openingBalance?: number, color?: string) => Promise<{success:boolean;error?:string}>;
   updateWallet: (walletId: string, updates: { name?: string; type?: WalletType; color?: string; institutionName?: string; targetBalance?: number }) => Promise<{success:boolean;error?:string}>;
   deleteWallet: (walletId: string) => Promise<{success:boolean;error?:string}>;
@@ -1538,9 +1538,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const resetMonthlyBalances=async()=>{
+  const resetMonthlyBalances=async(period?:string)=>{
     const householdId=state.activeHouseholdId;
-    const result=await resetMonthlyBalancesInSupabase(householdId,state.supabaseConfig);
+    const result=await resetMonthlyBalancesInSupabase(householdId,state.supabaseConfig,period);
     if(!result.success)return result;
     const refreshed=await pullAllDataFromSupabase(state.supabaseConfig,householdId);
     if(!refreshed.success||!refreshed.data)return {...result,error:'Reset sudah tersimpan. Muat ulang untuk memperbarui saldo.'};
@@ -1593,7 +1593,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addTransaction:(...args)=>duringWrite(()=>addTransaction(...args)),
         voidTransaction:(...args)=>duringWrite(()=>voidTransaction(...args)),
         clearCurrentMonthTransactions:(...args)=>duringWrite(()=>clearCurrentMonthTransactions(...args)),
-        resetMonthlyBalances:()=>duringWrite(()=>resetMonthlyBalances()),
+        resetMonthlyBalances:(period)=>duringWrite(()=>resetMonthlyBalances(period)),
         editTransaction:(...args)=>duringWrite(()=>editTransaction(...args)),
         debts,
         addDebt:(...args)=>duringWrite(()=>addDebt(...args)),

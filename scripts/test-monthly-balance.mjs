@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {loadSource} from './test-source-loader.mjs';
-const {monthlyActivity,monthlyResetCheckpoint,isDebtInstallmentExpense}=await loadSource('src/lib/monthlyBalance.ts');
+const {monthlyActivity,monthlyResetCheckpoint,isDebtInstallmentExpense,monthlyResetPreview}=await loadSource('src/lib/monthlyBalance.ts');
 const tx=(id,type,amount,date='2026-11-17T02:00:00Z',extra={})=>({id,type,amount,effectiveAt:date,createdAt:date,status:'POSTED',...extra});
 const oldIncome=tx('old-income','income',100000),oldExpense=tx('old-expense','expense',20000);
 const marker=tx('tx-month-reset-hh-2026-11-checkpoint','opening_balance',0,'2026-11-17T03:00:00Z',{notes:JSON.stringify({excludedTransactionIds:['old-income','old-expense']})});
@@ -15,4 +15,9 @@ assert.equal(isDebtInstallmentExpense(tx('tx-payment-1','expense',1)),true);
 assert.equal(isDebtInstallmentExpense(tx('tx-payment-2','income',1,undefined,{debtId:'receivable'})),false);
 assert.equal(isDebtInstallmentExpense(tx('food','expense',1,undefined,{categoryName:'Makanan & Minuman'})),false);
 assert.equal(isDebtInstallmentExpense(tx('food-note','expense',1,undefined,{categoryName:'Makan',description:'Makan setelah bayar utang'})),false);
+const wallets=[{id:'positive',balance:800},{id:'negative',balance:400}];
+const history=['oct-in','oct-out','nov-in','nov-out'].map(id=>({id,status:'POSTED'}));
+const ledger=[{walletId:'positive',transactionId:'oct-in',signedAmount:1000,postedAt:'2026-10-20T03:00:00Z'},{walletId:'negative',transactionId:'oct-out',signedAmount:-300,postedAt:'2026-10-20T03:00:00Z'},{walletId:'positive',transactionId:'nov-out',signedAmount:-200,postedAt:'2026-10-31T17:00:00Z'},{walletId:'negative',transactionId:'nov-in',signedAmount:700,postedAt:'2026-11-02T03:00:00Z'}];
+assert.deepEqual(monthlyResetPreview(wallets,ledger,history,2026,10).map(w=>[w.closingBalance,w.balanceAfterReset]),[[1000,-200],[-300,700]]);
+assert.deepEqual(monthlyResetPreview(wallets,ledger,history,2026,11).map(w=>w.balanceAfterReset),[0,0]);
 console.log('PASS: reset snapshot preserves new backdated activity, full history option, Jakarta month boundary, adjustment/void exclusion, canonical and legacy debt classification without excluding ordinary spending or receivables');

@@ -1,7 +1,16 @@
-import type {FinancialTransaction} from '../types';
+import type {FinancialTransaction,Wallet,LedgerEntry} from '../types';
 import {jakartaDateTime} from './dateTime';
 
 export const isBalanceReset = (tx: Pick<FinancialTransaction,'id'>) => tx.id.startsWith('tx-month-reset-');
+export function monthlyResetPreview(wallets:Wallet[],ledgers:LedgerEntry[],transactions:FinancialTransaction[],year:number,month:number){
+  const end=Date.UTC(year,month,1)-7*60*60*1000;
+  const posted=new Set(transactions.filter(tx=>tx.status==='POSTED').map(tx=>tx.id));
+  const balances=new Map<string,number>();
+  for(const entry of ledgers){
+    if(posted.has(entry.transactionId)&&Date.parse(entry.postedAt)<end)balances.set(entry.walletId,(balances.get(entry.walletId)||0)+entry.signedAmount);
+  }
+  return wallets.map(wallet=>({...wallet,closingBalance:balances.get(wallet.id)||0,balanceAfterReset:wallet.balance-(balances.get(wallet.id)||0)}));
+}
 export function monthlyResetCheckpoint(transactions: FinancialTransaction[], year: number, month: number) {
   const period = `${year}-${String(month).padStart(2,'0')}`;
   return transactions.find(tx => {

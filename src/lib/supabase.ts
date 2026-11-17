@@ -334,9 +334,9 @@ const transactionRow=(tx:FinancialTransaction)=>({
 });
 export const syncTransactionToSupabase = async (tx:FinancialTransaction,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG,_mode:'insert'|'update'='insert'):Promise<{success:boolean;error?:string}>=>saveAtomicTransaction(tx,undefined,config);
 export const syncDebtPaymentToSupabase = async (tx:FinancialTransaction,debtId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;error?:string}>=>saveAtomicTransaction(tx,debtId,config);
-export async function resetMonthlyBalancesInSupabase(householdId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;count?:number;alreadyReset?:boolean;error?:string}>{
+export async function resetMonthlyBalancesInSupabase(householdId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG,period?:string):Promise<{success:boolean;count?:number;alreadyReset?:boolean;error?:string}>{
  try{
-  const response=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/reset_monthly_balances',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_household:householdId})});
+  const response=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/reset_monthly_balances',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_household:householdId,...(period?{p_period:period+'-01'}:{})})});
   const result=await response.json();
   if(!response.ok||result.success!==true)throw new Error(result.message||'Reset saldo belum tersimpan.');
   return result;
