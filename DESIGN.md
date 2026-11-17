@@ -222,3 +222,5 @@ Daily finance surfaces use orange (#F59E42 / #FFF0DD), tropical red (#EF476F / #
 The shared import sheet is titled “Impor Excel / JSON” and accepts spreadsheet exports or Takara JSON backups. Keep the existing rounded surface and show supported formats, original-household scope, 20 MB JSON limit, asynchronous progress, validation errors, and confirmed added/skipped counts. Disable close/file input while importing. JSON export contains household financial data only.
 
 Monthly reset now exposes month/year selectors, disables future periods, explains chronological closure, and previews both the selected month’s closing balance and the resulting current wallet balance. Historical resets preserve later-month transactions. Confirmation states that automatic rollback is unavailable.
+
+An active period reset now offers “Tinjau rollback” with a current → restored wallet-balance preview and explicit confirmation. Ordinary transactions remain included; rollback proceeds from the newest active period. Reset/rollback audit remains visible and read-only. The earlier unavailable-rollback copy is superseded. After rollback, another reset can be created for the same period.

@@ -51,7 +51,7 @@ export const ReportsView: React.FC = () => {
   const periodIncome=transactions.filter(t=>t.type==='income').reduce((n,t)=>n+t.amount,0);
   const periodExpense=transactions.filter(t=>t.type==='expense').reduce((n,t)=>n+t.amount,0);
   const netCashFlow=periodIncome-periodExpense;
-  const reportKey=activeHousehold.id+':'+selectedYear+':'+selectedMonth+':'+hideDebtInstallments+':'+sinceReset;
+  const reportKey=activeHousehold.id+':'+selectedYear+':'+selectedMonth+':'+hideDebtInstallments+':'+sinceReset+':'+(resetCheckpoint?.id||'full');
   const analysisPeriod=useRef(reportKey);analysisPeriod.current=reportKey;
   const years=useMemo(()=>{
     const values=allTransactions.flatMap(t=>{try{return [Number(jakartaDateTime(t.effectiveAt).date.slice(0,4))];}catch{return [];}});

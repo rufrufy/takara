@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {loadSource} from './test-source-loader.mjs';
-const {monthlyActivity,monthlyResetCheckpoint,isDebtInstallmentExpense,monthlyResetPreview}=await loadSource('src/lib/monthlyBalance.ts');
+const {monthlyActivity,monthlyResetCheckpoint,isDebtInstallmentExpense,monthlyResetPreview,monthlyRollbackPreview,activeResetCheckpoints}=await loadSource('src/lib/monthlyBalance.ts');
 const tx=(id,type,amount,date='2026-11-17T02:00:00Z',extra={})=>({id,type,amount,effectiveAt:date,createdAt:date,status:'POSTED',...extra});
 const oldIncome=tx('old-income','income',100000),oldExpense=tx('old-expense','expense',20000);
 const marker=tx('tx-month-reset-hh-2026-11-checkpoint','opening_balance',0,'2026-11-17T03:00:00Z',{notes:JSON.stringify({excludedTransactionIds:['old-income','old-expense']})});
@@ -20,4 +20,13 @@ const history=['oct-in','oct-out','nov-in','nov-out'].map(id=>({id,status:'POSTE
 const ledger=[{walletId:'positive',transactionId:'oct-in',signedAmount:1000,postedAt:'2026-10-20T03:00:00Z'},{walletId:'negative',transactionId:'oct-out',signedAmount:-300,postedAt:'2026-10-20T03:00:00Z'},{walletId:'positive',transactionId:'nov-out',signedAmount:-200,postedAt:'2026-10-31T17:00:00Z'},{walletId:'negative',transactionId:'nov-in',signedAmount:700,postedAt:'2026-11-02T03:00:00Z'}];
 assert.deepEqual(monthlyResetPreview(wallets,ledger,history,2026,10).map(w=>[w.closingBalance,w.balanceAfterReset]),[[1000,-200],[-300,700]]);
 assert.deepEqual(monthlyResetPreview(wallets,ledger,history,2026,11).map(w=>w.balanceAfterReset),[0,0]);
+const rolledBack=tx('tx-month-reset-hh-2026-11-rollback','opening_balance',0);
+assert.equal(monthlyResetCheckpoint([...items,rolledBack],2026,11),undefined);
+assert.deepEqual(monthlyActivity([...items,rolledBack],2026,11).map(t=>t.id),['old-income','old-expense','new-backdated']);
+const retry=tx('tx-month-reset-hh-2026-11-r2-checkpoint','opening_balance',0,'2026-11-17T04:00:00Z',{notes:marker.notes});
+assert.deepEqual(activeResetCheckpoints([...items,rolledBack,retry]).map(t=>t.id),[retry.id]);
+const resetPrefix='tx-month-reset-hh-2026-10';
+const rollbackLedgers=[{transactionId:resetPrefix+'-positive',walletId:'positive',signedAmount:-1000},{transactionId:resetPrefix+'-negative',walletId:'negative',signedAmount:300},{transactionId:'new-after-reset',walletId:'positive',signedAmount:50}];
+const resetHistory=rollbackLedgers.map(entry=>({id:entry.transactionId,status:'POSTED'}));
+assert.deepEqual(monthlyRollbackPreview([{id:'positive',balance:-150},{id:'negative',balance:700}],rollbackLedgers,resetHistory,resetPrefix+'-checkpoint').map(w=>w.balanceAfterRollback),[850,400]);
 console.log('PASS: reset snapshot preserves new backdated activity, full history option, Jakarta month boundary, adjustment/void exclusion, canonical and legacy debt classification without excluding ordinary spending or receivables');

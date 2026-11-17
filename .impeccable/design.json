@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-17T02:54:13.641Z",
+  "generatedAt": "2026-11-17T06:08:17.029Z",
   "title": "Design System: Takara — Tropical Green Paradise",
   "extensions": {
     "shadows": [
@@ -279,7 +279,7 @@
       "selectors": "Month and year; current or past periods only",
       "preview": "Selected closing balance → zero; current balance → resulting current balance",
       "ordering": "Chronological, once per period",
-      "rollback": "No automatic rollback; immutable audit retained"
+      "rollback": "Preview and confirm exact inverse adjustments; preserve later activity and audit; newest active period first; supports new reset cycles"
     }
   },
   "components": [

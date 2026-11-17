@@ -342,6 +342,12 @@ export async function resetMonthlyBalancesInSupabase(householdId:string,config:S
   return result;
  }catch(error){return {success:false,error:error instanceof Error?error.message:'Reset saldo belum tersimpan.'};}
 }
+export async function rollbackMonthlyBalanceInSupabase(householdId:string,checkpointId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;count?:number;alreadyRolledBack?:boolean;error?:string}>{
+ try{
+  const response=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/rollback_monthly_balance_reset',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_household:householdId,p_checkpoint_id:checkpointId})});
+  const result=await response.json();if(!response.ok||result.success!==true)throw Error(result.message||'Rollback belum tersimpan.');return result;
+ }catch(error){return {success:false,error:error instanceof Error?error.message:'Rollback belum tersimpan.'};}
+}
 async function saveAtomicTransaction(tx:FinancialTransaction,debtId:string|undefined,config:SupabaseConfig){
  try{const res=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/save_financial_transaction',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_tx:transactionRow(tx),p_debt_id:debtId||null})});if(!res.ok)throw new Error('Transaksi belum tersimpan ('+res.status+'): '+(await res.text()).slice(0,160));return {success:true};}catch(error){return {success:false,error:(error as Error).message};}
 }

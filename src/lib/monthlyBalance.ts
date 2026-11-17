@@ -2,6 +2,19 @@ import type {FinancialTransaction,Wallet,LedgerEntry} from '../types';
 import {jakartaDateTime} from './dateTime';
 
 export const isBalanceReset = (tx: Pick<FinancialTransaction,'id'>) => tx.id.startsWith('tx-month-reset-');
+export function activeResetCheckpoints(transactions:FinancialTransaction[]){
+  const rolledBack=new Set(transactions.filter(tx=>tx.status==='POSTED'&&isBalanceReset(tx)&&tx.id.endsWith('-rollback')).map(tx=>tx.id.replace(/-rollback$/,'-checkpoint')));
+  return transactions.filter(tx=>tx.status==='POSTED'&&isBalanceReset(tx)&&tx.id.endsWith('-checkpoint')&&!rolledBack.has(tx.id)).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
+}
+export function monthlyRollbackPreview(wallets:Wallet[],ledgers:LedgerEntry[],transactions:FinancialTransaction[],checkpointId:string){
+  const prefix=checkpointId.replace(/-checkpoint$/,'');
+  const posted=new Set(transactions.filter(tx=>tx.status==='POSTED').map(tx=>tx.id));
+  const reversal=new Map<string,number>();
+  for(const entry of ledgers){
+    if(posted.has(entry.transactionId)&&entry.transactionId===prefix+'-'+entry.walletId)reversal.set(entry.walletId,(reversal.get(entry.walletId)||0)-entry.signedAmount);
+  }
+  return wallets.map(wallet=>({...wallet,rollbackChange:reversal.get(wallet.id)||0,balanceAfterRollback:wallet.balance+(reversal.get(wallet.id)||0)}));
+}
 export function monthlyResetPreview(wallets:Wallet[],ledgers:LedgerEntry[],transactions:FinancialTransaction[],year:number,month:number){
   const end=Date.UTC(year,month,1)-7*60*60*1000;
   const posted=new Set(transactions.filter(tx=>tx.status==='POSTED').map(tx=>tx.id));
@@ -13,7 +26,7 @@ export function monthlyResetPreview(wallets:Wallet[],ledgers:LedgerEntry[],trans
 }
 export function monthlyResetCheckpoint(transactions: FinancialTransaction[], year: number, month: number) {
   const period = `${year}-${String(month).padStart(2,'0')}`;
-  return transactions.find(tx => {
+  return activeResetCheckpoints(transactions).find(tx => {
     if(tx.status!=='POSTED'||!isBalanceReset(tx)||!tx.id.endsWith('-checkpoint'))return false;
     try{return jakartaDateTime(tx.effectiveAt).date.startsWith(period);}catch{return false;}
   });

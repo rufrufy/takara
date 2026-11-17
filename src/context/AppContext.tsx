@@ -29,6 +29,7 @@ import { DEFAULT_AI_CONFIG, getSystemAIConfig, saveSystemAIConfig } from '../lib
 import {
   DEFAULT_SUPABASE_CONFIG,
   resetMonthlyBalancesInSupabase,
+  rollbackMonthlyBalanceInSupabase,
   importFinancialBackupToSupabase,
   saveCategoryToSupabase,
   removeCategoryFromSupabase,
@@ -140,6 +141,7 @@ interface AppContextValue {
   voidTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
   clearCurrentMonthTransactions: () => Promise<{ success: boolean; count: number; error?: string }>;
   resetMonthlyBalances: (period?:string) => Promise<{success:boolean;count?:number;alreadyReset?:boolean;error?:string}>;
+  rollbackMonthlyBalance: (checkpointId:string) => Promise<{success:boolean;count?:number;alreadyRolledBack?:boolean;error?:string}>;
   addWallet: (name: string, type: WalletType, openingBalance?: number, color?: string) => Promise<{success:boolean;error?:string}>;
   updateWallet: (walletId: string, updates: { name?: string; type?: WalletType; color?: string; institutionName?: string; targetBalance?: number }) => Promise<{success:boolean;error?:string}>;
   deleteWallet: (walletId: string) => Promise<{success:boolean;error?:string}>;
@@ -1547,6 +1549,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setState(prev=>prev.activeHouseholdId===householdId?{...prev,...refreshed.data}:prev);
     return result;
   };
+  const rollbackMonthlyBalance=async(checkpointId:string)=>{
+    const householdId=state.activeHouseholdId;
+    const result=await rollbackMonthlyBalanceInSupabase(householdId,checkpointId,state.supabaseConfig);
+    if(!result.success)return result;
+    const refreshed=await pullAllDataFromSupabase(state.supabaseConfig,householdId);
+    if(!refreshed.success||!refreshed.data)return {...result,error:'Rollback sudah tersimpan. Muat ulang untuk memperbarui saldo.'};
+    setState(prev=>prev.activeHouseholdId===householdId?{...prev,...refreshed.data}:prev);
+    return result;
+  };
 
   useEffect(()=>{
     if(!authReady||!state.isAuthenticated||!state.activeHouseholdId)return;
@@ -1594,6 +1605,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         voidTransaction:(...args)=>duringWrite(()=>voidTransaction(...args)),
         clearCurrentMonthTransactions:(...args)=>duringWrite(()=>clearCurrentMonthTransactions(...args)),
         resetMonthlyBalances:(period)=>duringWrite(()=>resetMonthlyBalances(period)),
+        rollbackMonthlyBalance:(checkpointId)=>duringWrite(()=>rollbackMonthlyBalance(checkpointId)),
         editTransaction:(...args)=>duringWrite(()=>editTransaction(...args)),
         debts,
         addDebt:(...args)=>duringWrite(()=>addDebt(...args)),

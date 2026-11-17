@@ -39,7 +39,7 @@ begin
   debt_ref:=t.debt_id;
   if debt_ref is not null and not exists(select 1 from public.debts where id=debt_ref and household_id=p_household and ((type='debt' and t.type='expense') or (type='receivable' and t.type='income'))) then raise exception 'Invalid backup debt link';end if;
   if t.id like 'tx-month-reset-%' and t.id not like 'tx-month-reset-'||md5(p_household)||'-%' then raise exception 'Reset checkpoint belongs to another household';end if;
-  if t.id like 'tx-month-reset-%-checkpoint' then
+  if t.id like 'tx-month-reset-%-checkpoint' or t.id like 'tx-month-reset-%-rollback' then
    if t.type<>'opening_balance' or t.amount<>0 or t.source_wallet_id is not null or t.destination_wallet_id is not null then raise exception 'Invalid reset checkpoint';end if;
    insert into public.transactions select (t).*;
   else

@@ -14,3 +14,5 @@ Validation:
 - `scripts/test-json-backup.sql`: ran against Supabase in a rolled-back transaction; atomic failure, rebuilt balances, duplicate skipping, preserved edits, debt links without double payments, member rejection, and full restoration including monthly reset audit. No real financial records were imported during testing.
 - Browser file chooser accepted JSON and rejected an unsupported backup version before writes. Mobile import dialog reviewed at 390px.
 - Existing Supabase regression tests, TypeScript and production build pass. Security advisor results match the existing notices documented in `monthly-balance-reset.md`.
+
+Rollback audit is supported too: zero-value rollback markers are restored without synthetic wallet ledger entries. Original reset adjustments and their exact inverses remain recorded, allowing monthly counters to recognize a rolled-back reset after restore. `scripts/test-json-rollback-restore.sql` verifies the six-record restore and idempotent retry inside a rolled-back database transaction.
