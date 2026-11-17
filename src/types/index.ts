@@ -70,6 +70,7 @@ export interface LedgerEntry {
 
 export interface FinancialTransaction {
   id: string;
+  debtId?: string;
   no?: number;
   householdId: string;
   type: TransactionType;

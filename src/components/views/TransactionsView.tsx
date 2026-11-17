@@ -1,5 +1,6 @@
 import {jakartaDateTime,jakartaDateTimeToISO} from '../../lib/dateTime';
 import {ReceiptAttachment} from '../ReceiptAttachment';
+import {isBalanceReset} from '../../lib/monthlyBalance';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
@@ -231,6 +232,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     let exp = 0;
 
     for (const t of filteredTransactions) {
+      if(isBalanceReset(t))continue;
       if (t.type === 'income') {
         inc += t.amount;
       } else if (t.type === 'expense') {
@@ -426,7 +428,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   };
 
   return (
-    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="transactions-view screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {/* Title & Actions Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -908,7 +910,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                             : 'text-slate-900'
                         }`}
                       >
-                        {isIncome ? `+${formatIDR(t.amount)}` : isTransfer ? formatIDR(t.amount) : `-${formatIDR(t.amount)}`}
+                        {isIncome ? `+${formatIDR(t.amount)}` : isTransfer || t.type==='opening_balance' ? formatIDR(t.amount) : `-${formatIDR(t.amount)}`}
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5">
                         {safeDisplayDate(t.dateStr, t.effectiveAt)}
@@ -955,7 +957,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
               </div>
 
               <div className="flex items-center gap-1.5">
-                {!isEditing ? (
+                {!isEditing && !isBalanceReset(detailTransaction) ? (
                   <button
                     onClick={() => setIsEditing(true)}
                     className="px-3 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl flex items-center gap-1 transition-colors"
@@ -964,14 +966,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                     <Edit3 className="w-3.5 h-3.5" />
                     <span>Edit</span>
                   </button>
-                ) : (
+                ) : isEditing ? (
                   <button
                     onClick={() => setIsEditing(false)}
                     className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
                   >
                     Batal Edit
                   </button>
-                )}
+                ) : null}
 
                 <button
                   onClick={() => setDetailTransaction(null)}
@@ -1001,7 +1003,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   >
                     {detailTransaction.type === 'income'
                       ? `+${formatIDR(detailTransaction.amount)}`
-                      : detailTransaction.type === 'transfer'
+                      : detailTransaction.type === 'transfer' || detailTransaction.type === 'opening_balance'
                       ? formatIDR(detailTransaction.amount)
                       : `-${formatIDR(detailTransaction.amount)}`}
                   </div>
@@ -1095,7 +1097,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-2 pt-2 border-t border-slate-100">
+                {!isBalanceReset(detailTransaction)&&<div className="flex gap-2 pt-2 border-t border-slate-100">
                   <button
                     onClick={() => setVoidConfirmId(detailTransaction.id)}
                     className="flex-1 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors flex items-center justify-center gap-1.5"
@@ -1110,7 +1112,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                     <Edit3 className="w-4 h-4" />
                     <span>Ubah / Edit</span>
                   </button>
-                </div>
+                </div>}
               </div>
             ) : (
               /* EDIT TRANSACTION FORM MODE */

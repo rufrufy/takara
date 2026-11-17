@@ -1,5 +1,5 @@
 import {jakartaDateTime} from '../../lib/dateTime';
-import {transactionsForMonth} from '../../lib/reportPeriod';
+import {monthlyActivity,monthlyResetCheckpoint,isDebtInstallmentExpense} from '../../lib/monthlyBalance';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
@@ -40,12 +40,18 @@ export const ReportsView: React.FC = () => {
   const currentPeriod=jakartaDateTime().date;
   const [selectedMonth,setSelectedMonth]=useState(Number(currentPeriod.slice(5,7)));
   const [selectedYear,setSelectedYear]=useState(Number(currentPeriod.slice(0,4)));
+  const [hideDebtInstallments,setHideDebtInstallments]=useState(false);
+  const [sinceReset,setSinceReset]=useState(true);
   const periodLabel=new Intl.DateTimeFormat('id-ID',{month:'long',year:'numeric',timeZone:'Asia/Jakarta'}).format(new Date(selectedYear,selectedMonth-1,15));
-  const transactions=useMemo(()=>transactionsForMonth(allTransactions,selectedYear,selectedMonth),[allTransactions,selectedYear,selectedMonth]);
+  const resetCheckpoint=monthlyResetCheckpoint(allTransactions,selectedYear,selectedMonth);
+  const periodTransactions=useMemo(()=>monthlyActivity(allTransactions,selectedYear,selectedMonth,sinceReset),[allTransactions,selectedYear,selectedMonth,sinceReset]);
+  const excludedInstallments=periodTransactions.filter(isDebtInstallmentExpense);
+  const excludedAmount=excludedInstallments.reduce((sum,t)=>sum+t.amount,0);
+  const transactions=useMemo(()=>hideDebtInstallments?periodTransactions.filter(t=>!isDebtInstallmentExpense(t)):periodTransactions,[periodTransactions,hideDebtInstallments]);
   const periodIncome=transactions.filter(t=>t.type==='income').reduce((n,t)=>n+t.amount,0);
   const periodExpense=transactions.filter(t=>t.type==='expense').reduce((n,t)=>n+t.amount,0);
   const netCashFlow=periodIncome-periodExpense;
-  const reportKey=activeHousehold.id+':'+selectedYear+':'+selectedMonth;
+  const reportKey=activeHousehold.id+':'+selectedYear+':'+selectedMonth+':'+hideDebtInstallments+':'+sinceReset;
   const analysisPeriod=useRef(reportKey);analysisPeriod.current=reportKey;
   const years=useMemo(()=>{
     const values=allTransactions.flatMap(t=>{try{return [Number(jakartaDateTime(t.effectiveAt).date.slice(0,4))];}catch{return [];}});
@@ -188,6 +194,9 @@ export const ReportsView: React.FC = () => {
         <label className="min-w-36 flex-1 text-xs font-semibold text-slate-600">Bulan<select value={selectedMonth} onChange={e=>setSelectedMonth(Number(e.target.value))} className="mt-1 block w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600">{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Intl.DateTimeFormat('id-ID',{month:'long'}).format(new Date(2020,i,15))}</option>)}</select></label>
         <label className="min-w-24 flex-1 text-xs font-semibold text-slate-600">Tahun<select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} className="mt-1 block w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-900 focus:ring-2 focus:ring-teal-600">{years.map(year=><option key={year} value={year}>{year}</option>)}</select></label>
         <p className="w-full text-xs text-slate-500">{transactions.length} transaksi pada {periodLabel}{transactions.length===0?' · Belum ada transaksi untuk periode ini.':''}</p>
+        <label className="report-debt-toggle"><input type="checkbox" checked={hideDebtInstallments} onChange={e=>setHideDebtInstallments(e.target.checked)}/><span>Sembunyikan cicilan utang</span></label>
+        {hideDebtInstallments&&<p role="status" className="w-full text-xs text-slate-600">{excludedInstallments.length} cicilan ({formatIDR(excludedAmount)}) disembunyikan. Ringkasan dan grafik menampilkan pengeluaran selain cicilan utang.</p>}
+        {resetCheckpoint&&<label className="report-debt-toggle"><input type="checkbox" checked={sinceReset} onChange={e=>setSinceReset(e.target.checked)}/><span>Hitungan sejak reset saldo · {new Date(resetCheckpoint.createdAt).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'})}</span></label>}
       </div>
       {/* Net Cash Flow Card */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-4">

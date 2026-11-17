@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-16T20:08:13.741Z",
+  "generatedAt": "2026-11-17T01:46:40.707Z",
   "title": "Design System: Takara — Tropical Green Paradise",
   "extensions": {
     "shadows": [
@@ -251,6 +251,18 @@
       },
       "saveAndContinue": "48px circular plus, accessible name, spinner while saving",
       "amountInput": "Native numeric keyboard entry, raw digits while focused, Indonesian grouping on blur, shared keypad state, 12-digit maximum"
+    },
+    "tropicalFinance": {
+      "orange": "#F59E42",
+      "orangeTint": "#FFF0DD",
+      "red": "#EF476F",
+      "redTint": "#FFE0E8",
+      "green": "#06D6A0",
+      "greenTint": "#D7F7EE",
+      "wallets": "cash mint, bank orange, digital red",
+      "smallTransactions": "description first; amount and date below at <=400px",
+      "monthlyReset": "Owner/admin preview and confirmation; once per Jakarta month; history retained",
+      "reports": "Optional exclusion of debt installments, full-month or post-reset activity"
     }
   },
   "components": [

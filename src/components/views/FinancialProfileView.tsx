@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
+import {isBalanceReset} from '../../lib/monthlyBalance';
 import { Wallet, WalletType, DebtItem, TransactionType } from '../../types';
 import {
   Wallet as WalletIcon,
@@ -220,7 +221,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
   }, 0);
 
   // Filter income transactions
-  const incomeTransactions = transactions.filter(t => t.type === 'income');
+  const incomeTransactions = transactions.filter(t => t.type === 'income' && !isBalanceReset(t));
 
   const unattributedIncomeList = React.useMemo(() => {
     const memberFullNames = new Set(members.map(m => (m.displayName || '').toLowerCase().trim()));
@@ -427,7 +428,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     : [];
 
   return (
-    <div className="screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="financial-profile-view screen-view space-y-6 pb-24 pt-2 max-w-4xl mx-auto px-4 sm:px-6">
       {writeBusy&&<p role="status" className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] rounded-full bg-teal-700 px-5 py-3 text-sm text-white shadow-lg">Menyimpan ke Supabase…</p>}
       {/* Title */}
       <div className="flex items-center justify-between">
@@ -522,8 +523,10 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
               return (
                 <div
                   key={w.id}
+                  data-wallet-type={w.type}
+                  data-selected={isSelected}
                   onClick={() => setSelectedWalletId(isSelected ? null : w.id)}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                  className={`wallet-account-card p-4 rounded-2xl border transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-teal-50/70 border-teal-600 shadow-sm ring-1 ring-teal-600/30'
                       : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'

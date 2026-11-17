@@ -1,3 +1,4 @@
+import {MonthlyBalanceReset} from '../MonthlyBalanceReset';
 import {CategorySettings} from '../CategorySettings';
 import { HouseholdDeleteControl } from '../HouseholdDeleteControl';
 import React, { useState } from 'react';
@@ -58,8 +59,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
     sessions,
     activeSession,
     inviteMember,
-    removeMember,
-    clearCurrentMonthTransactions
+    removeMember
   } = useApp();
   const [showSecretKey, setShowSecretKey] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -70,7 +70,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
   const [pinError,setPinError]=useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
-  const [resetError,setResetError]=useState('');
 
   // Invite Member Modal / Inline Form
   const [isAddingMember, setIsAddingMember] = useState(false);
@@ -80,35 +79,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
   const [invitePin, setInvitePin] = useState('');
   const [inviteSuccessMsg, setInviteSuccessMsg] = useState('');
 
-  // Reset Transaksi Bulan Ini State
-  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetSuccessMsg, setResetSuccessMsg] = useState('');
-
-  const now = new Date();
-  const currentMonthLabel = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-
-  const monthTxCount = React.useMemo(() => {
-    return state.transactions.filter(t => {
-      if (t.householdId !== activeHousehold.id || t.status==='VOIDED') return false;
-      const tDate = new Date(t.effectiveAt || t.createdAt);
-      return !isNaN(tDate.getTime()) && tDate.getFullYear() === currentYear && tDate.getMonth() === currentMonth;
-    }).length;
-  }, [state.transactions, activeHousehold.id, currentYear, currentMonth]);
-
-  const handleExecuteResetMonth = async () => {
-    setIsResetting(true);
-    setResetSuccessMsg('');setResetError('');
-    const res = await clearCurrentMonthTransactions();
-    setIsResetting(false);
-    setIsConfirmingReset(false);
-    if (res.success) {
-      setResetSuccessMsg(`${res.count} transaksi bulan ${currentMonthLabel} berhasil dibatalkan dan disimpan di Supabase.`);
-      setTimeout(() => setResetSuccessMsg(''), 5000);
-    }else setResetError(res.error||'Pembatalan transaksi belum berhasil.');
-  };
   const inviteCode = activeHousehold?.inviteCode || 'DK-KLRG-8921';
   const inviteLink = `https://dompetkita.app/join?code=${inviteCode}`;
 
@@ -247,71 +217,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         </div>
       </div>
 
-      {resetError&&<p role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-800">{resetError}</p>}
-      {/* SEKSI: RESET TRANSAKSI BULAN INI */}
-      <div className="bg-white rounded-3xl border border-red-200/80 p-5 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Trash2 className="w-4 h-4 text-red-600" />
-            <h2 className="font-bold text-slate-900 text-sm">Reset Transaksi Bulan Ini</h2>
-          </div>
-          <span className="text-[10px] bg-red-50 text-red-700 font-bold px-2 py-0.5 rounded-full border border-red-200">
-            {monthTxCount} Transaksi ({currentMonthLabel})
-          </span>
-        </div>
-
-        <p className="text-xs text-slate-500 leading-relaxed">
-          Hapus seluruh riwayat transaksi (pemasukan, pengeluaran, transfer) di {activeHousehold.name} khusus untuk bulan berjalan ({currentMonthLabel}). Saldo dompet akan otomatis dihitung ulang.
-        </p>
-
-        {resetSuccessMsg && (
-          <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-semibold border border-emerald-200 flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{resetSuccessMsg}</span>
-          </div>
-        )}
-
-        {!isConfirmingReset ? (
-          <button
-            type="button"
-            onClick={() => setIsConfirmingReset(true)}
-            disabled={monthTxCount === 0 || isResetting}
-            className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors active:scale-98 cursor-pointer"
-          >
-            <RotateCcw className="w-4 h-4 text-red-600" />
-            <span>Reset & Hapus Seluruh Transaksi Bulan Ini ({monthTxCount})</span>
-          </button>
-        ) : (
-          <div className="p-4 bg-red-50/90 rounded-2xl border border-red-200 space-y-3 animate-in fade-in">
-            <div className="flex items-start gap-2.5 text-xs text-red-900">
-              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <div>
-                <strong className="block font-bold">Konfirmasi Hapus Transaksi</strong>
-                <span>Yakin ingin menghapus seluruh {monthTxCount} transaksi pada bulan {currentMonthLabel}? Data yang terhapus dari cloud Supabase tidak dapat dikembalikan.</span>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setIsConfirmingReset(false)}
-                disabled={isResetting}
-                className="flex-1 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteResetMonth}
-                disabled={isResetting}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
-              >
-                {isResetting ? 'Menghapus...' : 'Ya, Hapus Semua'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <MonthlyBalanceReset />
 
       {/* SEKSI 2: UNDANG KELUARGA (HOUSEHOLD INVITATION) */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-4">

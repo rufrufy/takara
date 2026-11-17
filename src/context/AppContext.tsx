@@ -1,4 +1,5 @@
 import {isDebtOpeningTransaction} from '../lib/transactionVisibility';
+import {monthlyActivity} from '../lib/monthlyBalance';
 import {inviteAccount,authenticateAccount,getCurrentAccount,changeAccountPin,registerAccount,adminCreateAccount,adminUpdateAccount,adminDeleteAccount,signOutAccount,getReceiptAuthClient} from '../lib/receiptAuth';
 import {jakartaDateTime} from '../lib/dateTime';
 import {loadUserFinancialData} from '../lib/financialBootstrap';
@@ -26,6 +27,7 @@ import { initialData, createFreshUserData } from '../lib/initialData';
 import { DEFAULT_AI_CONFIG, getSystemAIConfig, saveSystemAIConfig } from '../lib/aiScanner';
 import {
   DEFAULT_SUPABASE_CONFIG,
+  resetMonthlyBalancesInSupabase,
   saveCategoryToSupabase,
   removeCategoryFromSupabase,
   fetchUserHouseholds,
@@ -135,6 +137,7 @@ interface AppContextValue {
   addTransaction: (input: NewTransactionInput) => Promise<{ success: boolean; error?: string }>;
   voidTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
   clearCurrentMonthTransactions: () => Promise<{ success: boolean; count: number; error?: string }>;
+  resetMonthlyBalances: () => Promise<{success:boolean;count?:number;alreadyReset?:boolean;error?:string}>;
   addWallet: (name: string, type: WalletType, openingBalance?: number, color?: string) => Promise<{success:boolean;error?:string}>;
   updateWallet: (walletId: string, updates: { name?: string; type?: WalletType; color?: string; institutionName?: string; targetBalance?: number }) => Promise<{success:boolean;error?:string}>;
   deleteWallet: (walletId: string) => Promise<{success:boolean;error?:string}>;
@@ -475,13 +478,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [state.transactions, state.activeHouseholdId]);
 
   // Summary Metrics
+  const [summaryMonth,setSummaryMonth]=useState(()=>jakartaDateTime().date.slice(0,7));
+  useEffect(()=>{
+    const update=()=>setSummaryMonth(jakartaDateTime().date.slice(0,7));
+    const timer=setInterval(update,60000);window.addEventListener('focus',update);
+    return()=>{clearInterval(timer);window.removeEventListener('focus',update);};
+  },[]);
   const { totalBalance, periodIncome, periodExpense, netCashFlow } = useMemo(() => {
-    let totBal = wallets.reduce((sum, w) => sum + w.balance, 0);
+    const totBal = wallets.reduce((sum, w) => sum + w.balance, 0);
 
     let inc = 0;
     let exp = 0;
 
-    for (const t of transactions) {
+    const period=summaryMonth;
+    for (const t of monthlyActivity(transactions,Number(period.slice(0,4)),Number(period.slice(5,7)))) {
       if (t.type === 'income') {
         inc += t.amount;
       } else if (t.type === 'expense') {
@@ -491,18 +501,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    // Invariant: Total saldo household tidak boleh 0 jika ada transaksi pemasukan/pengeluaran riil
-    if (totBal === 0 && (inc > 0 || exp > 0)) {
-      totBal = inc - exp;
-    }
-
     return {
       totalBalance: totBal,
       periodIncome: inc,
       periodExpense: exp,
       netCashFlow: inc - exp
     };
-  }, [wallets, transactions]);
+  }, [wallets, transactions, summaryMonth]);
 
   // Add Transaction with atomic ledger updates & label support
   const addTransaction = async (input: NewTransactionInput): Promise<{ success: boolean; error?: string }> => {
@@ -866,6 +871,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const incoming = debt.type === 'receivable';
     return persistDebtActivity(updated, {
       id: 'tx-payment-' + debt.id + '-' + debt.remainingAmount, householdId: debt.householdId,
+      debtId: debt.id,
       type: incoming ? 'income' : 'expense', amount,
       sourceWalletId: incoming ? undefined : wallet.id, destinationWalletId: incoming ? wallet.id : undefined,
       categoryName: incoming ? 'Pembayaran Piutang' : 'Cicilan & Utang',
@@ -1505,6 +1511,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const resetMonthlyBalances=async()=>{
+    const householdId=state.activeHouseholdId;
+    const result=await resetMonthlyBalancesInSupabase(householdId,state.supabaseConfig);
+    if(!result.success)return result;
+    const refreshed=await pullAllDataFromSupabase(state.supabaseConfig,householdId);
+    if(!refreshed.success||!refreshed.data)return {...result,error:'Reset sudah tersimpan. Muat ulang untuk memperbarui saldo.'};
+    setState(prev=>prev.activeHouseholdId===householdId?{...prev,...refreshed.data}:prev);
+    return result;
+  };
+
   useEffect(()=>{
     if(!authReady||!state.isAuthenticated||!state.activeHouseholdId)return;
     const householdId=state.activeHouseholdId,userId=state.currentUser.id,admin=state.currentUser.role==='ADMIN';
@@ -1550,6 +1566,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addTransaction:(...args)=>duringWrite(()=>addTransaction(...args)),
         voidTransaction:(...args)=>duringWrite(()=>voidTransaction(...args)),
         clearCurrentMonthTransactions:(...args)=>duringWrite(()=>clearCurrentMonthTransactions(...args)),
+        resetMonthlyBalances:()=>duringWrite(()=>resetMonthlyBalances()),
         editTransaction:(...args)=>duringWrite(()=>editTransaction(...args)),
         debts,
         addDebt:(...args)=>duringWrite(()=>addDebt(...args)),

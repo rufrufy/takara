@@ -45,7 +45,7 @@ export const HomeView: React.FC<HomeViewProps> = ({onOpenQuickAdd,onOpenAIScan,o
       </div>
     </section>
     <div className="wallet-strip no-scrollbar" aria-label="Saldo tiap dompet">
-      {[...wallets].sort((a,b)=>b.balance-a.balance||a.name.localeCompare(b.name,'id')).map(w=><button key={w.id} onClick={()=>onChangeTab('profil-keuangan')}><Wallet size={16}/><span>{w.name}</span><b>{showBalance?formatIDR(w.balance):'••••••'}</b></button>)}
+      {[...wallets].sort((a,b)=>b.balance-a.balance||a.name.localeCompare(b.name,'id')).map(w=><button key={w.id} data-wallet-type={w.type} onClick={()=>onChangeTab('profil-keuangan')}><Wallet size={16}/><span>{w.name}</span><b>{showBalance?formatIDR(w.balance):'••••••'}</b></button>)}
       {!wallets.length&&<button onClick={()=>onChangeTab('profil-keuangan')}><Plus size={16}/>Tambah dompet</button>}
     </div>
     <section className="daily-activity" aria-labelledby="daily-title">
@@ -59,7 +59,7 @@ export const HomeView: React.FC<HomeViewProps> = ({onOpenQuickAdd,onOpenAIScan,o
           return <button className="daily-row" key={t.id} onClick={()=>onOpenTransaction(t.id)} aria-label={`Lihat transaksi ${t.description||t.categoryName}, ${formatIDR(t.amount)}`}>
             <span className="daily-icon" style={categoryAppearance(category?.color)}><CategoryIcon name={t.categoryName} type={t.type} icon={category?.icon} className="w-5 h-5"/></span>
             <span className="daily-description"><strong>{t.description||t.categoryName||'Transfer antar dompet'}</strong><small>{t.time||jakartaDateTime(t.effectiveAt).time}{t.addedBy?` · ${t.addedBy.split(' ')[0]}`:''}</small></span>
-            <span className={`daily-amount ${t.type==='income'?'is-income':''}`}>{t.type==='income'?'+':t.type==='expense'?'−':''}{formatIDR(t.amount)}</span>
+            <span className={`daily-amount is-${t.type}`}>{t.type==='income'?'+':t.type==='expense'?'−':''}{formatIDR(t.amount)}</span>
           </button>;
         })}</section>)}
         {!filtered.length&&<div className="daily-empty"><p>{transactions.length?'Tidak ada transaksi yang cocok.':'Belum ada catatan di household ini.'}</p><button onClick={()=>{if(transactions.length){setQuery('');setType('all');setWalletId('all');}else onOpenQuickAdd();}}>{transactions.length?'Reset pencarian':'Catat transaksi pertama'}</button></div>}

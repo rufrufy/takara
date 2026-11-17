@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {loadSource} from './test-source-loader.mjs';
+const {monthlyActivity,monthlyResetCheckpoint,isDebtInstallmentExpense}=await loadSource('src/lib/monthlyBalance.ts');
+const tx=(id,type,amount,date='2026-11-17T02:00:00Z',extra={})=>({id,type,amount,effectiveAt:date,createdAt:date,status:'POSTED',...extra});
+const oldIncome=tx('old-income','income',100000),oldExpense=tx('old-expense','expense',20000);
+const marker=tx('tx-month-reset-hh-2026-11-checkpoint','opening_balance',0,'2026-11-17T03:00:00Z',{notes:JSON.stringify({excludedTransactionIds:['old-income','old-expense']})});
+const items=[oldIncome,oldExpense,marker,tx('tx-month-reset-hh-wallet','expense',80000),tx('new-backdated','income',7000),tx('december','income',1,'2026-11-30T17:00:00Z'),tx('voided','expense',99,undefined,{status:'VOIDED'}),tx('bad-date','income',1,'invalid')];
+assert.equal(monthlyResetCheckpoint(items,2026,11).id,marker.id);
+assert.deepEqual(monthlyActivity(items,2026,11).map(t=>t.id),['new-backdated']);
+assert.deepEqual(monthlyActivity(items,2026,11,false).map(t=>t.id),['old-income','old-expense','new-backdated']);
+assert.deepEqual(monthlyActivity(items,2026,12).map(t=>t.id),['december']);
+assert.equal(isDebtInstallmentExpense(tx('linked','expense',1,undefined,{debtId:'debt-1',categoryName:'Rumah'})),true);
+assert.equal(isDebtInstallmentExpense(tx('legacy','expense',1,undefined,{categoryName:'Cicilan & Utang'})),true);
+assert.equal(isDebtInstallmentExpense(tx('tx-payment-1','expense',1)),true);
+assert.equal(isDebtInstallmentExpense(tx('tx-payment-2','income',1,undefined,{debtId:'receivable'})),false);
+assert.equal(isDebtInstallmentExpense(tx('food','expense',1,undefined,{categoryName:'Makanan & Minuman'})),false);
+assert.equal(isDebtInstallmentExpense(tx('food-note','expense',1,undefined,{categoryName:'Makan',description:'Makan setelah bayar utang'})),false);
+console.log('PASS: reset snapshot preserves new backdated activity, full history option, Jakarta month boundary, adjustment/void exclusion, canonical and legacy debt classification without excluding ordinary spending or receivables');

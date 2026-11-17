@@ -14,6 +14,7 @@ import type {
 
 interface RawSupabaseTx {
   id: string;
+  debt_id?: string;
   household_id: string;
   no?: number;
   type: FinancialTransaction['type'];
@@ -324,6 +325,14 @@ const transactionRow=(tx:FinancialTransaction)=>({
 });
 export const syncTransactionToSupabase = async (tx:FinancialTransaction,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG,_mode:'insert'|'update'='insert'):Promise<{success:boolean;error?:string}>=>saveAtomicTransaction(tx,undefined,config);
 export const syncDebtPaymentToSupabase = async (tx:FinancialTransaction,debtId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;error?:string}>=>saveAtomicTransaction(tx,debtId,config);
+export async function resetMonthlyBalancesInSupabase(householdId:string,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;count?:number;alreadyReset?:boolean;error?:string}>{
+ try{
+  const response=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/reset_monthly_balances',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_household:householdId})});
+  const result=await response.json();
+  if(!response.ok||result.success!==true)throw new Error(result.message||'Reset saldo belum tersimpan.');
+  return result;
+ }catch(error){return {success:false,error:error instanceof Error?error.message:'Reset saldo belum tersimpan.'};}
+}
 async function saveAtomicTransaction(tx:FinancialTransaction,debtId:string|undefined,config:SupabaseConfig){
  try{const res=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/save_financial_transaction',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_tx:transactionRow(tx),p_debt_id:debtId||null})});if(!res.ok)throw new Error('Transaksi belum tersimpan ('+res.status+'): '+(await res.text()).slice(0,160));return {success:true};}catch(error){return {success:false,error:(error as Error).message};}
 }
@@ -666,6 +675,7 @@ export const pullAllDataFromSupabase = async (
 
     const transactions: FinancialTransaction[] = rawTxs.map((t: RawSupabaseTx) => ({
       id: t.id,
+      debtId: t.debt_id,
       householdId: t.household_id,
       no: t.no,
       type: t.type,
