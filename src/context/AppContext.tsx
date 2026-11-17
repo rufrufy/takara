@@ -1,5 +1,6 @@
 import {isDebtOpeningTransaction} from '../lib/transactionVisibility';
 import {monthlyActivity} from '../lib/monthlyBalance';
+import {parseFinancialBackup,backupSummary} from '../lib/jsonBackup';
 import {inviteAccount,authenticateAccount,getCurrentAccount,changeAccountPin,registerAccount,adminCreateAccount,adminUpdateAccount,adminDeleteAccount,signOutAccount,getReceiptAuthClient} from '../lib/receiptAuth';
 import {jakartaDateTime} from '../lib/dateTime';
 import {loadUserFinancialData} from '../lib/financialBootstrap';
@@ -28,6 +29,7 @@ import { DEFAULT_AI_CONFIG, getSystemAIConfig, saveSystemAIConfig } from '../lib
 import {
   DEFAULT_SUPABASE_CONFIG,
   resetMonthlyBalancesInSupabase,
+  importFinancialBackupToSupabase,
   saveCategoryToSupabase,
   removeCategoryFromSupabase,
   fetchUserHouseholds,
@@ -150,6 +152,7 @@ interface AppContextValue {
   updateHousehold: (householdId: string, name: string) => Promise<{success:boolean;error?:string}>;
   deleteHousehold: (householdId: string) => Promise<{ success: boolean; error?: string }>;
   importExcelFile: (file: File) => Promise<{ success: boolean; summary?: ExcelImportSummary; error?: string }>;
+  importJSONFile: (file:File) => Promise<{success:boolean;summary?:ExcelImportSummary;imported?:number;skipped?:number;error?:string}>;
   resetToDefault: () => void;
   verifyAndUnlock: (pin: string) => Promise<boolean>;
   loginUser: (username: string, code5Digit: string) => Promise<{ success: boolean; error?: string }>;
@@ -1150,6 +1153,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true };
   };
 
+  const importJSONFile=async(file:File)=>{
+    const householdId=state.activeHouseholdId;
+    try{
+      const allowed=state.households.some(h=>h.id===householdId&&h.createdById===state.currentUser.id)||state.members.some(m=>m.householdId===householdId&&m.userId===state.currentUser.id&&['OWNER','ADMIN'].includes(m.role));
+      if(!allowed)throw Error('Hanya pemilik atau admin household yang dapat mengimpor cadangan JSON.');
+      if(file.size>20*1024*1024)throw Error('Ukuran cadangan JSON maksimal 20 MB.');
+      const backup=parseFinancialBackup(await file.text(),householdId);
+      const existingIds=new Set(state.transactions.map(tx=>tx.id));
+      for(const tx of backup.transactions){
+        if(!existingIds.has(tx.id)&&tx.imageUrl?.startsWith('data:'))tx.imageUrl=await uploadReceiptPhoto(tx.imageUrl,householdId,state.currentUser);
+      }
+      const result=await importFinancialBackupToSupabase(backup,state.supabaseConfig);
+      if(!result.success)return result;
+      const verified=await pullAllDataFromSupabase(state.supabaseConfig,householdId);
+      const confirmed=verified.data;
+      const complete=confirmed&&(['transactions','wallets','categories','debts'] as const).every(key=>{
+        const ids=new Set(confirmed[key]?.map(row=>row.id));return backup[key].every(row=>ids.has(row.id));
+      })&&backup.labels.every(label=>confirmed.labels?.includes(label));
+      if(!verified.success||!complete)return {success:false,error:'Impor tersimpan, tetapi belum dapat diverifikasi. Coba impor ulang dengan aman.'};
+      setState(prev=>prev.activeHouseholdId===householdId?{...prev,...verified.data}:prev);
+      return {...result,summary:backupSummary(backup)};
+    }catch(error){return {success:false,error:error instanceof Error?error.message:'Impor JSON gagal.'};}
+  };
+
   // Import from Excel file (.xlsx)
   const importExcelFile = async (file: File): Promise<{ success: boolean; summary?: ExcelImportSummary; error?: string }> => {
     try {
@@ -1587,6 +1614,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateHousehold:(...args)=>duringWrite(()=>updateHousehold(...args)),
         deleteHousehold:(...args)=>duringWrite(()=>deleteHousehold(...args)),
         importExcelFile:(...args)=>duringWrite(()=>importExcelFile(...args)),
+        importJSONFile:(...args)=>duringWrite(()=>importJSONFile(...args)),
         resetToDefault,
         verifyAndUnlock,
         loginUser,

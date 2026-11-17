@@ -1,4 +1,5 @@
 import {MonthlyBalanceReset} from '../MonthlyBalanceReset';
+import {createFinancialBackup} from '../../lib/jsonBackup';
 import {CategorySettings} from '../CategorySettings';
 import { HouseholdDeleteControl } from '../HouseholdDeleteControl';
 import React, { useState } from 'react';
@@ -120,7 +121,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
   };
 
   const handleExportJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
+    const dataStr = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(createFinancialBackup(state), null, 2));
     const link = document.createElement('a');
     link.setAttribute('href', dataStr);
     link.setAttribute('download', `backup-dompetkita-${Date.now()}.json`);
@@ -204,7 +205,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
             className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Impor Berkas Excel (.xlsx)</span>
+            <span>Impor Excel / JSON</span>
           </button>
 
           <button

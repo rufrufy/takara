@@ -1,4 +1,5 @@
 import {getAuthAccessToken,accountRequest} from './receiptAuth';
+import type {FinancialBackup} from './jsonBackup';
 import type {
   SupabaseConfig,
   FinancialTransaction,
@@ -146,6 +147,14 @@ const getHeaders = (config: SupabaseConfig): Record<string, string> => {
     Prefer: 'resolution=merge-duplicates'
   };
 };
+
+export async function importFinancialBackupToSupabase(backup:FinancialBackup,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<{success:boolean;imported?:number;skipped?:number;error?:string}>{
+ const row=(value:object)=>Object.fromEntries(Object.entries(value).filter(([,v])=>v!==undefined).map(([k,v])=>[k.replace(/[A-Z]/g,ch=>'_'+ch.toLowerCase()),v]));
+ try{
+  const response=await fetch(config.url.replace(/\/+$/,'')+'/rest/v1/rpc/import_financial_backup',{method:'POST',headers:getHeaders(config),body:JSON.stringify({p_household:backup.household.id,p_backup:{wallets:backup.wallets.map(w=>row({...w,balance:0})),categories:backup.categories.map(row),debts:backup.debts.map(row),transactions:backup.transactions.map(row),labels:backup.labels}})});
+  const result=await response.json();if(!response.ok||result.success!==true)throw Error(result.message||'Impor JSON belum tersimpan.');return result;
+ }catch(error){return {success:false,error:error instanceof Error?error.message:'Impor JSON gagal.'};}
+}
 
 const postSupabaseTable = async (
   cleanUrl: string,
