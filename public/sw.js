@@ -1,5 +1,5 @@
 // Service Worker untuk Takara Keuangan Keluarga (PWA offline shell & homescreen install)
-const CACHE_NAME = 'takara-pwa-v3';
+const CACHE_NAME = 'takara-pwa-v5';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',

@@ -303,10 +303,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 {[0, 1, 2, 3, 4].map(idx => (
                   <div
                     key={idx}
-                    className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                    className={`w-4 h-4 rounded-full border-2 border-[#073B4C] transition-all duration-150 ${
                       code.length > idx
-                        ? 'bg-teal-300 scale-125 shadow-sm shadow-teal-300/50'
-                        : 'border border-teal-400/40 bg-teal-950/40'
+                        ? 'bg-[#06D6A0] scale-125 shadow-[2px_2px_0_#073B4C]'
+                        : 'bg-white'
                     }`}
                   />
                 ))}
@@ -479,10 +479,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 {[0, 1, 2, 3, 4].map(idx => (
                   <div
                     key={idx}
-                    className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                    className={`w-4 h-4 rounded-full border-2 border-[#073B4C] transition-all duration-150 ${
                       code.length > idx
-                        ? 'bg-amber-300 scale-125 shadow-sm shadow-amber-300/50'
-                        : 'border border-amber-400/40 bg-amber-950/40'
+                        ? 'bg-[#FFD166] scale-125 shadow-[2px_2px_0_#073B4C]'
+                        : 'bg-white'
                     }`}
                   />
                 ))}

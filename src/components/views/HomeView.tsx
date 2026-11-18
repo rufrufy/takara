@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { jakartaDateTime } from '../../lib/dateTime';
+import { resolveWalletHeaderColor, getReadableHeaderText } from '../../lib/walletColors';
 import { CategoryIcon, categoryAppearance } from '../CategoryIcon';
 import { Eye, EyeOff, ArrowDownLeft, ArrowUpRight, Wallet, Plus, Search, SlidersHorizontal, Camera, ScanLine, FileUp, ChevronRight } from 'lucide-react';
 import type { ActiveTab } from '../BottomNav';
@@ -35,18 +36,18 @@ export const HomeView: React.FC<HomeViewProps> = ({onOpenQuickAdd,onOpenAIScan,o
   return <div className="home-view">
     {supabaseSyncStatus.status==='error'&&<div role="alert" className="sync-error"><p>{supabaseSyncStatus.error||'Data belum dapat dimuat.'}</p><button onClick={()=>syncFromSupabase()}>Coba lagi</button></div>}
     <section className="balance-panel" aria-label="Saldo household">
-      <p className="balance-label">Saldo tersedia</p>
-      <div className="balance-main"><div className="balance-value"><strong>{showBalance?formatIDR(totalBalance):'Rp ••••••'}</strong><button className="balance-eye" onClick={()=>setShowBalance(!showBalance)} aria-label={showBalance?'Sembunyikan saldo':'Tampilkan saldo'}>{showBalance?<Eye size={19}/>:<EyeOff size={19}/>}</button></div>
-        <button className="record-button" onClick={onOpenAIScan} aria-label="Scan struk"><ScanLine size={20}/><span>Scan</span></button>
+      <p className="balance-label">🌴 Saldo tersedia</p>
+      <div className="balance-main"><div className="balance-value"><strong>{showBalance?formatIDR(totalBalance):'Rp ••••••'}</strong><button className="balance-eye" onClick={()=>setShowBalance(!showBalance)} aria-label={showBalance?'Sembunyikan saldo':'Tampilkan saldo'}>{showBalance?<Eye size={18} strokeWidth={2.3}/>:<EyeOff size={18} strokeWidth={2.3}/>}</button></div>
+        <button className="record-button" onClick={onOpenAIScan} aria-label="Scan struk"><ScanLine size={19} strokeWidth={2.4}/><span>Scan AI</span></button>
       </div>
       <div className="balance-flows">
-        <button onClick={()=>onOpenQuickAdd('income')} aria-label="Catat pemasukan"><ArrowDownLeft size={17}/><span>Masuk <b>{showBalance?formatIDR(periodIncome):'••••••'}</b></span></button>
-        <button onClick={()=>onOpenQuickAdd('expense')} aria-label="Catat pengeluaran"><ArrowUpRight size={17}/><span>Keluar <b>{showBalance?formatIDR(periodExpense):'••••••'}</b></span></button>
+        <button onClick={()=>onOpenQuickAdd('income')} aria-label="Catat pemasukan"><ArrowDownLeft size={17} strokeWidth={2.6}/><span>Masuk <b>{showBalance?formatIDR(periodIncome):'••••••'}</b></span></button>
+        <button onClick={()=>onOpenQuickAdd('expense')} aria-label="Catat pengeluaran"><ArrowUpRight size={17} strokeWidth={2.6}/><span>Keluar <b>{showBalance?formatIDR(periodExpense):'••••••'}</b></span></button>
       </div>
     </section>
     <div className="wallet-strip no-scrollbar" aria-label="Saldo tiap dompet">
-      {[...wallets].sort((a,b)=>b.balance-a.balance||a.name.localeCompare(b.name,'id')).map(w=><button key={w.id} data-wallet-type={w.type} onClick={()=>onChangeTab('profil-keuangan')}><Wallet size={16}/><span>{w.name}</span><b>{showBalance?formatIDR(w.balance):'••••••'}</b></button>)}
-      {!wallets.length&&<button onClick={()=>onChangeTab('profil-keuangan')}><Plus size={16}/>Tambah dompet</button>}
+      {[...wallets].sort((a,b)=>b.balance-a.balance||a.name.localeCompare(b.name,'id')).map(w=>{const hc=resolveWalletHeaderColor(w);const ht=getReadableHeaderText(hc);return <button key={w.id} data-wallet-type={w.type} onClick={()=>onChangeTab('profil-keuangan')}><span style={{backgroundColor:hc,color:ht}}><Wallet size={14} strokeWidth={2.4}/>{w.name}</span><b>{showBalance?formatIDR(w.balance):'••••••'}</b></button>;})}
+      {!wallets.length&&<button onClick={()=>onChangeTab('profil-keuangan')}><span style={{backgroundColor:'#06D6A0',color:'#073B4C'}}><Plus size={15} strokeWidth={2.6}/>Tambah dompet</span><b>Mulai catat</b></button>}
     </div>
     <section className="daily-activity" aria-labelledby="daily-title">
       <div className="activity-heading"><h1 id="daily-title">Catatan Harian</h1><div className="activity-heading-actions"><button type="button" className="home-scan-button" onClick={onOpenAIScan} aria-label="Scan struk otomatis" title="Scan struk otomatis"><Camera size={20}/></button><button onClick={()=>onChangeTab('transaksi')} aria-label="Lihat semua transaksi"><ChevronRight size={20}/></button></div></div>

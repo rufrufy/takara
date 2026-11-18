@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import {isBalanceReset} from '../../lib/monthlyBalance';
+import { WALLET_HEADER_COLORS, defaultWalletHeaderColor, resolveWalletHeaderColor, getReadableHeaderText } from '../../lib/walletColors';
 import { Wallet, WalletType, DebtItem, TransactionType } from '../../types';
 import {
   Wallet as WalletIcon,
@@ -70,12 +71,15 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [walletName, setWalletName] = useState('');
   const [walletType, setWalletType] = useState<WalletType>('checking');
+  const [walletColor, setWalletColor] = useState<string>('#FFD166');
+  const [walletColorTouched, setWalletColorTouched] = useState(false);
   const [openingBalanceStr, setOpeningBalanceStr] = useState('');
 
   // Wallet edit state
   const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
   const [editWalletName, setEditWalletName] = useState('');
   const [editWalletType, setEditWalletType] = useState<WalletType>('checking');
+  const [editWalletColor, setEditWalletColor] = useState<string>('#FFD166');
   const [editWalletTargetBalanceStr, setEditWalletTargetBalanceStr] = useState('');
   const [editWalletError, setEditWalletError] = useState('');
   // 3-Step Debt Wizard State: Jenis -> Nominal & Tempo -> Detail & Dompet
@@ -260,16 +264,17 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
   // Handle Add Wallet Submit
   const handleAddWallet = async (e: React.FormEvent) => {
     e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
-    e.preventDefault();
     if (!walletName.trim()) return;
 
     const openingBalance = openingBalanceStr
       ? parseInt(openingBalanceStr.replace(/[^0-9]/g, ''), 10) || 0
       : 0;
 
-    const saved=await addWallet(walletName.trim(), walletType, openingBalance);if(!saved.success){setEditWalletError(saved.error||'Gagal menyimpan dompet.');return;}
+    const saved=await addWallet(walletName.trim(), walletType, openingBalance, walletColor);if(!saved.success){setEditWalletError(saved.error||'Gagal menyimpan dompet.');return;}
     setWalletName('');
     setOpeningBalanceStr('');
+    setWalletColor('#FFD166');
+    setWalletColorTouched(false);
     setIsWalletModalOpen(false);
     }catch(error){setEditWalletError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
@@ -277,13 +282,13 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     setEditingWallet(w);
     setEditWalletName(w.name);
     setEditWalletType(w.type);
+    setEditWalletColor(resolveWalletHeaderColor(w));
     setEditWalletTargetBalanceStr(String(w.balance || 0));
     setEditWalletError('');
   };
 
   const handleSaveEditWallet = async (e: React.FormEvent) => {
     e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
-    e.preventDefault();
     if (!editingWallet) return;
     const clean = editWalletName.trim();
     if (!clean) {
@@ -298,6 +303,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     const res = await updateWallet(editingWallet.id, {
       name: clean,
       type: editWalletType,
+      color: editWalletColor,
       targetBalance: isNaN(targetBal as number) ? undefined : targetBal
     });
 
@@ -507,18 +513,24 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-slate-900 text-sm">Daftar Akun & Rekening</h2>
             <button
-              onClick={() => setIsWalletModalOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-xl transition-colors"
+              onClick={() => {
+                setWalletColor('#FFD166');
+                setWalletColorTouched(false);
+                setIsWalletModalOpen(true);
+              }}
+              className="nb-btn flex items-center gap-1.5 text-xs bg-[#06D6A0] text-[#073B4C] px-3.5 py-2"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
               <span>Tambah Dompet</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {wallets.map(w => {
               const isSelected = selectedWalletId === w.id;
               const wTxs = transactions.filter(t => t.sourceWalletId === w.id || t.destinationWalletId === w.id);
+              const headerColor = resolveWalletHeaderColor(w);
+              const headerText = getReadableHeaderText(headerColor);
 
               return (
                 <div
@@ -526,27 +538,29 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   data-wallet-type={w.type}
                   data-selected={isSelected}
                   onClick={() => setSelectedWalletId(isSelected ? null : w.id)}
-                  className={`wallet-account-card p-4 rounded-2xl border transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-teal-50/70 border-teal-600 shadow-sm ring-1 ring-teal-600/30'
-                      : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
-                  }`}
+                  className="wallet-account-card rounded-3xl border-[2.5px] border-[#073B4C] transition-all cursor-pointer overflow-hidden bg-white"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                  {/* Colored Card Header */}
+                  <div
+                    style={{ backgroundColor: headerColor, color: headerText }}
+                    className="px-4 py-3.5 border-b-[2.5px] border-[#073B4C] flex items-start justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
                         {getWalletIcon(w.type)}
                       </div>
-                      <div>
-                        <h2 className="font-bold text-slate-900 text-sm leading-tight">{w.name}</h2>
-                        <span className="text-[11px] text-slate-400 capitalize">
-                          {w.type === 'cash' ? 'Uang Tunai' : w.type === 'digital' ? 'E-Wallet / Digital' : 'Rekening Bank'}
+                      <div className="min-w-0 flex-1">
+                        <h2 className="font-extrabold text-sm leading-tight break-words" style={{ color: headerText }}>
+                          {w.name}
+                        </h2>
+                        <span className="text-[11px] font-bold opacity-90 capitalize block mt-0.5" style={{ color: headerText }}>
+                          {w.type === 'cash' ? 'Uang Tunai' : w.type === 'digital' ? 'E-Wallet / Digital' : w.type === 'custom' ? 'Tabungan / Aset' : 'Rekening Bank'}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px] font-extrabold bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] px-2 py-0.5 rounded-full whitespace-nowrap">
                         {wTxs.length} mutasi
                       </span>
                       <button
@@ -555,32 +569,35 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                           e.stopPropagation();
                           handleOpenEditWallet(w);
                         }}
-                        className="p-1 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
-                        title="Edit Dompet"
+                        className="w-7 h-7 bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] hover:bg-[#FFFBEB] rounded-full flex items-center justify-center transition-colors"
+                        title="Edit Dompet & Warna Header"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 flex items-baseline justify-between mt-3">
-                    <span className="text-xs text-slate-500">Saldo Tersedia</span>
-                    <span
-                      className={`text-lg font-extrabold tabular-nums ${
-                        w.balance < 0 ? 'text-red-600' : 'text-slate-900'
-                      }`}
-                    >
-                      {formatIDR(w.balance)}
-                    </span>
-                  </div>
-
-                  {isSelected && (
-                    <div className="mt-2 text-right">
-                      <span className="text-[11px] text-teal-700 font-semibold">
-                        Melihat mutasi dompet ini ▼
+                  {/* Card Balance Body */}
+                  <div className="p-4 bg-white">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-500">Saldo Tersedia</span>
+                      <span
+                        className={`text-lg font-extrabold tabular-nums break-all ${
+                          w.balance < 0 ? 'text-red-600' : 'text-[#073B4C]'
+                        }`}
+                      >
+                        {formatIDR(w.balance)}
                       </span>
                     </div>
-                  )}
+
+                    {isSelected && (
+                      <div className="mt-2 pt-2 border-t border-dashed border-[#073B4C]/20 text-right">
+                        <span className="text-[11px] text-teal-800 font-extrabold">
+                          Melihat mutasi dompet ini ▼
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -1577,52 +1594,116 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       {/* ADD WALLET MODAL */}
       {isWalletModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-slate-900 text-base">Tambah Dompet / Rekening</h2>
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-xl border-[3px] border-[#073B4C]">
+            {/* Live Colored Card Header Preview */}
+            <div
+              style={{ backgroundColor: walletColor, color: getReadableHeaderText(walletColor) }}
+              className="px-5 py-4 border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
+                  {getWalletIcon(walletType)}
+                </div>
+                <div className="min-w-0">
+                  <h2 className="font-extrabold text-base leading-tight truncate" style={{ color: getReadableHeaderText(walletColor) }}>
+                    {walletName.trim() || 'Tambah Dompet Baru'}
+                  </h2>
+                  <p className="text-[11px] font-bold opacity-90" style={{ color: getReadableHeaderText(walletColor) }}>
+                    Pratinjau warna header kartu
+                  </p>
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => setIsWalletModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
+                className="w-8 h-8 rounded-full bg-white border-2 border-[#073B4C] flex items-center justify-center text-[#073B4C] hover:bg-[#FFE0E5] shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleAddWallet} className="space-y-4">
+            <form onSubmit={handleAddWallet} className="p-5 space-y-4 max-h-[78vh] overflow-y-auto">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Dompet</label>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Nama Dompet</label>
                 <input
                   type="text"
                   placeholder="Misal: BCA Utama, Gopay, Dompet Tunai"
                   value={walletName}
                   onChange={e => setWalletName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold focus:outline-none"
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Tipe Akun</label>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Tipe Akun</label>
                 <select
                   value={walletType}
-                  onChange={e => setWalletType(e.target.value as WalletType)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  onChange={e => {
+                    const nextType = e.target.value as WalletType;
+                    setWalletType(nextType);
+                    if (!walletColorTouched) {
+                      setWalletColor(defaultWalletHeaderColor(nextType));
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold focus:outline-none"
                 >
                   <option value="checking">Rekening Bank (Checking)</option>
                   <option value="digital">Dompet Digital (E-Wallet)</option>
                   <option value="cash">Uang Tunai (Cash)</option>
-                  <option value="savings">Tabungan Khusus (Savings)</option>
+                  <option value="custom">Tabungan Khusus (Savings)</option>
                 </select>
               </div>
 
+              {/* Color Swatch Picker for Card Header */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Saldo Awal (Opsional)</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-extrabold text-[#073B4C]">Warna Header Kartu</label>
+                  <label className="inline-flex items-center gap-1.5 text-[11px] font-extrabold text-[#073B4C] bg-[#FFFBEB] border-[1.5px] border-[#073B4C] px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-[#FEF3C7]">
+                    <span>🎨 Bebas</span>
+                    <input
+                      type="color"
+                      value={walletColor}
+                      onChange={e => {
+                        setWalletColor(e.target.value);
+                        setWalletColorTouched(true);
+                      }}
+                      className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer"
+                    />
+                  </label>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {WALLET_HEADER_COLORS.map(preset => {
+                    const active = walletColor.toLowerCase() === preset.hex.toLowerCase();
+                    return (
+                      <button
+                        key={preset.hex}
+                        type="button"
+                        onClick={() => {
+                          setWalletColor(preset.hex);
+                          setWalletColorTouched(true);
+                        }}
+                        style={{ backgroundColor: preset.hex, color: getReadableHeaderText(preset.hex) }}
+                        className={`py-2 px-2 rounded-xl border-2 border-[#073B4C] text-[11px] font-extrabold flex items-center justify-center gap-1 transition-transform ${
+                          active ? 'shadow-[3px_3px_0_#073B4C] -translate-y-0.5 ring-2 ring-[#073B4C]' : 'opacity-90 hover:opacity-100'
+                        }`}
+                      >
+                        {active && <Check className="w-3 h-3 stroke-[3]" />}
+                        <span>{preset.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Saldo Awal (Opsional)</label>
                 <input
                   type="text"
                   placeholder="0"
                   value={openingBalanceStr ? parseInt(openingBalanceStr, 10).toLocaleString('id-ID') : ''}
                   onChange={e => setOpeningBalanceStr(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold focus:outline-none tabular-nums"
                 />
               </div>
 
@@ -1630,13 +1711,13 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                 <button
                   type="button"
                   onClick={() => setIsWalletModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-extrabold text-[#073B4C] bg-slate-100 hover:bg-slate-200 border-2 border-[#073B4C] rounded-full"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold bg-teal-700 text-white hover:bg-teal-800 rounded-xl shadow-xs"
+                  className="nb-btn px-5 py-2 text-xs bg-[#06D6A0] text-[#073B4C]"
                 >
                   Simpan Dompet
                 </button>
@@ -1648,66 +1729,108 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       {/* EDIT WALLET MODAL */}
       {editingWallet && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center">
-                  <Edit2 className="w-4 h-4 text-teal-700" />
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-xl border-[3px] border-[#073B4C]">
+            <div
+              style={{ backgroundColor: editWalletColor, color: getReadableHeaderText(editWalletColor) }}
+              className="px-5 py-4 border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
+                  <Edit2 className="w-4 h-4 text-[#073B4C]" />
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">Edit Dompet</h3>
-                  <p className="text-[11px] text-slate-400">{editingWallet.name}</p>
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-sm leading-tight truncate" style={{ color: getReadableHeaderText(editWalletColor) }}>
+                    {editWalletName.trim() || editingWallet.name}
+                  </h3>
+                  <p className="text-[11px] font-bold opacity-90" style={{ color: getReadableHeaderText(editWalletColor) }}>
+                    Edit Dompet & Warna Header
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingWallet(null)}
-                className="w-7 h-7 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center"
+                className="w-8 h-8 rounded-full bg-white border-2 border-[#073B4C] text-[#073B4C] hover:bg-[#FFE0E5] flex items-center justify-center shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {editWalletError && (
-              <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium">
-                {editWalletError}
-              </div>
-            )}
+            <form onSubmit={handleSaveEditWallet} className="p-5 space-y-3.5 max-h-[78vh] overflow-y-auto">
+              {editWalletError && (
+                <div className="p-2.5 bg-red-50 border-2 border-[#073B4C] text-red-800 rounded-xl text-xs font-bold">
+                  {editWalletError}
+                </div>
+              )}
 
-            <form onSubmit={handleSaveEditWallet} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Dompet</label>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Nama Dompet</label>
                 <input
                   type="text"
                   placeholder="Misal: BCA Utama, Gopay, Dompet Tunai"
                   value={editWalletName}
                   onChange={e => setEditWalletName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 font-semibold text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C]"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Tipe Akun</label>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Tipe Akun</label>
                 <select
                   value={editWalletType}
                   onChange={e => setEditWalletType(e.target.value as WalletType)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C]"
                 >
                   <option value="checking">Rekening Bank (Checking)</option>
                   <option value="digital">Dompet Digital (E-Wallet)</option>
                   <option value="cash">Uang Tunai (Cash)</option>
-                  <option value="savings">Tabungan Khusus (Savings)</option>
+                  <option value="custom">Tabungan Khusus (Savings)</option>
                 </select>
+              </div>
+
+              {/* Color Swatch Picker for Edit Modal */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-extrabold text-[#073B4C]">Warna Header Kartu</label>
+                  <label className="inline-flex items-center gap-1.5 text-[11px] font-extrabold text-[#073B4C] bg-[#FFFBEB] border-[1.5px] border-[#073B4C] px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-[#FEF3C7]">
+                    <span>🎨 Bebas</span>
+                    <input
+                      type="color"
+                      value={editWalletColor}
+                      onChange={e => setEditWalletColor(e.target.value)}
+                      className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer"
+                    />
+                  </label>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {WALLET_HEADER_COLORS.map(preset => {
+                    const active = editWalletColor.toLowerCase() === preset.hex.toLowerCase();
+                    return (
+                      <button
+                        key={preset.hex}
+                        type="button"
+                        onClick={() => setEditWalletColor(preset.hex)}
+                        style={{ backgroundColor: preset.hex, color: getReadableHeaderText(preset.hex) }}
+                        className={`py-2 px-2 rounded-xl border-2 border-[#073B4C] text-[11px] font-extrabold flex items-center justify-center gap-1 transition-transform ${
+                          active ? 'shadow-[3px_3px_0_#073B4C] -translate-y-0.5 ring-2 ring-[#073B4C]' : 'opacity-90 hover:opacity-100'
+                        }`}
+                      >
+                        {active && <Check className="w-3 h-3 stroke-[3]" />}
+                        <span>{preset.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-600">
+                  <label className="block text-xs font-extrabold text-[#073B4C]">
                     Penyesuaian Saldo Akhir
                   </label>
-                  <span className="text-[10px] text-slate-400">
-                    Saldo saat ini: {formatIDR(editingWallet.balance)}
+                  <span className="text-[10px] font-bold text-slate-500">
+                    Saat ini: {formatIDR(editingWallet.balance)}
                   </span>
                 </div>
                 <input
@@ -1715,18 +1838,18 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   placeholder="0"
                   value={editWalletTargetBalanceStr ? parseInt(editWalletTargetBalanceStr.replace(/[^0-9-]/g, ''), 10).toLocaleString('id-ID') : ''}
                   onChange={e => setEditWalletTargetBalanceStr(e.target.value.replace(/[^0-9-]/g, ''))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums font-bold text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs tabular-nums font-extrabold text-[#073B4C]"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  💡 Jika saldo disesuaikan, sistem akuntansi otomatis membuat mutasi penyesuaian.
+                <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                  💡 Jika saldo disesuaikan, sistem otomatis membuat mutasi penyesuaian.
                 </p>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between pt-2 border-t-2 border-dashed border-[#073B4C]/20">
                 <button
                   type="button"
                   onClick={() => handleDeleteWallet(editingWallet.id)}
-                  className="px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl flex items-center gap-1 transition-colors"
+                  className="px-3 py-2 text-xs font-extrabold text-red-700 bg-red-50 hover:bg-red-100 border-2 border-[#073B4C] rounded-full flex items-center gap-1 transition-colors"
                   title="Hapus atau Arsipkan Dompet"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -1737,13 +1860,13 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   <button
                     type="button"
                     onClick={() => setEditingWallet(null)}
-                    className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    className="px-3.5 py-2 text-xs font-extrabold text-[#073B4C] bg-slate-100 hover:bg-slate-200 border-2 border-[#073B4C] rounded-full"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 rounded-xl shadow-xs"
+                    className="nb-btn px-4 py-2 text-xs bg-[#06D6A0] text-[#073B4C]"
                   >
                     Simpan
                   </button>

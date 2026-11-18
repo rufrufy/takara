@@ -253,14 +253,14 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* Tab Switcher for Reports */}
-      <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+      <div className="flex bg-white p-1.5 rounded-3xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] gap-1.5">
         <button
           type="button"
           onClick={() => setReportTab('kategori')}
-          className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 transition-all ${
             reportTab === 'kategori'
-              ? 'bg-white text-teal-800 shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-[#FFD166] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+              : 'text-[#365664] hover:bg-[#FFFBEB]'
           }`}
         >
           <PieChartIcon className="w-4 h-4" />
@@ -270,10 +270,10 @@ export const ReportsView: React.FC = () => {
         <button
           type="button"
           onClick={() => setReportTab('tren')}
-          className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 transition-all ${
             reportTab === 'tren'
-              ? 'bg-white text-teal-800 shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-[#38BDF8] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+              : 'text-[#365664] hover:bg-[#FFFBEB]'
           }`}
         >
           <BarChart3 className="w-4 h-4" />
@@ -283,10 +283,10 @@ export const ReportsView: React.FC = () => {
         <button
           type="button"
           onClick={() => setReportTab('label')}
-          className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 transition-all ${
             reportTab === 'label'
-              ? 'bg-white text-teal-800 shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-[#06D6A0] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+              : 'text-[#365664] hover:bg-[#FFFBEB]'
           }`}
         >
           <TagIcon className="w-4 h-4" />
@@ -673,20 +673,20 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* 4. AI Expense Deep Analysis Card */}
-      <div className="soft-summary rounded-3xl p-5 sm:p-6 shadow-xl border border-teal-800/40 space-y-5">
+      <div className="soft-summary !bg-[#DDD6FE] rounded-3xl p-5 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
-              <Sparkles className="w-5 h-5" />
+            <div className="w-11 h-11 rounded-2xl bg-[#FFD166] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center text-[#073B4C] shrink-0">
+              <Sparkles className="w-5 h-5 stroke-[2.4]" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-base text-white">Tinjau pengeluaran</h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-400/20 text-teal-300 border border-teal-400/30">
-                  Analisis pengeluaran
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="font-extrabold text-base text-[#073B4C]">🤖 Skor & Tinjauan AI</h2>
+                <span className="nb-chip text-[10px] px-2.5 py-0.5 bg-white text-[#073B4C]">
+                  Analisis Pengeluaran
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-0.5">
+              <p className="text-xs font-bold text-[#365664] mt-0.5">
                 Tinjau pola pengeluaran dan peluang menabung untuk {activeHousehold?.name || 'Keluarga'}.
               </p>
             </div>

@@ -35,7 +35,7 @@ export const TakaraMainLayout: React.FC = () => {
     setIsQuickAddOpen(true);
   };
 
-  if(!isAuthReady)return <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6"><div role="status" className="text-center space-y-3"><h1 className="text-xl font-semibold text-slate-900">Membuka Takara</h1><p className="text-sm text-slate-600">Memulihkan sesi akun Anda…</p></div></main>;
+  if(!isAuthReady)return <main className="takara-app min-h-screen flex items-center justify-center p-6"><div role="status" className="nb-card max-w-xs w-full p-6 text-center space-y-2 bg-[#FFD166]"><div className="brand-badge mx-auto mb-2">T</div><h1 className="text-xl font-extrabold text-[#073B4C]">Membuka Takara</h1><p className="text-sm font-bold text-[#365664]">Memulihkan sesi akun keluarga Anda…</p></div></main>;
   // Jika belum login, tampilkan Landing Page atau Login Page
   if (!state.isAuthenticated || state.isLocked) {
     if (authView === 'landing') {
@@ -69,9 +69,10 @@ export const TakaraMainLayout: React.FC = () => {
   }
   // ROLE 1: ADMIN DASHBOARD (Khusus Admin: kelola user, AI, Supabase, sesi - tidak ikut pencatatan)
   if(!isFinancialReady && state.currentUser.role!=='ADMIN' && state.currentUser.username!=='admin') {
-    return <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6"><div className="max-w-sm text-center space-y-4">
-      <h1 className="text-lg font-bold text-teal-900">Menyiapkan household Anda</h1>
-      {supabaseSyncStatus.status==='error'?<><p role="alert" className="text-sm text-red-700">{supabaseSyncStatus.error}</p><button onClick={()=>window.location.reload()} className="rounded-xl bg-teal-700 text-white px-4 py-2">Coba lagi</button><button onClick={logoutUser} className="block mx-auto text-sm underline">Kembali ke login</button></>:<p role="status" className="text-sm text-slate-600">Memuat saldo, dompet, dan transaksi dari Supabase…</p>}
+    return <main className="takara-app min-h-screen flex items-center justify-center p-6"><div className="nb-card max-w-sm w-full p-6 text-center space-y-4">
+      <div className="brand-badge mx-auto">T</div>
+      <h1 className="text-lg font-extrabold text-[#073B4C]">Menyiapkan household Anda</h1>
+      {supabaseSyncStatus.status==='error'?<><p role="alert" className="text-sm font-bold text-red-700">{supabaseSyncStatus.error}</p><button onClick={()=>window.location.reload()} className="nb-btn bg-[#06D6A0] text-[#073B4C] px-5 py-2.5">Coba lagi</button><button onClick={logoutUser} className="block mx-auto text-sm font-extrabold underline">Kembali ke login</button></>:<p role="status" className="text-sm font-bold text-[#365664]">Memuat saldo, dompet, dan transaksi dari Supabase…</p>}
     </div></main>;
   }
 
@@ -117,7 +118,7 @@ export const TakaraMainLayout: React.FC = () => {
         activeTab={activeTab}
         onChangeTab={tab=>{setSelectedTransactionId(undefined);setActiveTab(tab);}}
       />
-      {(activeTab==='beranda'||activeTab==='transaksi'||activeTab==='profil-keuangan')&&<div className="page-record-action"><button onClick={()=>handleOpenQuickAdd()} aria-label="Tambah transaksi"><Plus size={25}/></button></div>}
+      {(activeTab==='beranda'||activeTab==='transaksi'||activeTab==='profil-keuangan')&&<div className="page-record-action"><button onClick={()=>handleOpenQuickAdd()} aria-label="Tambah transaksi"><Plus size={28} strokeWidth={2.8}/></button></div>}
 
       {/* Quick Add Transaction Modal */}
       <QuickAddModal

@@ -484,23 +484,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
           </div>
         </div>
 
-        {/* 3 Metrics: Pemasukan, Pengeluaran, Net Balance */}
-        <div className="grid grid-cols-3 gap-2.5 pt-1">
+        {/* 3 Metrics: Pemasukan, Pengeluaran, Net Balance (Responsive anti-overlap) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
           <button
             type="button"
             onClick={() => setTypeFilter(typeFilter === 'income' ? 'all' : 'income')}
-            className={`p-3 rounded-2xl border text-left transition-all active:scale-98 cursor-pointer ${
+            className={`min-w-0 overflow-hidden p-3 rounded-2xl border-2 border-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C] flex sm:block items-center justify-between gap-2 text-left transition-all active:translate-x-[1.5px] active:translate-y-[1.5px] cursor-pointer ${
               typeFilter === 'income'
-                ? 'bg-emerald-100/90 border-emerald-400 ring-2 ring-emerald-500/30 shadow-xs'
-                : 'bg-emerald-50/70 hover:bg-emerald-100/60 border-emerald-100'
+                ? 'bg-[#06D6A0] text-[#073B4C]'
+                : 'bg-[#D9F99D] hover:bg-[#BEF264] text-[#073B4C]'
             }`}
             title="Klik untuk filter hanya pemasukan"
           >
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-800">
-              <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
+            <div className="flex items-center gap-1.5 text-xs font-extrabold text-[#073B4C] shrink-0">
+              <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Pemasukan</span>
             </div>
-            <div className="text-sm sm:text-base font-extrabold text-emerald-700 tabular-nums mt-0.5">
+            <div className="text-sm sm:text-base font-extrabold text-[#073B4C] tabular-nums sm:mt-1 text-right sm:text-left break-all sm:break-words">
               {formatIDR(filteredIncome)}
             </div>
           </button>
@@ -508,18 +508,18 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
           <button
             type="button"
             onClick={() => setTypeFilter(typeFilter === 'expense' ? 'all' : 'expense')}
-            className={`p-3 rounded-2xl border text-left transition-all active:scale-98 cursor-pointer ${
+            className={`min-w-0 overflow-hidden p-3 rounded-2xl border-2 border-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C] flex sm:block items-center justify-between gap-2 text-left transition-all active:translate-x-[1.5px] active:translate-y-[1.5px] cursor-pointer ${
               typeFilter === 'expense'
-                ? 'bg-red-100/90 border-red-400 ring-2 ring-red-500/30 shadow-xs'
-                : 'bg-red-50/70 hover:bg-red-100/60 border-red-100'
+                ? 'bg-[#FF6B6B] text-white'
+                : 'bg-[#FFE0E5] hover:bg-[#FECDD6] text-[#073B4C]'
             }`}
             title="Klik untuk filter hanya pengeluaran"
           >
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-red-800">
-              <ArrowDownRight className="w-3.5 h-3.5 text-red-600" />
+            <div className={`flex items-center gap-1.5 text-xs font-extrabold shrink-0 ${typeFilter === 'expense' ? 'text-white' : 'text-[#073B4C]'}`}>
+              <ArrowDownRight className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Pengeluaran</span>
             </div>
-            <div className="text-sm sm:text-base font-extrabold text-red-700 tabular-nums mt-0.5">
+            <div className={`text-sm sm:text-base font-extrabold tabular-nums sm:mt-1 text-right sm:text-left break-all sm:break-words ${typeFilter === 'expense' ? 'text-white' : 'text-[#911D35]'}`}>
               {formatIDR(filteredExpense)}
             </div>
           </button>
@@ -527,17 +527,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
           <button
             type="button"
             onClick={() => setTypeFilter('all')}
-            className={`p-3 rounded-2xl border text-left transition-all active:scale-98 cursor-pointer ${
+            className={`min-w-0 overflow-hidden p-3 rounded-2xl border-2 border-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C] flex sm:block items-center justify-between gap-2 text-left transition-all active:translate-x-[1.5px] active:translate-y-[1.5px] cursor-pointer ${
               typeFilter === 'all'
-                ? 'bg-slate-100 border-slate-300 ring-2 ring-slate-400/20'
-                : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200/80'
+                ? 'bg-[#38BDF8] text-[#073B4C]'
+                : 'bg-[#E0F2FE] hover:bg-[#BAE6FD] text-[#073B4C]'
             }`}
             title="Tampilkan semua transaksi"
           >
-            <div className="text-[11px] font-semibold text-slate-600">
-              Selisih
+            <div className="text-xs font-extrabold text-[#073B4C] shrink-0">
+              Saldo Selisih
             </div>
-            <div className={`text-sm sm:text-base font-extrabold tabular-nums mt-0.5 ${filteredNet >= 0 ? 'text-teal-700' : 'text-red-700'}`}>
+            <div className={`text-sm sm:text-base font-extrabold tabular-nums sm:mt-1 text-right sm:text-left break-all sm:break-words ${filteredNet >= 0 ? 'text-[#073B4C]' : 'text-[#911D35]'}`}>
               {formatIDR(filteredNet, { showSign: true })}
             </div>
           </button>
@@ -831,67 +831,67 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                 <div
                   key={t.id}
                   onClick={() => handleOpenDetail(t)}
-                  className="p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50/70 transition-colors group cursor-pointer"
+                  className="p-3.5 sm:p-4 flex items-start sm:items-center justify-between gap-3 hover:bg-[#FFFBEB] transition-colors group cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
                     <div
                       style={categoryAppearance(category?.color)}
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                      className={`w-10 h-10 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0 ${
                         isIncome
-                          ? 'bg-emerald-50 text-emerald-600'
+                          ? 'bg-emerald-50 text-emerald-700'
                           : isTransfer
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'bg-red-50 text-red-600'
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'bg-amber-100 text-[#073B4C]'
                       }`}
                     >
                       <CategoryIcon name={t.categoryName} type={t.type} icon={category?.icon} className="w-5 h-5" />
                     </div>
 
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="font-extrabold text-[#073B4C] text-xs sm:text-sm break-words">
                           {t.description || t.label || t.categoryName || (isTransfer ? 'Transfer Antar Dompet' : 'Transaksi')}
                         </span>
 
                         {/* Label Badge */}
                         {t.label && (
-                          <span className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200/80 font-bold px-1.5 py-0.5 rounded-md">
+                          <span className="text-[10px] bg-teal-50 text-teal-900 border border-[#073B4C] font-extrabold px-1.5 py-0.5 rounded-full">
                             #{t.label}
                           </span>
                         )}
 
                         {t.addedBy && (
-                          <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.5 rounded-md">
+                          <span className="text-[10px] bg-[#FEF3C7] text-[#073B4C] border border-[#073B4C] font-bold px-1.5 py-0.5 rounded-full">
                             {t.addedBy.split(' ')[0]}
                           </span>
                         )}
 
                         {t.imageUrl && (
-                          <span className="p-1 rounded-md bg-teal-50 text-teal-700 border border-teal-200" title="Ada Foto Struk">
+                          <span className="p-1 rounded-md bg-teal-50 text-teal-800 border border-[#073B4C]" title="Ada Foto Struk">
                             <Camera className="w-3 h-3" />
                           </span>
                         )}
                       </div>
 
-                      <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <div className="text-[11px] text-slate-600 font-semibold mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                         <span>{t.categoryName}</span>
                         {isTransfer && t.sourceWalletId && t.destinationWalletId && (
-                          <span className="text-blue-600 font-medium">
+                          <span className="text-blue-700 font-bold break-words">
                             • {wallets.find(w => w.id === t.sourceWalletId)?.name || 'Sumber'} → {wallets.find(w => w.id === t.destinationWalletId)?.name || 'Tujuan'}
                           </span>
                         )}
                         {isIncome && (
-                          <span className="text-emerald-700 font-medium">
+                          <span className="text-emerald-800 font-bold break-words">
                             • Masuk ke: {wallets.find(w => w.id === (t.destinationWalletId || t.sourceWalletId))?.name || t.destinationAsset || t.sourceAsset || 'Dompet Utama'}
                           </span>
                         )}
                         {!isIncome && !isTransfer && (
-                          <span>
+                          <span className="break-words">
                             • {wallets.find(w => w.id === (t.sourceWalletId || t.destinationWalletId))?.name || t.sourceAsset || t.destinationAsset || 'Dompet'}
                           </span>
                         )}
                         {!!t.fee && t.fee > 0 && (
-                          <span className="text-amber-700 font-medium bg-amber-50 px-1.5 py-0.2 rounded">
+                          <span className="text-amber-900 font-bold bg-amber-100 border border-[#073B4C]/40 px-1.5 py-0.2 rounded">
                             Biaya admin: {formatIDR(t.fee)}
                           </span>
                         )}
@@ -899,26 +899,26 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 shrink-0 pl-1">
                     <div className="text-right shrink-0">
                       <div
-                        className={`font-bold text-xs sm:text-sm tabular-nums ${
+                        className={`inline-block px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C] font-extrabold text-xs sm:text-sm tabular-nums whitespace-nowrap ${
                           isIncome
-                            ? 'text-emerald-600'
+                            ? 'bg-[#D1FAE5] text-[#045D44]'
                             : isTransfer
-                            ? 'text-blue-600'
-                            : 'text-slate-900'
+                            ? 'bg-[#E0F2FE] text-[#074C75]'
+                            : 'bg-[#FFF1F3] text-[#B42340]'
                         }`}
                       >
                         {isIncome ? `+${formatIDR(t.amount)}` : isTransfer || t.type==='opening_balance' ? formatIDR(t.amount) : `-${formatIDR(t.amount)}`}
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
+                      <div className="text-[10px] font-bold text-slate-500 mt-1 whitespace-nowrap">
                         {safeDisplayDate(t.dateStr, t.effectiveAt)}
                         {` • ${t.time || jakartaDateTime(t.effectiveAt).time}`}
                       </div>
                     </div>
 
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                    <ChevronRight className="w-4 h-4 text-[#073B4C]/50 group-hover:text-[#073B4C] shrink-0 transition-colors" />
                   </div>
                 </div>
               );

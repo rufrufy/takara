@@ -65,7 +65,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
   return (
     <header className="app-header">
       <div className="header-inner">
-        <span className="wordmark">Takara</span>
+        <div className="brand-cluster">
+          <span className="brand-badge" aria-hidden="true">T</span>
+          <span className="wordmark">Takara</span>
+        </div>
         {/* Household Switcher */}
         <div className="relative">
           <button
@@ -73,7 +76,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
             id="header-household-dropdown-btn"
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="household-switch" aria-expanded={dropdownOpen} aria-label={`Pilih household, ${activeHousehold.name}`}>
-            <House size={18} strokeWidth={1.6}/><span>{activeHousehold.name}</span><ChevronDown size={15}/>
+            <House size={17} strokeWidth={2.3}/><span>{activeHousehold.name}</span><ChevronDown size={15} strokeWidth={2.6}/>
           </button>
 
           {/* Dropdown Menu */}
@@ -88,8 +91,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
                   setJoinError('');
                 }}
               />
-              <div className="absolute left-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-2 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                <div className="text-[11px] font-semibold text-slate-400 px-3 py-1.5 uppercase tracking-wider">
+              <div className="absolute left-0 mt-2.5 w-68 bg-white rounded-3xl border-[3px] border-[#073B4C] shadow-[6px_6px_0_#073B4C] z-50 p-2.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                <div className="text-[11px] font-extrabold text-[#365664] px-3 py-1.5 uppercase tracking-wider">
                   Pilih Household
                 </div>
 
@@ -100,23 +103,23 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
                       switchHousehold(h.id);
                       setDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-sm font-extrabold transition-all mb-1 ${
                       h.id === activeHousehold.id
-                        ? 'bg-teal-50 text-teal-800'
-                        : 'text-slate-700 hover:bg-slate-50'
+                        ? 'bg-[#FFD166] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                        : 'text-[#073B4C] hover:bg-[#FEF3C7]'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <Building className="w-4 h-4 text-teal-700" />
+                      <Building className="w-4 h-4 text-[#073B4C]" />
                       <span>{h.name}</span>
                     </div>
                     {h.id === activeHousehold.id && (
-                      <Check className="w-4 h-4 text-teal-700" />
+                      <Check className="w-4 h-4 text-[#073B4C] stroke-[2.8]" />
                     )}
                   </button>
                 ))}
 
-                <div className="border-t border-slate-100 my-1 pt-1 space-y-1">
+                <div className="border-t-2 border-dashed border-[#073B4C]/25 my-1.5 pt-2 space-y-1">
                   {/* Form Buat Household Baru */}
                   {!isCreatingHousehold && !isJoiningHousehold && (
                     <>

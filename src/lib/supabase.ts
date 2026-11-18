@@ -426,7 +426,7 @@ export const syncWalletToSupabase = async (
   if (!config.url || !clientKey) return { success: false, error: 'Config missing' };
   try {
     const cleanUrl = config.url.replace(/\/+$/, '');
-    const res = await fetch(`${cleanUrl}/rest/v1/wallets`, {
+    const res = await fetch(`${cleanUrl}/rest/v1/wallets?on_conflict=id`, {
       method: 'POST',
       headers: getHeaders(config),
       body: JSON.stringify({
