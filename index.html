@@ -2,8 +2,8 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <link rel="icon" type="image/png" href="/Takara_logo_original_transparan.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/png" href="/Takara-192.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#FFFDF5" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Takara" />
-    <link rel="apple-touch-icon" href="/Takara_logo_original_transparan.png" />
+    <link rel="apple-touch-icon" href="/Takara.png" />
     <title>Takara — Keuangan Rumah Tangga</title>
     <script>
       if ('serviceWorker' in navigator) {
@@ -29,7 +29,31 @@
           }
         } else {
           window.addEventListener('load', function() {
-            navigator.serviceWorker.register('/sw.js').catch(function() {});
+            var hadController = !!navigator.serviceWorker.controller;
+            var swReloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+              if (hadController && !swReloading) {
+                swReloading = true;
+                window.location.reload();
+              }
+            });
+            navigator.serviceWorker
+              .register('/sw.js', { updateViaCache: 'none' })
+              .then(function(reg) {
+                if (reg.waiting) {
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+                reg.addEventListener('updatefound', function() {
+                  var installing = reg.installing;
+                  if (!installing) return;
+                  installing.addEventListener('statechange', function() {
+                    if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                      installing.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                  });
+                });
+              })
+              .catch(function() {});
           });
         }
       }

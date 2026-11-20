@@ -11,7 +11,7 @@ const tabs = [
 ] as const;
 export const BottomNav: React.FC<BottomNavProps> = ({activeTab,onChangeTab}) => (
   <nav className="bottom-dock" aria-label="Navigasi utama">
-    {tabs.map(({id,label,icon:Icon}) => <button key={id} type="button" aria-current={activeTab===id?'page':undefined} onClick={()=>onChangeTab(id)}>
+    {tabs.map(({id,label,icon:Icon}) => <button key={id} type="button" data-nav-tab={id} aria-current={activeTab===id?'page':undefined} onClick={()=>onChangeTab(id)}>
       <Icon size={22} strokeWidth={2.3} aria-hidden="true"/><span>{label}</span>
     </button>)}
   </nav>

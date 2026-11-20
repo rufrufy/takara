@@ -9,6 +9,7 @@ import type { ViteDevServer } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const buildVersion = `v-${Date.now()}`;
   const AI_URL = (env.AI_API_URL || env.VITE_AI_API_URL || 'https://9r.bkpp.web.id/v1').trim().replace(/\/+$/, '');
   const AI_KEY = (env.AI_API_KEY || env.VITE_AI_API_KEY || '').trim();
   const AI_MODEL = (env.AI_MODEL || env.VITE_AI_MODEL || 'ag/gemini-3.8-flash').trim();
@@ -337,16 +338,90 @@ export default defineConfig(({ mode }) => {
           }
         }
 
+        if (url.startsWith('/api/ai/parse-text') && req.method === 'POST') {
+          try {
+            let rawBody = '';
+            for await (const chunk of req) rawBody += chunk;
+            const body = JSON.parse(rawBody || '{}') as {
+              text?: string;
+              wallets?: string[];
+              expenseCategories?: string[];
+              incomeCategories?: string[];
+            };
+            if (!body.text?.trim() || !AI_KEY) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false }));
+              return;
+            }
+            const prompt = `Ekstrak kalimat transaksi keuangan ini ke JSON murni tanpa teks pengantar:
+Kalimat: "${body.text.trim()}"
+Dompet: ${(body.wallets || []).join(', ')}
+Kategori pengeluaran: ${(body.expenseCategories || []).join(', ')}
+Kategori pemasukan: ${(body.incomeCategories || []).join(', ')}
+Format JSON: {"type":"expense"|"income"|"transfer","amount":number,"categoryName":string,"sourceWalletName":string,"destinationWalletName":string,"label":string,"description":string}`;
+            const upstream = await fetch(normalizeEndpoint(AI_URL), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI_KEY}` },
+              body: JSON.stringify({ model: AI_MODEL, messages: [{ role: 'user', content: prompt }], temperature: 0.1, max_tokens: 220 })
+            });
+            if (upstream.ok) {
+              const data = await upstream.json();
+              const content: string = data?.choices?.[0]?.message?.content || '';
+              const match = content.match(/\{[\s\S]*\}/);
+              if (match) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true, data: JSON.parse(match[0]) }));
+                return;
+              }
+            }
+          } catch {
+            // fallback to client local parser
+          }
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false }));
+          return;
+        }
+
         next();
       });
     }
   });
 
+  const buildVersionPlugin = () => {
+    let outDir = resolve(process.cwd(), 'dist');
+    return {
+      name: 'takara-build-version-plugin',
+      configResolved(config: { root: string; build: { outDir: string } }) {
+        outDir = resolve(config.root, config.build.outDir);
+      },
+      closeBundle() {
+        if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+        writeFileSync(
+          resolve(outDir, 'version.json'),
+          JSON.stringify({ version: buildVersion, builtAt: new Date().toISOString() }, null, 2),
+          'utf-8'
+        );
+        const swPath = resolve(outDir, 'sw.js');
+        if (existsSync(swPath)) {
+          const swContent = readFileSync(swPath, 'utf-8').replace(/__TAKARA_BUILD_VERSION__/g, buildVersion);
+          writeFileSync(swPath, swContent, 'utf-8');
+        }
+      }
+    };
+  };
+
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(buildVersion),
+    },
     plugins: [
       react(),
       tailwindcss(),
       aiDevServerPlugin(),
+      buildVersionPlugin(),
     ],
     server: {
       port: 3001,

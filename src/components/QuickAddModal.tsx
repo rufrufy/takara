@@ -26,6 +26,8 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { CategoryIcon } from './CategoryIcon';
+import { MagicInputBar } from './MagicInputBar';
+import { formatIDR } from '../lib/money';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -34,7 +36,8 @@ interface QuickAddModalProps {
 }
 
 export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, initialType }) => {
-  const { wallets, categories, labels, addTransaction, addCategory, addLabel, state } = useApp();
+  const { wallets, categories, labels, transactions, categoryBudgets, addTransaction, addCategory, addLabel, state } = useApp();
+  const [showMagicInput, setShowMagicInput] = useState(false);
 
   const [type, setType] = useState<TransactionType>('expense');
   const [amountStr, setAmountStr] = useState('');
@@ -393,14 +396,43 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
             </div>
           )}
 
+          {showMagicInput && (
+            <MagicInputBar
+              mode="prefill"
+              onApplyToForm={parsed => {
+                setType(parsed.type);
+                if (parsed.amount > 0) setAmountStr(String(parsed.amount));
+                if (parsed.categoryId) setCategoryId(parsed.categoryId);
+                if (parsed.categoryName) setCategoryName(parsed.categoryName);
+                if (parsed.sourceWalletId) setSourceWalletId(parsed.sourceWalletId);
+                if (parsed.destinationWalletId) setDestinationWalletId(parsed.destinationWalletId);
+                if (parsed.label) setSelectedLabel(parsed.label);
+                if (parsed.description) setDescription(parsed.description);
+                setShowMagicInput(false);
+              }}
+            />
+          )}
+
           {/* DISPLAY NOMINAL BESAR */}
           <div
             onClick={() => setShowKeypad(true)}
             className="p-3.5 bg-slate-50 hover:bg-slate-100/80 cursor-pointer rounded-2xl border border-slate-200/90 transition-all text-center group"
           >
-            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
+            <div className="flex items-center justify-between gap-1.5 text-[11px] font-semibold text-slate-500 mb-1 flex-wrap">
               <label htmlFor="modal-nominal-amount">Nominal ({type === 'expense' ? 'Pengeluaran' : type === 'income' ? 'Pemasukan' : 'Transfer'})</label>
-              <button type="button" disabled={saving||attachmentUploading} onClick={e=>{e.stopPropagation();resetForm();}} aria-label="Reset semua input transaksi" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-teal-700 hover:bg-teal-100 disabled:opacity-40"><RotateCcw className="w-3.5 h-3.5" />Reset</button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setShowMagicInput(v => !v);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#073B4C] bg-[#FFD166] px-2.5 py-0.5 text-[11px] font-extrabold text-[#073B4C]"
+                >
+                  ✨ Ketik/Suara
+                </button>
+                <button type="button" disabled={saving||attachmentUploading} onClick={e=>{e.stopPropagation();resetForm();}} aria-label="Reset semua input transaksi" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-teal-700 hover:bg-teal-100 disabled:opacity-40"><RotateCcw className="w-3.5 h-3.5" />Reset</button>
+              </div>
             </div>
             <div className="flex items-baseline justify-center gap-1.5">
               <span className="text-lg font-bold text-slate-400">Rp</span>
@@ -588,6 +620,45 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
               </button>
             </div>
           )}
+
+          {/* Live Category Budget Status Indicator */}
+          {type === 'expense' && categoryName && (() => {
+            const bgt = categoryBudgets.find(
+              b => (categoryId && b.categoryId === categoryId) || b.categoryName.toLowerCase() === categoryName.toLowerCase()
+            );
+            if (!bgt) return null;
+            const monthPrefix = transactionDate.slice(0, 7);
+            const spentSoFar = transactions
+              .filter(
+                t =>
+                  t.type === 'expense' &&
+                  t.status !== 'VOIDED' &&
+                  jakartaDateTime(t.effectiveAt).date.startsWith(monthPrefix) &&
+                  ((bgt.categoryId && t.categoryId === bgt.categoryId) ||
+                    (t.categoryName || '').toLowerCase() === bgt.categoryName.toLowerCase())
+              )
+              .reduce((s, t) => s + t.amount, 0);
+            const typedAmt = parseInt(amountStr || '0', 10) || 0;
+            const projected = spentSoFar + typedAmt;
+            const pct = bgt.monthlyLimit > 0 ? Math.round((projected / bgt.monthlyLimit) * 100) : 0;
+            const isOver = projected > bgt.monthlyLimit;
+            const isWarn = !isOver && pct >= bgt.alertThreshold;
+
+            return (
+              <div
+                className={`px-3 py-2 rounded-2xl border-2 border-[#073B4C] text-[11px] font-extrabold flex items-center justify-between gap-2 ${
+                  isOver ? 'bg-[#FFE0E5] text-[#911D35]' : isWarn ? 'bg-[#FEF3C7] text-[#784D05]' : 'bg-[#D1FAE5] text-[#064E3B]'
+                }`}
+              >
+                <span>
+                  {isOver ? '🔴 Lewat pagu' : isWarn ? '🟡 Mendekati pagu' : '🟢 Pagu'} {bgt.categoryName}
+                </span>
+                <span className="tabular-nums">
+                  {formatIDR(projected)} / {formatIDR(bgt.monthlyLimit)} ({pct}%)
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Biaya Admin untuk Transfer (Opsional) */}
           {type === 'transfer' && (

@@ -116,21 +116,66 @@ export interface ExcelImportSummary {
   labelsList?: string[];
   walletsList?: string[];
 }
+
 export interface DebtItem {
   id: string;
   householdId: string;
-  type: 'debt' | 'receivable'; // debt = Keluarga Berutang, receivable = Piutang (orang lain berutang ke kita)
+  type: 'debt' | 'receivable';
   personOrEntity: string;
   amount: number;
   remainingAmount: number;
-  monthlyInstallment?: number; // Nominal cicilan per bulan (Rp)
-  dueDay?: number; // Tanggal jatuh tempo (1-31)
+  monthlyInstallment?: number;
+  dueDay?: number;
   dueDate?: string;
   notes?: string;
   isSettled: boolean;
-  isPaidThisMonth?: boolean; // Status apakah cicilan bulan berjalan sudah dibayar
-  lastPaidMonth?: string; // Penanda bulan pembayaran terakhir, e.g. '2026-11'
-  imageUrl?: string; // Foto bukti transfer / struk pembayaran cicilan
+  isPaidThisMonth?: boolean;
+  lastPaidMonth?: string;
+  imageUrl?: string;
+  createdAt: string;
+}
+
+export interface SavingsGoal {
+  id: string;
+  householdId: string;
+  title: string;
+  targetAmount: number;
+  currentAmount: number;
+  linkedWalletId?: string;
+  deadline?: string;
+  icon: string;
+  color: string;
+  notes?: string;
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CategoryBudget {
+  id: string;
+  householdId: string;
+  categoryId?: string;
+  categoryName: string;
+  monthlyLimit: number;
+  alertThreshold: number;
+  updatedAt: string;
+}
+
+export type ChallengeTargetType = 'spending_cap' | 'no_spend_category' | 'streak_days';
+
+export interface FamilyChallenge {
+  id: string;
+  householdId: string;
+  title: string;
+  targetType: ChallengeTargetType;
+  categoryName?: string;
+  maxAmount?: number;
+  targetDays?: number;
+  startDate: string;
+  endDate: string;
+  rewardBadge: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'FAILED';
+  createdBy?: string;
   createdAt: string;
 }
 
@@ -170,10 +215,13 @@ export interface AppState {
   members: HouseholdMember[];
   wallets: Wallet[];
   categories: Category[];
-  labels: string[]; // Daftar label dinamis yang bisa ditambah pengguna
+  labels: string[];
   transactions: FinancialTransaction[];
   ledgerEntries: LedgerEntry[];
   debts?: DebtItem[];
+  savingsGoals?: SavingsGoal[];
+  categoryBudgets?: CategoryBudget[];
+  familyChallenges?: FamilyChallenge[];
   importHistory?: ExcelImportSummary[];
   isLocked: boolean;
   isAuthenticated?: boolean;
@@ -181,4 +229,30 @@ export interface AppState {
   sessions?: UserSession[];
   aiConfig?: AIConfig;
   supabaseConfig?: SupabaseConfig;
+}
+
+export type HouseholdNotificationKind =
+  | 'transaction_income'
+  | 'transaction_expense'
+  | 'transaction_transfer'
+  | 'wallet'
+  | 'debt'
+  | 'savings_goal'
+  | 'budget'
+  | 'challenge'
+  | 'member'
+  | 'category';
+
+export interface HouseholdNotification {
+  id: string;
+  householdId: string;
+  kind: HouseholdNotificationKind;
+  title: string;
+  message: string;
+  actor?: string;
+  amount?: number;
+  entityId?: string;
+  targetTab?: 'beranda' | 'transaksi' | 'profil-keuangan' | 'laporan' | 'pengaturan';
+  createdAt: string;
+  read: boolean;
 }

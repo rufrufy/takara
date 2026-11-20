@@ -525,17 +525,104 @@ Format jawaban HANYA JSON murni tanpa markdown, tanpa teks pembuka:
       }
     }
 
+    // API: Parse Natural Language Transaction Text via AI
+    if (pathname === "/api/ai/parse-text" && req.method === "POST") {
+      try {
+        const body = (await req.json()) as {
+          text?: string;
+          wallets?: string[];
+          expenseCategories?: string[];
+          incomeCategories?: string[];
+        };
+        if (!body.text?.trim() || !SERVER_AI_KEY) {
+          return new Response(JSON.stringify({ success: false }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const prompt = `Ekstrak kalimat transaksi keuangan ini ke JSON murni tanpa teks pengantar:
+Kalimat: "${body.text.trim()}"
+Dompet: ${(body.wallets || []).join(", ")}
+Kategori pengeluaran: ${(body.expenseCategories || []).join(", ")}
+Kategori pemasukan: ${(body.incomeCategories || []).join(", ")}
+Format JSON: {"type":"expense"|"income"|"transfer","amount":number,"categoryName":string,"sourceWalletName":string,"destinationWalletName":string,"label":string,"description":string}`;
+
+        const aiRes = await fetch(normalizeEndpoint(SERVER_AI_URL), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SERVER_AI_KEY}`
+          },
+          body: JSON.stringify({
+            model: SERVER_AI_MODEL,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.1,
+            max_tokens: 220
+          })
+        });
+        if (aiRes.ok) {
+          const aiJson = (await aiRes.json()) as AIChatResponseBody;
+          const rawText = aiJson.choices?.[0]?.message?.content || aiJson.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const extracted = extractJsonFromText(rawText);
+          if (extracted) {
+            return new Response(JSON.stringify({ success: true, data: extracted }), {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": "application/json" }
+            });
+          }
+        }
+      } catch {
+        // Fallback handled on client
+      }
+      return new Response(JSON.stringify({ success: false }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     // 4. Guard against path traversal
     const safePath = resolve(DIST_DIR, "." + pathname);
     if (!safePath.startsWith(DIST_DIR)) {
       return new Response("Forbidden", { status: 403 });
     }
 
+    const noCacheHeaders = {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0"
+    };
+
     // 5. Serve static asset if found
     if (pathname !== "/") {
       const file = Bun.file(safePath);
       if (await file.exists()) {
-        return new Response(file);
+        if (pathname.startsWith("/assets/")) {
+          return new Response(file, {
+            headers: { "Cache-Control": "public, max-age=31536000, immutable" }
+          });
+        }
+        if (
+          pathname === "/sw.js" ||
+          pathname === "/version.json" ||
+          pathname === "/manifest.json" ||
+          pathname === "/index.html"
+        ) {
+          const contentType =
+            pathname === "/sw.js"
+              ? "application/javascript; charset=utf-8"
+              : pathname.endsWith(".json")
+              ? "application/json; charset=utf-8"
+              : "text/html; charset=utf-8";
+          return new Response(file, {
+            headers: {
+              ...noCacheHeaders,
+              "Content-Type": contentType
+            }
+          });
+        }
+        return new Response(file, {
+          headers: { "Cache-Control": "public, max-age=3600, must-revalidate" }
+        });
       }
       if (pathname.startsWith("/assets/")) {
         return new Response("Asset not found", { status: 404 });
@@ -543,7 +630,12 @@ Format jawaban HANYA JSON murni tanpa markdown, tanpa teks pembuka:
     }
 
     // 6. SPA fallback: return index.html for client-side routing
-    return new Response(Bun.file(resolve(DIST_DIR, "index.html")));
+    return new Response(Bun.file(resolve(DIST_DIR, "index.html")), {
+      headers: {
+        ...noCacheHeaders,
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    });
   },
 });
 

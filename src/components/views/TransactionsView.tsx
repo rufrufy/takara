@@ -59,15 +59,65 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, state, supabaseSyncStatus, syncFromSupabase } = useApp();
   const transactionCategory=(t:FinancialTransaction)=>categories.find(c=>c.householdId===t.householdId&&(c.id===t.categoryId||(c.type===t.type&&c.name.toLocaleLowerCase('id')===t.categoryName?.toLocaleLowerCase('id'))));
 
-  // Search & Filter State (5 Kriteria: Tipe, Anggota, Aset, Kategori, Label)
+  // Search & Filter State (6 Kriteria: Tanggal, Tipe, Anggota, Aset, Kategori, Label)
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'yesterday' | '7d' | 'this_month' | 'last_month' | 'custom'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
   const [memberFilter, setMemberFilter] = useState<string>('all');
   const [assetFilter, setAssetFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [labelFilter, setLabelFilter] = useState<string>('all');
-  const [filterDimension, setFilterDimension] = useState<'type' | 'member' | 'asset' | 'category' | 'label'>('type');
+  const [filterDimension, setFilterDimension] = useState<'date' | 'type' | 'member' | 'asset' | 'category' | 'label'>('date');
+
+  const applyDatePreset = (preset: 'all' | 'today' | 'yesterday' | '7d' | 'this_month' | 'last_month') => {
+    setDatePreset(preset);
+    const todayStr = jakartaDateTime(new Date().toISOString()).date;
+    if (preset === 'all') {
+      setStartDateFilter('');
+      setEndDateFilter('');
+      return;
+    }
+    if (preset === 'today') {
+      setStartDateFilter(todayStr);
+      setEndDateFilter(todayStr);
+      return;
+    }
+    if (preset === 'yesterday') {
+      const d = new Date(`${todayStr}T12:00:00+07:00`);
+      d.setUTCDate(d.getUTCDate() - 1);
+      const yStr = jakartaDateTime(d.toISOString()).date;
+      setStartDateFilter(yStr);
+      setEndDateFilter(yStr);
+      return;
+    }
+    if (preset === '7d') {
+      const d = new Date(`${todayStr}T12:00:00+07:00`);
+      d.setUTCDate(d.getUTCDate() - 6);
+      const startStr = jakartaDateTime(d.toISOString()).date;
+      setStartDateFilter(startStr);
+      setEndDateFilter(todayStr);
+      return;
+    }
+    if (preset === 'this_month') {
+      const ym = todayStr.slice(0, 7);
+      setStartDateFilter(`${ym}-01`);
+      setEndDateFilter(todayStr);
+      return;
+    }
+    if (preset === 'last_month') {
+      const yr = Number(todayStr.slice(0, 4));
+      const mo = Number(todayStr.slice(5, 7));
+      const prevYear = mo === 1 ? yr - 1 : yr;
+      const prevMonth = mo === 1 ? 12 : mo - 1;
+      const lastDay = new Date(prevYear, prevMonth, 0).getDate();
+      const ym = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+      setStartDateFilter(`${ym}-01`);
+      setEndDateFilter(`${ym}-${String(lastDay).padStart(2, '0')}`);
+    }
+  };
 
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
@@ -131,18 +181,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   }, [wallets]);
 
   // Count active filters
+  const hasDateFilter = Boolean(startDateFilter || endDateFilter);
   const activeFilterCount = useMemo(() => {
     let count = 0;
+    if (startDateFilter || endDateFilter) count++;
     if (typeFilter !== 'all') count++;
     if (memberFilter !== 'all') count++;
     if (assetFilter !== 'all') count++;
     if (categoryFilter !== 'all') count++;
     if (labelFilter !== 'all') count++;
     return count;
-  }, [typeFilter, memberFilter, assetFilter, categoryFilter, labelFilter]);
+  }, [startDateFilter, endDateFilter, typeFilter, memberFilter, assetFilter, categoryFilter, labelFilter]);
 
-  // Reset all 5 filters
+  // Reset all filters including date range
   const handleResetFilters = () => {
+    setStartDateFilter('');
+    setEndDateFilter('');
+    setDatePreset('all');
     setTypeFilter('all');
     setMemberFilter('all');
     setAssetFilter('all');
@@ -153,7 +208,19 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
 
   // Filtered transactions computation
   const filteredTransactions = useMemo(() => {
+    const minDate =
+      startDateFilter && endDateFilter && startDateFilter > endDateFilter ? endDateFilter : startDateFilter;
+    const maxDate =
+      startDateFilter && endDateFilter && startDateFilter > endDateFilter ? startDateFilter : endDateFilter;
+
     return transactions.filter(t => {
+      // 0. Rentang Tanggal (WIB / Asia/Jakarta YYYY-MM-DD)
+      if (minDate || maxDate) {
+        const txDate = jakartaDateTime(t.effectiveAt).date;
+        if (minDate && txDate < minDate) return false;
+        if (maxDate && txDate > maxDate) return false;
+      }
+
       // 1. Tipe (income, expense, transfer)
       if (typeFilter !== 'all' && t.type !== typeFilter) return false;
 
@@ -202,6 +269,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     });
   }, [
     transactions,
+    startDateFilter,
+    endDateFilter,
     typeFilter,
     memberFilter,
     assetFilter,
@@ -451,11 +520,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       </div>
 
       {/* DYNAMIC RECALCULATED SUMMARY BANNER (Bulan Berjalan / Terfilter) */}
-      <div className="transaction-summary bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className={`w-2.5 h-2.5 rounded-full ${isFiltered ? 'bg-amber-500 animate-pulse' : 'bg-teal-600'}`} />
-            <span className="text-xs font-bold text-slate-800">
+      <div className="transaction-summary saldo-hero saldo-hero--lavender rounded-3xl p-4 sm:p-5 space-y-3.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="nb-chip inline-flex items-center gap-2 bg-white px-3 py-1">
+            <div className={`w-2.5 h-2.5 rounded-full border border-[#073B4C] ${isFiltered ? 'bg-[#FFD166] animate-pulse' : 'bg-[#06D6A0]'}`} />
+            <span className="text-xs font-extrabold text-[#073B4C]">
               {isFiltered ? (
                 <>
                   Hasil filter ({filteredTransactions.length} Transaksi)
@@ -470,14 +539,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
             {isFiltered && (
               <button
                 onClick={handleResetFilters}
-                className="text-[11px] font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
+                className="text-[11px] font-extrabold text-[#911D35] bg-[#FFE0E5] hover:bg-[#FECDD6] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] px-2.5 py-1 rounded-full transition-colors flex items-center gap-1"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Reset Filter</span>
               </button>
             )}
             {!isFiltered && (
-              <span className="text-[11px] font-semibold text-slate-500 tabular-nums">
+              <span className="nb-chip bg-[#FFD166] text-[#073B4C] px-2.5 py-0.5 text-[11px] font-extrabold tabular-nums">
                 {filteredTransactions.length} Transaksi
               </span>
             )}
@@ -569,9 +638,73 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
         </div>
 
         <button type="button" onClick={()=>setIsFilterOpen(open=>!open)} aria-label="Filter transaksi" aria-expanded={isFilterOpen} aria-controls="transaction-filter-panel" className={`relative shrink-0 rounded-xl border p-2.5 ${isFilterOpen||activeFilterCount?'border-teal-700 bg-teal-50 text-teal-700':'border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Filter className="w-4 h-4" />{activeFilterCount>0&&<span className="absolute -right-1 -top-1 rounded-full bg-teal-700 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}</button></div>
-        {isFilterOpen && <div id="transaction-filter-panel" className="space-y-2.5 pt-2">
-        {/* BARIS 1: PILIHAN KRITERIA FILTER (Tipe, Anggota, Aset, Kategori, Label) */}
+
+        {/* BARIS CEPAT RENTANG TANGGAL (1-Klik Preset + Buka Kalender) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+          {(
+            [
+              { key: 'all', label: 'Semua Waktu' },
+              { key: 'today', label: 'Hari Ini' },
+              { key: 'yesterday', label: 'Kemarin' },
+              { key: '7d', label: '7 Hari' },
+              { key: 'this_month', label: 'Bulan Ini' },
+              { key: 'last_month', label: 'Bulan Lalu' }
+            ] as const
+          ).map(p => {
+            const active = datePreset === p.key && (p.key === 'all' ? !hasDateFilter : hasDateFilter);
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => applyDatePreset(p.key)}
+                className={`px-3 py-1 rounded-full text-xs font-extrabold whitespace-nowrap border-[1.5px] border-[#073B4C] transition-all ${
+                  active
+                    ? 'bg-[#FFD166] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                    : 'bg-white text-[#365664] hover:bg-[#FFFBEB]'
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              setFilterDimension('date');
+              setIsFilterOpen(true);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-extrabold whitespace-nowrap border-[1.5px] border-[#073B4C] inline-flex items-center gap-1 transition-all ${
+              datePreset === 'custom' && hasDateFilter
+                ? 'bg-[#06D6A0] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                : 'bg-[#E0F2FE] text-[#073B4C] hover:bg-[#BAE6FD]'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>
+              {hasDateFilter && datePreset === 'custom'
+                ? `${startDateFilter || 'Awal'} – ${endDateFilter || 'Akhir'}`
+                : 'Pilih Tanggal'}
+            </span>
+          </button>
+        </div>
+
+        {isFilterOpen && <div id="transaction-filter-panel" className="space-y-2.5 pt-2 border-t-2 border-dashed border-[#073B4C]/15">
+        {/* BARIS 1: PILIHAN KRITERIA FILTER (Tanggal, Tipe, Anggota, Aset, Kategori, Label) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-slate-100">
+          <button
+            type="button"
+            onClick={() => setFilterDimension('date')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              filterDimension === 'date'
+                ? 'bg-teal-700 text-white shadow-2xs'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Rentang Tanggal</span>
+            {hasDateFilter && <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}
+          </button>
+
           <button
             type="button"
             onClick={() => setFilterDimension('type')}
@@ -660,6 +793,52 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
         </div>
 
         {/* BARIS 2: ISIAN DARI KRITERIA YANG DIPILIH DI BARIS 1 */}
+        {filterDimension === 'date' && (
+          <div className="p-3 rounded-2xl bg-[#FFFDF5] border-2 border-[#073B4C] space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label className="block text-xs font-extrabold text-[#073B4C]">
+                Dari Tanggal
+                <input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={e => {
+                    setDatePreset('custom');
+                    setStartDateFilter(e.target.value);
+                  }}
+                  className="mt-1 block w-full px-3 py-2 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C]"
+                />
+              </label>
+              <label className="block text-xs font-extrabold text-[#073B4C]">
+                Sampai Tanggal
+                <input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={e => {
+                    setDatePreset('custom');
+                    setEndDateFilter(e.target.value);
+                  }}
+                  className="mt-1 block w-full px-3 py-2 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C]"
+                />
+              </label>
+            </div>
+            {hasDateFilter && (
+              <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-[#365664]">
+                <span>
+                  Menampilkan: <strong>{startDateFilter || 'Awal'}</strong> s/d{' '}
+                  <strong>{endDateFilter || 'Sekarang'}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => applyDatePreset('all')}
+                  className="text-red-700 underline font-extrabold"
+                >
+                  Hapus Tanggal
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
           {/* 1. Isian Tipe Transaksi */}
           {filterDimension === 'type' && (

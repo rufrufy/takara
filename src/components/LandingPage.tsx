@@ -11,7 +11,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToLogin, onGoToReg
   <div className="welcome-page">
     <header>
       <div className="brand-cluster">
-        <span className="brand-badge" aria-hidden="true">T</span>
+        <img src="/Takara-192.png" alt="Takara" className="brand-logo-img" />
         <span className="wordmark">Takara</span>
       </div>
       {onOpenInstall && (
@@ -27,8 +27,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToLogin, onGoToReg
           <Sparkles size={14} strokeWidth={2.5} />
           <span>Keuangan Rumah Tangga Seru!</span>
         </span>
-        <div className="welcome-symbol">
-          <Wallet size={38} strokeWidth={2.1} />
+        <div className="mb-4">
+          <img
+            src="/Takara.png"
+            alt="Logo Pohon Keluarga Takara"
+            className="w-24 h-24 object-contain"
+          />
         </div>
         <h1>
           Keuangan keluarga,

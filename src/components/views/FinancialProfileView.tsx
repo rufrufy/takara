@@ -3,6 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import {isBalanceReset} from '../../lib/monthlyBalance';
 import { WALLET_HEADER_COLORS, defaultWalletHeaderColor, resolveWalletHeaderColor, getReadableHeaderText } from '../../lib/walletColors';
+import { SavingsGoalsSection } from '../SavingsGoalsSection';
+import { WalletStack } from '../WalletStack';
 import { Wallet, WalletType, DebtItem, TransactionType } from '../../types';
 import {
   Wallet as WalletIcon,
@@ -59,12 +61,13 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     updateDebt,
     deleteDebt,
     addTransaction,
+    savingsGoals,
     members,
     activeHousehold
   } = useApp();
 
-  // Sub-kategori tabs: 'dompet' | 'utang' | 'pemasukan' (Default dibuka ke Aset dan Dompet)
-  const [subTab, setSubTab] = useState<'dompet' | 'utang' | 'pemasukan'>('dompet');
+  // Sub-kategori tabs: 'dompet' | 'impian' | 'utang' | 'pemasukan'
+  const [subTab, setSubTab] = useState<'dompet' | 'impian' | 'utang' | 'pemasukan'>('dompet');
 
   // Wallet detail & add modal
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
@@ -429,6 +432,11 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
     return name.slice(0, 2).toUpperCase();
   };
 
+  const currentMonthLabel = new Date().toLocaleDateString('id-ID', {
+    month: 'long',
+    year: 'numeric'
+  });
+
   const selectedWalletTransactions = selectedWalletId
     ? transactions.filter(t => t.sourceWalletId === selectedWalletId || t.destinationWalletId === selectedWalletId)
     : [];
@@ -448,8 +456,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
 
       {/* Payment Success Toast */}
       {paymentNotice && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-xs animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="p-3 bg-[#D1FAE5] border-[2.5px] border-[#073B4C] shadow-[3px_3px_0_#073B4C] text-[#064E3B] rounded-2xl text-xs font-extrabold flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-[#073B4C] shrink-0" />
           <span>{paymentNotice}</span>
         </div>
       )}
@@ -466,6 +474,18 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
         >
           <WalletIcon className="w-4 h-4" />
           <span className="wallet-tab-label">Aset<small className="wallet-tab-count">({wallets.length})</small></span>
+        </button>
+
+        <button
+          role="tab" aria-selected={subTab === 'impian'} data-wallet-tab="impian" onClick={() => setSubTab('impian')}
+          className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+            subTab === 'impian'
+              ? 'bg-white text-teal-800 shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span className="wallet-tab-label">Impian<small className="wallet-tab-count">({savingsGoals.length})</small></span>
         </button>
 
         <button
@@ -494,17 +514,23 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       </div>
 
       {/* SUB-KATEGORI 1: DOMPET & ASET */}
+      <div key={subTab} className="view-stage-enter">
       {subTab === 'dompet' && (
         <div className="space-y-4">
           {/* Total Assets Banner */}
-          <div className="soft-summary rounded-3xl p-5 shadow-lg space-y-2">
-            <span className="text-xs font-semibold text-teal-200 uppercase tracking-wider">
-              Total Kekayaan Bersih (Aset Dompet)
-            </span>
-            <div className="text-3xl font-extrabold tabular-nums">
+          <div className="saldo-hero saldo-hero--lagoon rounded-3xl p-5 space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide text-[#073B4C]">
+                💎 Total Kekayaan Bersih
+              </span>
+              <span className="nb-chip bg-[#FFD166] px-2.5 py-0.5 text-xs text-[#073B4C]">
+                {wallets.length} Dompet Aktif
+              </span>
+            </div>
+            <div className="text-3xl font-extrabold tabular-nums text-[#073B4C]">
               {formatIDR(totalBalance)}
             </div>
-            <p className="text-xs text-teal-200/80">
+            <p className="text-xs font-bold text-[#073B4C]/85">
               Saldo riil yang tersebar di {wallets.length} rekening bank, e-wallet, dan uang tunai
             </p>
           </div>
@@ -525,83 +551,19 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {wallets.map(w => {
-              const isSelected = selectedWalletId === w.id;
-              const wTxs = transactions.filter(t => t.sourceWalletId === w.id || t.destinationWalletId === w.id);
-              const headerColor = resolveWalletHeaderColor(w);
-              const headerText = getReadableHeaderText(headerColor);
-
-              return (
-                <div
-                  key={w.id}
-                  data-wallet-type={w.type}
-                  data-selected={isSelected}
-                  onClick={() => setSelectedWalletId(isSelected ? null : w.id)}
-                  className="wallet-account-card rounded-3xl border-[2.5px] border-[#073B4C] transition-all cursor-pointer overflow-hidden bg-white"
-                >
-                  {/* Colored Card Header */}
-                  <div
-                    style={{ backgroundColor: headerColor, color: headerText }}
-                    className="px-4 py-3.5 border-b-[2.5px] border-[#073B4C] flex items-start justify-between gap-2"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
-                        {getWalletIcon(w.type)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="font-extrabold text-sm leading-tight break-words" style={{ color: headerText }}>
-                          {w.name}
-                        </h2>
-                        <span className="text-[11px] font-bold opacity-90 capitalize block mt-0.5" style={{ color: headerText }}>
-                          {w.type === 'cash' ? 'Uang Tunai' : w.type === 'digital' ? 'E-Wallet / Digital' : w.type === 'custom' ? 'Tabungan / Aset' : 'Rekening Bank'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-[10px] font-extrabold bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] px-2 py-0.5 rounded-full whitespace-nowrap">
-                        {wTxs.length} mutasi
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenEditWallet(w);
-                        }}
-                        className="w-7 h-7 bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] hover:bg-[#FFFBEB] rounded-full flex items-center justify-center transition-colors"
-                        title="Edit Dompet & Warna Header"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Card Balance Body */}
-                  <div className="p-4 bg-white">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="text-xs font-bold text-slate-500">Saldo Tersedia</span>
-                      <span
-                        className={`text-lg font-extrabold tabular-nums break-all ${
-                          w.balance < 0 ? 'text-red-600' : 'text-[#073B4C]'
-                        }`}
-                      >
-                        {formatIDR(w.balance)}
-                      </span>
-                    </div>
-
-                    {isSelected && (
-                      <div className="mt-2 pt-2 border-t border-dashed border-[#073B4C]/20 text-right">
-                        <span className="text-[11px] text-teal-800 font-extrabold">
-                          Melihat mutasi dompet ini ▼
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <WalletStack
+            variant="profile"
+            wallets={wallets}
+            transactions={transactions}
+            selectedWalletId={selectedWalletId}
+            onSelectWallet={setSelectedWalletId}
+            onEditWallet={handleOpenEditWallet}
+            onAddWallet={() => {
+              setWalletColor('#FFD166');
+              setWalletColorTouched(false);
+              setIsWalletModalOpen(true);
+            }}
+          />
 
           {/* Selected Wallet Mutations */}
           {selectedWalletId && (
@@ -672,57 +634,83 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
         </div>
       )}
 
-      {/* SUB-KATEGORI 2: UTANG & PIUTANG (Alur 3-Step Wizard + Cicilan Bulanan) */}
+      {/* SUB-KATEGORI 1B: KANTONG IMPIAN / TARGET TABUNGAN */}
+      {subTab === 'impian' && <SavingsGoalsSection />}
+
+      {/* SUB-KATEGORI 2: UTANG & PIUTANG (Tropical Neo-Brutalism) */}
       {subTab === 'utang' && (
         <div className="space-y-4">
           {/* Summary Row (Keluarga Berutang vs Piutang Orang Lain) */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-red-50 border border-red-200/80 rounded-2xl p-4">
-              <div className="text-xs font-bold text-red-700">Keluarga Berutang</div>
-              <div className="text-lg sm:text-xl font-extrabold text-red-600 mt-1 tabular-nums">
+            <div className="saldo-mini-hero saldo-hero--coral rounded-3xl p-3.5 sm:p-4 space-y-1.5">
+              <span className="nb-chip inline-flex items-center gap-1 bg-white px-2.5 py-0.5 text-[11px] text-[#073B4C]">
+                <span>🔴</span>
+                <span>Berutang</span>
+              </span>
+              <div className="text-lg sm:text-2xl font-extrabold text-[#073B4C] tabular-nums break-words">
                 {formatIDR(totalUtang)}
               </div>
-              <div className="text-[11px] text-red-500 mt-0.5">Total sisa kewajiban aktif yang harus dibayar</div>
+              <p className="text-[11px] font-bold text-[#073B4C]/80 leading-snug">
+                Sisa kewajiban aktif
+              </p>
             </div>
 
-            <div className="bg-emerald-50 border border-emerald-200/80 rounded-2xl p-4">
-              <div className="text-xs font-bold text-emerald-800">Piutang (Orang Lain)</div>
-              <div className="text-lg sm:text-xl font-extrabold text-emerald-600 mt-1 tabular-nums">
+            <div className="saldo-mini-hero saldo-hero--mint-soft rounded-3xl p-3.5 sm:p-4 space-y-1.5">
+              <span className="nb-chip inline-flex items-center gap-1 bg-white px-2.5 py-0.5 text-[11px] text-[#073B4C]">
+                <span>🟢</span>
+                <span>Piutang</span>
+              </span>
+              <div className="text-lg sm:text-2xl font-extrabold text-[#073B4C] tabular-nums break-words">
                 {formatIDR(totalPiutang)}
               </div>
-              <div className="text-[11px] text-emerald-600 mt-0.5">Uang keluarga yang ada di pihak luar</div>
+              <p className="text-[11px] font-bold text-[#073B4C]/80 leading-snug">
+                Dana di pihak luar
+              </p>
             </div>
           </div>
 
-          {/* Banner: Tagihan Cicilan Bulan Berjalan Yang Belum Terbayar */}
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200/90 rounded-2xl p-4 shadow-2xs">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center shrink-0">
-                  <Calendar className="w-5 h-5" />
+          {/* Banner: Tagihan Cicilan Bulan Berjalan */}
+          <div className="saldo-hero saldo-hero--mango rounded-3xl p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C] flex items-center justify-center shrink-0 text-[#073B4C]">
+                  <Calendar className="w-5 h-5 stroke-[2.5]" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold text-amber-950">
-                      Cicilan Bulan Ini (November 2026)
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-extrabold text-[#073B4C]">
+                      Cicilan Bulan Ini
                     </span>
-                    <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
-                      {unpaidDebtsThisMonth.length} Belum Dibayar
+                    <span className="nb-chip bg-white px-2.5 py-0.5 text-[11px] text-[#073B4C] capitalize">
+                      {currentMonthLabel}
+                    </span>
+                    <span
+                      className={`nb-chip px-2.5 py-0.5 text-[10px] ${
+                        unpaidDebtsThisMonth.length > 0
+                          ? 'bg-[#FF6B6B] text-white'
+                          : 'bg-[#06D6A0] text-[#073B4C]'
+                      }`}
+                    >
+                      {unpaidDebtsThisMonth.length > 0
+                        ? `${unpaidDebtsThisMonth.length} Belum Bayar`
+                        : 'Semua Lunas'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-amber-800/80 mt-0.5">
+                  <p className="text-[11px] font-bold text-[#073B4C]/80">
                     Kewajiban angsuran bulanan yang harus disiapkan bulan ini
                   </p>
                 </div>
               </div>
 
-              <div className="text-left sm:text-right w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-200/60">
-                <div className="text-[11px] text-amber-700 font-semibold">Total Tagihan Belum Bayar:</div>
-                <div className="text-lg sm:text-xl font-extrabold text-amber-900 tabular-nums">
+              <div className="bg-white border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] rounded-2xl px-4 py-2.5 w-full sm:w-auto text-left sm:text-right shrink-0">
+                <div className="text-[11px] font-extrabold text-[#365664]">
+                  Tagihan Belum Bayar:
+                </div>
+                <div className="text-lg sm:text-xl font-extrabold text-[#073B4C] tabular-nums">
                   {formatIDR(totalUnpaidInstallmentThisMonth)}
                 </div>
                 {totalPaidInstallmentThisMonth > 0 && (
-                  <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                  <div className="text-[10px] text-[#065F46] font-extrabold mt-0.5">
                     ✓ {formatIDR(totalPaidInstallmentThisMonth)} sudah terbayar bulan ini
                   </div>
                 )}
@@ -730,169 +718,260 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
             </div>
           </div>
 
-          {/* Action Button: Opens 3-step wizard */}
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-xs font-bold text-slate-700">Daftar Utang & Piutang ({debts.length})</span>
-            <div className="flex gap-2">
+          {/* Action Header: Opens 3-step wizard */}
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+            <h2 className="font-extrabold text-[#073B4C] text-sm">
+              Daftar Utang & Piutang ({debts.length})
+            </h2>
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => openNewDebtWizard('debt')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-xl text-xs font-semibold shadow-xs transition-colors"
+                className="nb-btn bg-[#FF6B6B] hover:bg-[#FF8585] text-white px-3.5 py-2 text-xs inline-flex items-center gap-1.5"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Utang Baru</span>
+                <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
+                <span>Utang Baru</span>
               </button>
               <button
+                type="button"
                 onClick={() => openNewDebtWizard('receivable')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl text-xs font-semibold shadow-xs transition-colors"
+                className="nb-btn bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] px-3.5 py-2 text-xs inline-flex items-center gap-1.5"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Piutang</span>
+                <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
+                <span>Piutang</span>
               </button>
             </div>
           </div>
 
-          {/* Debts List with Monthly Installments & Remaining Months */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs divide-y divide-slate-100 overflow-hidden">
-            {debts.map(d => {
-              const isDebt = d.type === 'debt';
-              const monthly = d.monthlyInstallment && d.monthlyInstallment > 0 ? d.monthlyInstallment : d.remainingAmount;
-              const remainingMonths = Math.max(1, Math.ceil(d.remainingAmount / (monthly || 1)));
+          {/* Debts Card List */}
+          {debts.length === 0 ? (
+            <div className="bg-white rounded-3xl border-[2.5px] border-dashed border-[#073B4C] p-8 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-[#FECDD6] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] grid place-items-center mx-auto text-[#073B4C]">
+                <HandCoins className="w-7 h-7 stroke-[2.2]" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-[#073B4C]">Belum Ada Catatan Utang / Piutang</h3>
+                <p className="text-xs font-semibold text-[#365664] max-w-xs mx-auto mt-1">
+                  Catat cicilan rumah, pinjaman keluarga, atau piutang agar jatuh tempo bulanan selalu terpantau rapi.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => openNewDebtWizard('debt')}
+                  className="nb-btn bg-[#FF6B6B] text-white px-4 py-2 text-xs inline-flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
+                  <span>Catat Utang</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openNewDebtWizard('receivable')}
+                  className="nb-btn bg-[#06D6A0] text-[#073B4C] px-4 py-2 text-xs inline-flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
+                  <span>Catat Piutang</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {debts.map(d => {
+                const isDebt = d.type === 'debt';
+                const monthly = d.monthlyInstallment && d.monthlyInstallment > 0 ? d.monthlyInstallment : d.remainingAmount;
+                const remainingMonths = Math.max(1, Math.ceil(d.remainingAmount / (monthly || 1)));
+                const paidPct = d.isSettled
+                  ? 100
+                  : d.amount > 0
+                  ? Math.min(100, Math.max(0, Math.round(((d.amount - d.remainingAmount) / d.amount) * 100)))
+                  : 0;
+                const headerBg = d.isSettled ? '#E2E8F0' : isDebt ? '#FECDD6' : '#06D6A0';
 
-              return (
-                <div key={d.id} className="p-4 sm:p-5 hover:bg-slate-50 transition-colors">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      {/* Settle full debt button */}
-                      <button
-                        onClick={async()=>{const result=await toggleDebtSettled(d.id);if(!result.success)setEditWalletError(result.error||'Gagal memperbarui utang.');}}
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center mt-0.5 transition-colors border shrink-0 ${
-                          d.isSettled
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'border-slate-300 hover:border-emerald-500 bg-white'
-                        }`}
-                        title={d.isSettled ? 'Tandai Belum Lunas Total' : 'Tandai Lunas Total'}
-                      >
-                        {d.isSettled && <Check className="w-4 h-4 stroke-[3]" />}
-                      </button>
+                return (
+                  <div
+                    key={d.id}
+                    className="rounded-3xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] overflow-hidden bg-white"
+                  >
+                    {/* Colored Card Header */}
+                    <div
+                      style={{ backgroundColor: headerBg }}
+                      className="px-4 py-3.5 border-b-[2.5px] border-[#073B4C] flex items-start justify-between gap-2.5"
+                    >
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const result = await toggleDebtSettled(d.id);
+                            if (!result.success) setEditWalletError(result.error || 'Gagal memperbarui utang.');
+                          }}
+                          className={`w-8 h-8 rounded-full border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0 transition-transform active:translate-y-0.5 ${
+                            d.isSettled ? 'bg-[#06D6A0] text-[#073B4C]' : 'bg-white text-[#073B4C] hover:bg-[#FEF3C7]'
+                          }`}
+                          title={d.isSettled ? 'Tandai Belum Lunas Total' : 'Tandai Lunas Total'}
+                          aria-label={d.isSettled ? 'Tandai Belum Lunas Total' : 'Tandai Lunas Total'}
+                        >
+                          {d.isSettled && <Check className="w-4 h-4 stroke-[3]" />}
+                        </button>
 
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-xs sm:text-sm font-bold ${d.isSettled ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                            {d.personOrEntity}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              isDebt ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
+                        <div className="min-w-0 flex-1">
+                          <h3
+                            className={`text-sm sm:text-base font-extrabold text-[#073B4C] leading-tight break-words ${
+                              d.isSettled ? 'line-through opacity-60' : ''
                             }`}
                           >
-                            {isDebt ? 'Utang' : 'Piutang'}
-                          </span>
-
-                          {d.isSettled ? (
-                            <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">
-                              Lunas Total
+                            {d.personOrEntity}
+                          </h3>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            <span
+                              className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C] ${
+                                isDebt ? 'bg-[#FF6B6B] text-white' : 'bg-[#FFFDF5] text-[#073B4C]'
+                              }`}
+                            >
+                              {isDebt ? 'Utang' : 'Piutang'}
                             </span>
-                          ) : isDebt ? (
-                            d.isPaidThisMonth ? (
-                              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                                <span>Cicilan Bulan Ini Lunas</span>
+
+                            {d.isSettled ? (
+                              <span className="text-[10px] bg-white text-[#073B4C] font-extrabold px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C]">
+                                ✓ Lunas Total
                               </span>
-                            ) : (
-                              <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                <span>Belum Bayar Bulan Ini</span>
-                              </span>
-                            )
-                          ) : null}
+                            ) : isDebt ? (
+                              d.isPaidThisMonth ? (
+                                <span className="text-[10px] bg-[#D1FAE5] text-[#073B4C] font-extrabold px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C] inline-flex items-center gap-1">
+                                  <Check className="w-3 h-3 stroke-[3]" />
+                                  <span>Bulan Ini Lunas</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-[#FFD166] text-[#073B4C] font-extrabold px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C] inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3 stroke-[2.5]" />
+                                  <span>Belum Bayar Bulan Ini</span>
+                                </span>
+                              )
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Header Action Icons */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditDebt(d)}
+                          className="w-8 h-8 rounded-full bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-[#073B4C] hover:bg-[#FFFBEB] flex items-center justify-center transition-transform active:translate-y-0.5"
+                          title="Edit Catatan Utang / Piutang"
+                          aria-label={`Edit ${d.personOrEntity}`}
+                        >
+                          <Edit2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const result = await deleteDebt(d.id);
+                            if (!result.success) setEditWalletError(result.error || 'Gagal menghapus utang.');
+                          }}
+                          className="w-8 h-8 rounded-full bg-[#FFE0E5] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-[#911D35] hover:bg-[#FF6B6B] hover:text-white flex items-center justify-center transition-colors"
+                          title="Hapus Catatan"
+                          aria-label={`Hapus ${d.personOrEntity}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Card Body */}
+                    <div className="p-4 bg-white space-y-3">
+                      {/* Remaining Amount & Progress */}
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <div>
+                            <span className="text-[11px] font-bold text-[#365664] block">
+                              {isDebt ? 'Sisa Utang:' : 'Sisa Piutang:'}
+                            </span>
+                            <span
+                              className={`text-lg sm:text-xl font-extrabold tabular-nums ${
+                                d.isSettled
+                                  ? 'line-through text-slate-400'
+                                  : isDebt
+                                  ? 'text-[#BE123C]'
+                                  : 'text-[#065F46]'
+                              }`}
+                            >
+                              {formatIDR(d.remainingAmount)}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[11px] font-bold text-[#365664] block tabular-nums">
+                              dari {formatIDR(d.amount)}
+                            </span>
+                            <span className="text-[10px] font-extrabold text-[#073B4C] bg-[#FEF3C7] border border-[#073B4C] px-2 py-0.5 rounded-full inline-block mt-0.5">
+                              {paidPct}% terbayar
+                            </span>
+                          </div>
                         </div>
 
-                        {/* Cicilan per bulan & Sisa Tenor */}
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                          {/* Cicilan per Bulan */}
+                        <div className="w-full h-3.5 bg-slate-100 border-2 border-[#073B4C] rounded-full overflow-hidden">
+                          <div
+                            className="h-full transition-all duration-300"
+                            style={{
+                              width: `${paidPct}%`,
+                              backgroundColor: isDebt ? '#06D6A0' : '#38BDF8'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Metadata Chips */}
+                      {(d.monthlyInstallment || !d.isSettled || d.dueDate) && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
                           {d.monthlyInstallment ? (
-                            <div className="font-semibold text-slate-700 flex items-center gap-1">
-                              <Coins className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Cicilan: </span>
-                              <span className="font-bold text-slate-900 tabular-nums">
-                                {formatIDR(d.monthlyInstallment)} / bln
-                              </span>
-                            </div>
+                            <span className="inline-flex items-center gap-1 bg-[#FFFBEB] text-[#073B4C] font-extrabold px-2.5 py-1 rounded-full border-[1.5px] border-[#073B4C] text-[11px] tabular-nums">
+                              <Coins className="w-3.5 h-3.5 shrink-0" />
+                              <span>Cicilan {formatIDR(d.monthlyInstallment)}/bln</span>
+                            </span>
                           ) : null}
 
-                          {/* Sisa Tenor Berapa Bulan Lagi */}
                           {!d.isSettled && (
-                            <div className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100 flex items-center gap-1 text-[11px]">
-                              <Calendar className="w-3 h-3 text-teal-600" />
-                              <span>Sisa {remainingMonths} bulan lagi</span>
-                            </div>
+                            <span className="inline-flex items-center gap-1 bg-[#A5F3FC] text-[#073B4C] font-extrabold px-2.5 py-1 rounded-full border-[1.5px] border-[#073B4C] text-[11px]">
+                              <Calendar className="w-3 h-3 shrink-0" />
+                              <span>Sisa {remainingMonths} bln lagi</span>
+                            </span>
                           )}
 
                           {d.dueDate && (
-                            <span className="text-[11px] text-slate-400">
+                            <span className="inline-flex items-center bg-white text-[#365664] font-bold px-2.5 py-1 rounded-full border-[1.5px] border-[#073B4C] text-[11px]">
                               Tempo: {d.dueDate}
                             </span>
                           )}
                         </div>
+                      )}
 
-                        {d.notes && (
-                          <div className="text-[11px] text-slate-500 mt-1 italic">
-                            • {d.notes}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      {d.notes && (
+                        <div className="text-[11px] font-semibold text-[#365664] bg-[#FFFDF5] border-[1.5px] border-dashed border-[#073B4C]/35 rounded-2xl px-3 py-2">
+                          📝 {d.notes}
+                        </div>
+                      )}
 
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-400 block font-semibold">Sisa Utang:</span>
-                        <span
-                          className={`text-sm sm:text-base font-extrabold tabular-nums ${
-                            d.isSettled ? 'line-through text-slate-300' : isDebt ? 'text-red-600' : 'text-emerald-600'
-                          }`}
-                        >
-                          {formatIDR(d.remainingAmount)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        {/* Quick Pay Monthly Installment Button */}
-                        {!d.isSettled && isDebt && !d.isPaidThisMonth && (
+                      {!d.isSettled && isDebt && !d.isPaidThisMonth && (
+                        <div className="pt-1 flex justify-end">
                           <button
+                            type="button"
                             onClick={() => {
                               setPaymentModalDebt(d);
                               setPaymentSourceWalletId(wallets[0]?.id || 'none');
                               setPaymentReceiptImage('');
                             }}
-                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition-colors"
+                            className="nb-btn bg-[#FFD166] hover:bg-[#FFE08A] text-[#073B4C] px-4 py-2 text-xs inline-flex items-center gap-1.5 w-full sm:w-auto justify-center"
                           >
-                            <Coins className="w-3.5 h-3.5" />
-                            <span>Bayar Cicilan</span>
+                            <Coins className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Bayar Cicilan Bulan Ini</span>
                           </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditDebt(d)}
-                          className="p-1.5 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
-                          title="Edit Catatan Utang / Piutang"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={async()=>{const result=await deleteDebt(d.id);if(!result.success)setEditWalletError(result.error||'Gagal menghapus utang.');}}
-                          className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Hapus Catatan"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -900,15 +979,20 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       {subTab === 'pemasukan' && (
         <div className="space-y-4">
           {/* Total Monthly Income Banner */}
-          <div className="soft-summary rounded-3xl p-5 shadow-lg space-y-2">
-            <span className="text-xs font-semibold text-emerald-100 uppercase tracking-wider">
-              Total Pemasukan Bulan Berjalan
-            </span>
-            <div className="text-3xl font-extrabold tabular-nums">
+          <div className="saldo-hero saldo-hero--mint rounded-3xl p-5 space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide text-[#073B4C]">
+                💰 Total Pemasukan Bulan Berjalan
+              </span>
+              <span className="nb-chip bg-[#FFD166] px-2.5 py-0.5 text-xs text-[#073B4C]">
+                {incomeTransactions.length} Transaksi
+              </span>
+            </div>
+            <div className="text-3xl font-extrabold tabular-nums text-[#073B4C]">
               {formatIDR(periodIncome)}
             </div>
-            <p className="text-xs text-emerald-100/80">
-              {incomeTransactions.length} transaksi pemasukan terdata dari gaji keluarga
+            <p className="text-xs font-bold text-[#073B4C]/85">
+              {incomeTransactions.length} transaksi pemasukan terdata dari arus pendapatan keluarga
             </p>
           </div>
 
@@ -1037,181 +1121,185 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
           </div>
         </div>
       )}
+      </div>
 
       {/* QUICK PAY INSTALLMENT MODAL */}
       {paymentModalDebt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center">
-                  <Coins className="w-4 h-4" />
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C]">
+            <div className="px-5 py-4 bg-[#FFD166] border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-[#073B4C] flex items-center justify-center shrink-0">
+                  <Coins className="w-4 h-4 stroke-[2.5]" />
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">Bayar Cicilan Bulan Ini</h3>
-                  <p className="text-[11px] text-slate-400">{paymentModalDebt.personOrEntity}</p>
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-[#073B4C] text-sm truncate">Bayar Cicilan Bulan Ini</h3>
+                  <p className="text-[11px] font-bold text-[#073B4C]/80 truncate">{paymentModalDebt.personOrEntity}</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setPaymentModalDebt(null);
                   setPaymentReceiptImage('');
                 }}
-                className="w-7 h-7 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center"
+                className="w-8 h-8 rounded-full bg-white border-2 border-[#073B4C] text-[#073B4C] hover:bg-[#FFE0E5] flex items-center justify-center shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Installment Info */}
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-1">
-              <div className="text-[11px] font-semibold text-amber-800">Nominal Cicilan yang Dibayar:</div>
-              <div className="text-xl font-extrabold text-amber-950 tabular-nums">
-                {formatIDR(
-                  Math.min(
-                    paymentModalDebt.monthlyInstallment || paymentModalDebt.remainingAmount,
-                    paymentModalDebt.remainingAmount
-                  )
-                )}
-              </div>
-              <div className="text-[11px] text-amber-700 mt-1 flex justify-between">
-                <span>Sisa saat ini: {formatIDR(paymentModalDebt.remainingAmount)}</span>
-                <span>
-                  Sisa setelah bayar:{' '}
+            <div className="p-5 space-y-4 max-h-[78vh] overflow-y-auto">
+              {/* Installment Info */}
+              <div className="p-3.5 bg-[#FFFBEB] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] rounded-2xl space-y-1">
+                <div className="text-[11px] font-extrabold text-[#073B4C]">Nominal Cicilan yang Dibayar:</div>
+                <div className="text-xl font-extrabold text-[#073B4C] tabular-nums">
                   {formatIDR(
-                    Math.max(
-                      0,
-                      paymentModalDebt.remainingAmount -
-                        (paymentModalDebt.monthlyInstallment || paymentModalDebt.remainingAmount)
+                    Math.min(
+                      paymentModalDebt.monthlyInstallment || paymentModalDebt.remainingAmount,
+                      paymentModalDebt.remainingAmount
                     )
                   )}
-                </span>
+                </div>
+                <div className="text-[11px] font-bold text-[#365664] pt-1 flex justify-between gap-2 flex-wrap">
+                  <span>Sisa saat ini: {formatIDR(paymentModalDebt.remainingAmount)}</span>
+                  <span>
+                    Setelah bayar:{' '}
+                    {formatIDR(
+                      Math.max(
+                        0,
+                        paymentModalDebt.remainingAmount -
+                          (paymentModalDebt.monthlyInstallment || paymentModalDebt.remainingAmount)
+                      )
+                    )}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            {/* Choose Source Wallet */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                Potong Dari Dompet Sumber:
-              </label>
-              <div className="space-y-1.5 max-h-44 overflow-y-auto">
-                <button
-                  type="button"
-                  onClick={() => setPaymentSourceWalletId('none')}
-                  className={`w-full p-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between transition-colors ${
-                    paymentSourceWalletId === 'none'
-                      ? 'bg-teal-50 border-teal-600 text-teal-900 ring-1 ring-teal-600'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span>Tanpa Potong Saldo (Hanya catat cicilan)</span>
-                  {paymentSourceWalletId === 'none' && <Check className="w-4 h-4 text-teal-700" />}
-                </button>
-
-                {wallets.map(w => (
+              {/* Choose Source Wallet */}
+              <div>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1.5">
+                  Potong Dari Dompet Sumber:
+                </label>
+                <div className="space-y-2 max-h-44 overflow-y-auto pr-0.5">
                   <button
-                    key={w.id}
                     type="button"
-                    onClick={() => setPaymentSourceWalletId(w.id)}
-                    className={`w-full p-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between transition-colors ${
-                      paymentSourceWalletId === w.id
-                        ? 'bg-teal-50 border-teal-600 text-teal-900 ring-1 ring-teal-600'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    onClick={() => setPaymentSourceWalletId('none')}
+                    className={`w-full p-2.5 rounded-2xl border-2 border-[#073B4C] text-left text-xs font-extrabold flex items-center justify-between transition-all ${
+                      paymentSourceWalletId === 'none'
+                        ? 'bg-[#D1FAE5] text-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C]'
+                        : 'bg-white text-[#073B4C] hover:bg-[#FEF3C7]'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                        {getWalletBadge(w.name, w.type)}
-                      </span>
-                      <span>{w.name}</span>
-                    </div>
-                    <span className="text-slate-500 tabular-nums">{formatIDR(w.balance)}</span>
+                    <span>Tanpa Potong Saldo (Hanya catat cicilan)</span>
+                    {paymentSourceWalletId === 'none' && <Check className="w-4 h-4 text-[#073B4C] stroke-[3] shrink-0" />}
                   </button>
-                ))}
+
+                  {wallets.map(w => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => setPaymentSourceWalletId(w.id)}
+                      className={`w-full p-2.5 rounded-2xl border-2 border-[#073B4C] text-left text-xs font-extrabold flex items-center justify-between transition-all ${
+                        paymentSourceWalletId === w.id
+                          ? 'bg-[#D1FAE5] text-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C]'
+                          : 'bg-white text-[#073B4C] hover:bg-[#FEF3C7]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] bg-[#FFD166] text-[#073B4C] border border-[#073B4C] px-1.5 py-0.5 rounded-full font-extrabold shrink-0">
+                          {getWalletBadge(w.name, w.type)}
+                        </span>
+                        <span className="truncate">{w.name}</span>
+                      </div>
+                      <span className="text-[#073B4C] tabular-nums shrink-0 ml-2">{formatIDR(w.balance)}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Lampiran Foto Struk / Bukti Transfer Cicilan */}
-            <div className="space-y-1.5 pt-1">
-              <label className="block text-[11px] font-bold text-slate-600">
-                Bukti Transfer / Foto Struk (Opsional):
-              </label>
+              {/* Lampiran Foto Struk / Bukti Transfer Cicilan */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-extrabold text-[#073B4C]">
+                  Bukti Transfer / Foto Struk (Opsional):
+                </label>
 
-              <input
-                ref={paymentReceiptInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      setPaymentReceiptImage(reader.result as string);
-                    };
-                    reader.readAsDataURL(file);
-                  }
-                }}
-              />
+                <input
+                  ref={paymentReceiptInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setPaymentReceiptImage(reader.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
 
-              {paymentReceiptImage ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src={paymentReceiptImage}
-                      alt="Struk Pembayaran"
-                      className="w-11 h-11 object-cover rounded-xl border border-slate-200"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-800">Foto Struk Terlampir</div>
-                      <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
-                        <Check className="w-3 h-3" />
-                        <span>Tersimpan ke riwayat transaksi</span>
+                {paymentReceiptImage ? (
+                  <div className="rounded-2xl border-2 border-[#073B4C] bg-[#FFFDF5] p-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <img
+                        src={paymentReceiptImage}
+                        alt="Struk Pembayaran"
+                        className="w-11 h-11 object-cover rounded-xl border-2 border-[#073B4C]"
+                      />
+                      <div>
+                        <div className="text-xs font-extrabold text-[#073B4C]">Foto Struk Terlampir</div>
+                        <div className="text-[10px] text-[#065F46] font-extrabold flex items-center gap-1">
+                          <Check className="w-3 h-3 stroke-[3]" />
+                          <span>Tersimpan ke riwayat transaksi</span>
+                        </div>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentReceiptImage('');
+                        if (paymentReceiptInputRef.current) paymentReceiptInputRef.current.value = '';
+                      }}
+                      className="w-8 h-8 rounded-full bg-[#FFE0E5] border-2 border-[#073B4C] text-[#911D35] hover:bg-[#FF6B6B] hover:text-white flex items-center justify-center transition-colors"
+                      title="Hapus Foto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      setPaymentReceiptImage('');
-                      if (paymentReceiptInputRef.current) paymentReceiptInputRef.current.value = '';
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Hapus Foto"
+                    onClick={() => paymentReceiptInputRef.current?.click()}
+                    className="w-full py-2.5 px-3 border-2 border-dashed border-[#073B4C] bg-[#FFFDF5] hover:bg-[#FEF3C7] rounded-2xl text-xs font-extrabold text-[#073B4C] flex items-center justify-center gap-2 transition-colors cursor-pointer"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Camera className="w-4 h-4" />
+                    <span>Foto Struk / Upload Bukti Transfer</span>
                   </button>
-                </div>
-              ) : (
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t-2 border-dashed border-[#073B4C]/20">
                 <button
                   type="button"
-                  onClick={() => paymentReceiptInputRef.current?.click()}
-                  className="w-full py-2.5 px-3 border border-dashed border-slate-300 hover:border-amber-600 hover:bg-amber-50/40 rounded-2xl text-xs font-semibold text-slate-600 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  onClick={() => {
+                    setPaymentModalDebt(null);
+                    setPaymentReceiptImage('');
+                  }}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-[#073B4C] font-extrabold border-2 border-[#073B4C] rounded-full text-xs"
                 >
-                  <Camera className="w-4 h-4 text-amber-700" />
-                  <span>Foto Struk / Upload Bukti Transfer</span>
+                  Batal
                 </button>
-              )}
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentModalDebt(null);
-                  setPaymentReceiptImage('');
-                }}
-                className="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-200"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleExecutePayment}
-                className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-xs"
-              >
-                Konfirmasi Bayar
-              </button>
+                <button
+                  type="button"
+                  onClick={handleExecutePayment}
+                  className="nb-btn flex-1 py-2.5 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] text-xs"
+                >
+                  Konfirmasi Bayar
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1220,26 +1308,31 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       {/* 3-STEP DEBT WIZARD MODAL */}
       {isDebtModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="bg-white rounded-3xl max-w-md w-full border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C] overflow-hidden flex flex-col max-h-[92vh]">
             {/* Header: Utang Baru & Step Indicator */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h2 className="font-extrabold text-slate-900 text-base">
+            <div
+              className={`px-5 py-4 border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 ${
+                debtType === 'debt' ? 'bg-[#FECDD6]' : 'bg-[#06D6A0]'
+              }`}
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-extrabold text-[#073B4C] text-base">
                     {debtType === 'debt' ? 'Utang baru' : 'Piutang baru'}
                   </h2>
-                  <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                  <span className="text-[11px] font-extrabold text-[#073B4C] bg-white px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C] shadow-[1.5px_1.5px_0_#073B4C]">
                     Langkah {debtStep}/3
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs font-bold text-[#073B4C]/80 mt-0.5 truncate">
                   {debtTitle || debtKind}
                 </p>
               </div>
 
               <button
+                type="button"
                 onClick={() => setIsDebtModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"
+                className="w-8 h-8 rounded-full bg-white border-2 border-[#073B4C] text-[#073B4C] hover:bg-[#FFE0E5] flex items-center justify-center shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1247,7 +1340,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
 
             {/* Error Message */}
             {wizardError && (
-              <div className="mx-4 mt-3 p-2.5 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+              <div className="mx-5 mt-3.5 p-2.5 bg-[#FFE0E5] text-[#911D35] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] rounded-xl text-xs font-extrabold flex items-center gap-1.5">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{wizardError}</span>
               </div>
@@ -1257,16 +1350,16 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
             {debtStep === 1 && (
               <div className="p-5 overflow-y-auto space-y-4">
                 <div>
-                  <div className="text-[11px] font-bold text-teal-700 uppercase tracking-wider">
+                  <div className="text-[11px] font-extrabold text-[#365664] uppercase tracking-wider">
                     1/3 · Jenis
                   </div>
-                  <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
-                    Utang apa ini?
+                  <h3 className="text-base font-extrabold text-[#073B4C] mt-0.5">
+                    {debtType === 'debt' ? 'Utang apa ini?' : 'Piutang apa ini?'}
                   </h3>
                 </div>
 
                 {/* List of Debt Types */}
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {DEBT_TYPES.map(item => {
                     const isSelected = debtKind === item.name;
                     const IconComp = item.Icon;
@@ -1280,34 +1373,28 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                           setDebtKindDesc(item.desc);
                           if (!debtTitle) setDebtTitle(item.name);
                         }}
-                        className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                        className={`w-full p-3.5 rounded-2xl border-2 border-[#073B4C] text-left flex items-center justify-between transition-all ${
                           isSelected
-                            ? 'bg-teal-50/80 border-teal-600 ring-2 ring-teal-600/20 shadow-2xs'
-                            : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-teal-300'
+                            ? 'bg-[#FFD166] shadow-[3px_3px_0_#073B4C] -translate-y-0.5'
+                            : 'bg-white hover:bg-[#FEF3C7]'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                              isSelected
-                                ? 'bg-teal-700 text-white'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-[#073B4C] flex items-center justify-center shrink-0">
                             <IconComp className="w-5 h-5" />
                           </div>
-                          <div>
-                            <div className="text-sm font-bold text-slate-900">
+                          <div className="min-w-0">
+                            <div className="text-sm font-extrabold text-[#073B4C]">
                               {item.name}
                             </div>
-                            <div className="text-xs text-slate-400">
+                            <div className="text-xs font-semibold text-[#365664]">
                               {item.desc}
                             </div>
                           </div>
                         </div>
 
                         {isSelected && (
-                          <CheckCircle2 className="w-5 h-5 text-teal-700 shrink-0" />
+                          <CheckCircle2 className="w-5 h-5 text-[#073B4C] shrink-0" />
                         )}
                       </button>
                     );
@@ -1319,10 +1406,10 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   <button
                     type="button"
                     onClick={handleProceedToStep2}
-                    className="w-full py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                    className="nb-btn w-full py-3 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] text-xs sm:text-sm flex items-center justify-center gap-1.5"
                   >
                     <span>Lanjut ke Nominal (2/3)</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4 stroke-[2.8]" />
                   </button>
                 </div>
               </div>
@@ -1332,21 +1419,21 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
             {debtStep === 2 && (
               <div className="p-5 overflow-y-auto space-y-4">
                 <div>
-                  <div className="text-[11px] font-bold text-teal-700 uppercase tracking-wider">
+                  <div className="text-[11px] font-extrabold text-[#365664] uppercase tracking-wider">
                     2/3 · Nominal & Jatuh Tempo
                   </div>
-                  <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
-                    Berapa total utang & cicilan per bulan?
+                  <h3 className="text-base font-extrabold text-[#073B4C] mt-0.5">
+                    Berapa total nominal & cicilan per bulan?
                   </h3>
                 </div>
 
                 {/* Total Utang Input */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">
                     Total Pokok Pinjaman / Utang (Rp)
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#365664] font-extrabold text-sm">
                       Rp
                     </span>
                     <input
@@ -1361,7 +1448,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                           setDebtRemainingStr(val);
                         }
                       }}
-                      className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-lg font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                      className="w-full pl-11 pr-4 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-lg font-extrabold text-[#073B4C] tabular-nums"
                       autoFocus
                     />
                   </div>
@@ -1369,11 +1456,11 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
 
                 {/* Sisa Utang Saat Ini Input */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Sisa Utang Saat Ini (Rp)
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">
+                    Sisa Pokok Saat Ini (Rp)
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#365664] font-extrabold text-sm">
                       Rp
                     </span>
                     <input
@@ -1382,21 +1469,21 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                       placeholder="0"
                       value={debtRemainingStr ? parseInt(debtRemainingStr, 10).toLocaleString('id-ID') : ''}
                       onChange={e => setDebtRemainingStr(e.target.value.replace(/[^0-9]/g, ''))}
-                      className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                      className="w-full pl-11 pr-4 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-base font-extrabold text-[#073B4C] tabular-nums"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[11px] font-semibold text-[#365664] mt-1">
                     * Boleh sama dengan total pokok pinjaman jika belum dicicil.
                   </p>
                 </div>
 
                 {/* Cicilan Per Bulan Input */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">
                     Cicilan per Bulan (Rp / bulan)
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#365664] font-extrabold text-sm">
                       Rp
                     </span>
                     <input
@@ -1405,7 +1492,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                       placeholder="0"
                       value={debtMonthlyPaymentStr ? parseInt(debtMonthlyPaymentStr, 10).toLocaleString('id-ID') : ''}
                       onChange={e => setDebtMonthlyPaymentStr(e.target.value.replace(/[^0-9]/g, ''))}
-                      className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                      className="w-full pl-11 pr-4 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-base font-extrabold text-[#073B4C] tabular-nums"
                     />
                   </div>
 
@@ -1416,8 +1503,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                     if (rem > 0 && monthly > 0) {
                       const months = Math.ceil(rem / monthly);
                       return (
-                        <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1.5 rounded-lg border border-teal-200/80">
-                          <Calendar className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                        <div className="mt-2 flex items-center gap-1.5 text-xs font-extrabold text-[#073B4C] bg-[#A5F3FC] px-3 py-1.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" />
                           <span>Perkiraan sisa tenor: {months} bulan lagi</span>
                         </div>
                       );
@@ -1428,26 +1515,26 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
 
                 {/* Tanggal Jatuh Tempo */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">
                     Tanggal Jatuh Tempo Tiap Bulan
                   </label>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-bold">Tanggal:</span>
+                    <span className="text-xs text-[#073B4C] font-extrabold">Tanggal:</span>
                     <input
                       type="number"
                       min={1}
                       max={31}
                       value={debtDueDay}
                       onChange={e => setDebtDueDay(e.target.value)}
-                      className="w-20 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 text-center focus:outline-none focus:ring-1 focus:ring-teal-600"
+                      className="w-20 px-3 py-2 bg-white border-2 border-[#073B4C] rounded-xl text-sm font-extrabold text-[#073B4C] text-center tabular-nums"
                     />
-                    <span className="text-xs text-slate-400">tiap bulan (contoh: 13)</span>
+                    <span className="text-xs font-semibold text-[#365664]">tiap bulan (contoh: 13)</span>
                   </div>
                 </div>
 
                 {/* Optional Title / Entity */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">
                     Nama Pihak / Kreditor (Opsional)
                   </label>
                   <input
@@ -1455,16 +1542,16 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                     placeholder={`Default: ${debtKind}`}
                     value={debtTitle}
                     onChange={e => setDebtTitle(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-teal-600"
+                    className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs sm:text-sm font-bold text-[#073B4C]"
                   />
                 </div>
 
                 {/* Step 2 Actions */}
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-2 border-t-2 border-dashed border-[#073B4C]/20">
                   <button
                     type="button"
                     onClick={() => setDebtStep(1)}
-                    className="px-4 py-2.5 rounded-2xl bg-slate-100 text-slate-600 font-bold text-xs flex items-center gap-1 hover:bg-slate-200"
+                    className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 border-2 border-[#073B4C] text-[#073B4C] font-extrabold text-xs inline-flex items-center gap-1"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     <span>Kembali</span>
@@ -1472,37 +1559,37 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   <button
                     type="button"
                     onClick={handleProceedToStep3}
-                    className="flex-1 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    className="nb-btn flex-1 py-2.5 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] text-xs sm:text-sm flex items-center justify-center gap-1"
                   >
                     <span>Lanjut ke Detail (3/3)</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4 stroke-[2.8]" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 3/3: DETAIL (Uang pinjamannya baru masuk ke dompet?) */}
+            {/* STEP 3/3: DETAIL */}
             {debtStep === 3 && (
               <form onSubmit={handleSubmitDebtWizard} className="p-5 overflow-y-auto space-y-4">
                 {/* Summary Pill */}
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
-                  <div className="text-[11px] font-bold text-slate-500 uppercase">
-                    3/3 · Detail
+                <div className="p-3.5 bg-[#FFFDF5] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] rounded-2xl space-y-1">
+                  <div className="text-[11px] font-extrabold text-[#365664] uppercase">
+                    3/3 · Ringkasan
                   </div>
-                  <div className="text-xs font-extrabold text-slate-800">
+                  <div className="text-xs font-extrabold text-[#073B4C]">
                     {debtTitle || debtKind} · jatuh tempo tgl {debtDueDay || '13'}
                   </div>
-                  <div className="text-sm font-extrabold text-red-600 tabular-nums">
+                  <div className="text-base font-extrabold text-[#BE123C] tabular-nums">
                     Sisa Rp {parseInt(debtRemainingStr || debtAmountStr || '0', 10).toLocaleString('id-ID')}
                   </div>
                   {debtMonthlyPaymentStr && (
-                    <div className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 pt-0.5">
+                    <div className="text-xs font-bold text-[#365664] flex items-center gap-1.5 pt-0.5 flex-wrap">
                       <span>Cicilan: Rp {parseInt(debtMonthlyPaymentStr, 10).toLocaleString('id-ID')} / bln</span>
                       {(() => {
                         const rem = parseInt(debtRemainingStr || debtAmountStr, 10) || 0;
                         const m = parseInt(debtMonthlyPaymentStr, 10) || 0;
                         if (rem > 0 && m > 0) {
-                          return <span className="text-teal-700 font-bold">• Sisa {Math.ceil(rem / m)} bulan lagi</span>;
+                          return <span className="text-[#073B4C] font-extrabold">• Sisa {Math.ceil(rem / m)} bulan lagi</span>;
                         }
                         return null;
                       })()}
@@ -1510,17 +1597,19 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   )}
                 </div>
 
-                <p className="rounded-xl bg-teal-50 p-3 text-xs leading-relaxed text-teal-800">Utang awal hanya disimpan pada daftar Utang/Piutang. Transaksi dan mutasi saldo dompet akan dicatat saat pembayaran cicilan.</p>
+                <p className="rounded-2xl border-2 border-[#073B4C] bg-[#D1FAE5] p-3 text-xs font-bold leading-relaxed text-[#073B4C]">
+                  Utang awal hanya disimpan pada daftar Utang/Piutang. Transaksi dan mutasi saldo dompet akan dicatat saat pembayaran cicilan.
+                </p>
 
                 {/* Tambahan: Bunga, Auto-debit, Catatan */}
-                <div className="space-y-3 pt-2 border-t border-slate-100">
-                  <div className="text-xs font-bold text-slate-700">Tambahan</div>
+                <div className="space-y-3 pt-2 border-t-2 border-dashed border-[#073B4C]/20">
+                  <div className="text-xs font-extrabold text-[#073B4C]">Tambahan</div>
 
                   {/* Bunga Input */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs font-bold text-slate-800">Bunga</div>
-                      <div className="text-[10px] text-slate-400">opsional</div>
+                      <div className="text-xs font-extrabold text-[#073B4C]">Bunga</div>
+                      <div className="text-[10px] font-semibold text-[#365664]">opsional</div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -1528,61 +1617,61 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                         step="0.1"
                         value={debtInterestRate}
                         onChange={e => setDebtInterestRate(e.target.value)}
-                        className="w-16 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 text-center"
+                        className="w-16 px-2.5 py-1 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-extrabold text-[#073B4C] text-center tabular-nums"
                       />
-                      <span className="text-xs text-slate-500">% / thn</span>
+                      <span className="text-xs font-bold text-[#365664]">% / thn</span>
                     </div>
                   </div>
 
                   {/* Auto-debit Cicilan PRO */}
-                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div className="p-3 bg-[#FFFBEB] rounded-2xl border-2 border-[#073B4C] flex items-center justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-800">Auto-debit cicilan</span>
-                        <span className="text-[9px] font-extrabold bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded">
+                        <span className="text-xs font-extrabold text-[#073B4C]">Auto-debit cicilan</span>
+                        <span className="text-[9px] font-extrabold bg-[#FFD166] text-[#073B4C] border border-[#073B4C] px-1.5 py-0.2 rounded-full">
                           PRO
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[11px] font-semibold text-[#365664]">
                         Biar cicilan minimal tercatat sendiri tiap bulan.
                       </div>
                     </div>
-                    <span className="text-[11px] text-teal-700 font-bold hover:underline cursor-pointer">
+                    <span className="text-[11px] text-[#073B4C] font-extrabold underline shrink-0 cursor-pointer">
                       Lihat Pro
                     </span>
                   </div>
 
                   {/* Catatan Opsional */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Catatan <span className="text-slate-400 font-normal">(opsional)</span>
+                    <label className="block text-xs font-extrabold text-[#073B4C] mb-1">
+                      Catatan <span className="text-[#365664] font-semibold">(opsional)</span>
                     </label>
                     <textarea
                       rows={2}
                       placeholder="Tulis keterangan atau perjanjian cicilan..."
                       value={debtNotes}
                       onChange={e => setDebtNotes(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+                      className="w-full px-3 py-2 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C] resize-none"
                     />
                   </div>
                 </div>
 
                 {/* Step 3 Actions */}
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-2 border-t-2 border-dashed border-[#073B4C]/20">
                   <button
                     type="button"
                     onClick={() => setDebtStep(2)}
-                    className="px-4 py-2.5 rounded-2xl bg-slate-100 text-slate-600 font-bold text-xs flex items-center gap-1 hover:bg-slate-200"
+                    className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 border-2 border-[#073B4C] text-[#073B4C] font-extrabold text-xs inline-flex items-center gap-1"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     <span>Kembali</span>
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    className="nb-btn flex-1 py-2.5 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] text-xs sm:text-sm flex items-center justify-center gap-1.5"
                   >
-                    <CheckCheck className="w-4 h-4" />
-                    <span>Simpan Utang</span>
+                    <CheckCheck className="w-4 h-4 stroke-[2.6]" />
+                    <span>{debtType === 'debt' ? 'Simpan Utang' : 'Simpan Piutang'}</span>
                   </button>
                 </div>
               </form>
@@ -1879,27 +1968,36 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
       {/* EDIT DEBT / RECEIVABLE MODAL */}
       {editingDebt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="font-extrabold text-slate-900 text-base">
-                  Edit {editType === 'debt' ? 'Utang Keluarga' : 'Piutang Orang Lain'}
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Perbarui rincian, nominal sisa pokok, dan tempo cicilan
-                </p>
+          <div className="bg-white rounded-3xl max-w-md w-full border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C] overflow-hidden flex flex-col max-h-[92vh]">
+            <div
+              className={`px-5 py-4 border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 ${
+                editType === 'debt' ? 'bg-[#FECDD6]' : 'bg-[#06D6A0]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-[#073B4C] flex items-center justify-center shrink-0">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="font-extrabold text-[#073B4C] text-sm sm:text-base truncate">
+                    Edit {editType === 'debt' ? 'Utang Keluarga' : 'Piutang Orang Lain'}
+                  </h2>
+                  <p className="text-[11px] font-bold text-[#073B4C]/80 mt-0.5 truncate">
+                    Perbarui rincian, sisa pokok, dan tempo cicilan
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingDebt(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"
+                className="w-8 h-8 rounded-full bg-white border-2 border-[#073B4C] text-[#073B4C] hover:bg-[#FFE0E5] flex items-center justify-center shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {editError && (
-              <div className="mx-5 mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+              <div className="mx-5 mt-4 p-3 bg-[#FFE0E5] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-[#911D35] rounded-xl text-xs font-extrabold">
                 {editError}
               </div>
             )}
@@ -1907,36 +2005,36 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
             <form onSubmit={handleSaveEditDebt} className="p-5 overflow-y-auto space-y-4">
               {/* Tipe Toggle */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Jenis Catatan</label>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1.5">Jenis Catatan</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setEditType('debt')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-extrabold border-2 border-[#073B4C] transition-all ${
                       editType === 'debt'
-                        ? 'bg-red-50 border-red-300 text-red-800 shadow-2xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        ? 'bg-[#FECDD6] text-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C]'
+                        : 'bg-white text-[#365664] hover:bg-[#FEF3C7]'
                     }`}
                   >
-                    🔴 Utang (Saya Berutang)
+                    🔴 Utang (Berutang)
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditType('receivable')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-extrabold border-2 border-[#073B4C] transition-all ${
                       editType === 'receivable'
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        ? 'bg-[#06D6A0] text-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C]'
+                        : 'bg-white text-[#365664] hover:bg-[#FEF3C7]'
                     }`}
                   >
-                    🟢 Piutang (Orang Berutang)
+                    🟢 Piutang (Orang Lain)
                   </button>
                 </div>
               </div>
 
               {/* Nama Pihak */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">
                   Nama Pihak / Judul {editType === 'debt' ? 'Pemberi Pinjaman' : 'Peminjam'}
                 </label>
                 <input
@@ -1944,7 +2042,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
                   value={editPersonOrEntity}
                   onChange={e => setEditPersonOrEntity(e.target.value)}
                   placeholder="Misal: Cicilan Bank, Teman Kantor, Katering Bu Rina"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C]"
                   required
                 />
               </div>
@@ -1952,23 +2050,23 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
               {/* Grid Nominal Total & Sisa */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Total Pinjaman (Rp)</label>
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Total Pinjaman (Rp)</label>
                   <input
                     type="text"
                     value={editAmountStr ? parseInt(editAmountStr, 10).toLocaleString('id-ID') : ''}
                     onChange={e => setEditAmountStr(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                    className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-extrabold text-[#073B4C] tabular-nums"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Sisa Pokok (Rp)</label>
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Sisa Pokok (Rp)</label>
                   <input
                     type="text"
                     value={editRemainingStr ? parseInt(editRemainingStr, 10).toLocaleString('id-ID') : ''}
                     onChange={e => setEditRemainingStr(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                    className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-extrabold text-[#073B4C] tabular-nums"
                     required
                   />
                 </div>
@@ -1977,80 +2075,80 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
               {/* Cicilan Bulanan & Tanggal Jatuh Tempo */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Cicilan Bulanan (Rp)</label>
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Cicilan Bulanan (Rp)</label>
                   <input
                     type="text"
                     value={editMonthlyStr ? parseInt(editMonthlyStr, 10).toLocaleString('id-ID') : ''}
                     onChange={e => setEditMonthlyStr(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="Opsional (0 jika pelunasan langsung)"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                    placeholder="Opsional (0 jika langsung)"
+                    className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C] tabular-nums"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Jatuh Tempo (Tgl 1-31)</label>
+                  <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Jatuh Tempo (Tgl 1-31)</label>
                   <input
                     type="number"
                     min={1}
                     max={31}
                     value={editDueDay}
                     onChange={e => setEditDueDay(e.target.value)}
-                    placeholder="Misal: 15 atau 30"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 tabular-nums"
+                    placeholder="Misal: 15"
+                    className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C] tabular-nums"
                   />
                 </div>
               </div>
 
               {/* Keterangan Tempo Text */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Teks Jatuh Tempo (Opsional)</label>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Teks Jatuh Tempo (Opsional)</label>
                 <input
                   type="text"
                   value={editDueDate}
                   onChange={e => setEditDueDate(e.target.value)}
                   placeholder="Misal: 25 Nov 2026 atau Akhir Bulan"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C]"
                 />
               </div>
 
               {/* Catatan */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Catatan Tambahan</label>
+                <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Catatan Tambahan</label>
                 <textarea
                   rows={2}
                   value={editNotes}
                   onChange={e => setEditNotes(e.target.value)}
                   placeholder="Misal: Nomor rekening tujuan, sisa 2x cicilan, kontak peminjam"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C] resize-none"
                 />
               </div>
 
               {/* Status Lunas Toggle */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+              <div className="p-3 bg-[#FFFDF5] border-2 border-[#073B4C] rounded-2xl flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-xs font-bold text-slate-800">Tandai Sudah Lunas</div>
-                  <div className="text-[11px] text-slate-500">Utang/piutang ini sudah tidak memiliki sisa tanggungan</div>
+                  <div className="text-xs font-extrabold text-[#073B4C]">Tandai Sudah Lunas</div>
+                  <div className="text-[11px] font-semibold text-[#365664]">Utang/piutang ini sudah tidak memiliki sisa tanggungan</div>
                 </div>
                 <input
                   type="checkbox"
                   checked={editIsSettled}
                   onChange={e => setEditIsSettled(e.target.checked)}
-                  className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer"
+                  className="w-5 h-5 accent-[#06D6A0] rounded cursor-pointer shrink-0"
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-2 border-t-2 border-dashed border-[#073B4C]/20">
                 <button
                   type="button"
                   onClick={() => setEditingDebt(null)}
-                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  className="px-4 py-2 text-xs font-extrabold text-[#073B4C] bg-slate-100 hover:bg-slate-200 border-2 border-[#073B4C] rounded-full"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white rounded-xl shadow-xs transition-colors"
+                  className="nb-btn px-5 py-2 text-xs bg-[#06D6A0] text-[#073B4C]"
                 >
                   Simpan Perubahan
                 </button>

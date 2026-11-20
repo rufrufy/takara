@@ -4,6 +4,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { CategoryIcon } from '../CategoryIcon';
+import { CategoryBudgetSection } from '../CategoryBudgetSection';
+import { FamilyGamificationModal } from '../FamilyGamificationModal';
+import { calculateHouseholdStreak } from '../../lib/gamification';
 import {
   TrendingUp,
   TrendingDown,
@@ -36,7 +39,9 @@ interface AIAnalysisResult {
 }
 
 export const ReportsView: React.FC = () => {
-  const {transactions:allTransactions,activeHousehold}=useApp();
+  const {transactions:allTransactions,activeHousehold,familyChallenges}=useApp();
+  const [isGamificationOpen, setIsGamificationOpen] = useState(false);
+  const streak = useMemo(() => calculateHouseholdStreak(allTransactions), [allTransactions]);
   const currentPeriod=jakartaDateTime().date;
   const [selectedMonth,setSelectedMonth]=useState(Number(currentPeriod.slice(5,7)));
   const [selectedYear,setSelectedYear]=useState(Number(currentPeriod.slice(0,4)));
@@ -199,29 +204,33 @@ export const ReportsView: React.FC = () => {
         {resetCheckpoint&&<label className="report-debt-toggle"><input type="checkbox" checked={sinceReset} onChange={e=>setSinceReset(e.target.checked)}/><span>Hitungan sejak reset saldo · {new Date(resetCheckpoint.createdAt).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'})}</span></label>}
       </div>
       {/* Net Cash Flow Card */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Arus Kas Bersih (Net Cash Flow)
+      <div
+        className={`saldo-hero ${
+          netCashFlow >= 0 ? 'saldo-hero--lagoon' : 'saldo-hero--coral'
+        } rounded-3xl p-5 space-y-4`}
+      >
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide text-[#073B4C]">
+            📊 Arus Kas Bersih
           </span>
           <span
-            className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-              netCashFlow >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+            className={`nb-chip text-xs px-3 py-0.5 ${
+              netCashFlow >= 0 ? 'bg-[#06D6A0] text-[#073B4C]' : 'bg-[#FF6B6B] text-white'
             }`}
           >
             {netCashFlow >= 0 ? '✓ Surplus (Hemat)' : '⚠️ Defisit'}
           </span>
         </div>
 
-        <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tabular-nums">
+        <div className="text-2xl sm:text-3xl font-extrabold text-[#073B4C] tabular-nums">
           {formatIDR(netCashFlow, { showSign: true })}
         </div>
 
         {/* Visual Progress Bar Ratio */}
-        <div className="space-y-1.5 pt-1">
-          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+        <div className="space-y-2 pt-1">
+          <div className="w-full h-3.5 bg-white border-2 border-[#073B4C] rounded-full overflow-hidden flex">
             <div
-              className="bg-emerald-500 h-full transition-all duration-300"
+              className="bg-[#06D6A0] h-full transition-all duration-300"
               style={{
                 width: `${Math.min(
                   100,
@@ -231,7 +240,7 @@ export const ReportsView: React.FC = () => {
               title="Porsi Pemasukan"
             />
             <div
-              className="bg-red-500 h-full transition-all duration-300"
+              className="bg-[#FF6B6B] h-full transition-all duration-300"
               style={{
                 width: `${Math.min(
                   100,
@@ -241,16 +250,48 @@ export const ReportsView: React.FC = () => {
               title="Porsi Pengeluaran"
             />
           </div>
-          <div className="flex justify-between text-[11px] text-slate-500 font-medium">
-            <span className="flex items-center gap-1 text-emerald-700 font-bold">
-              <TrendingUp className="w-3.5 h-3.5" /> Pemasukan: {formatIDR(periodIncome)}
+          <div className="flex flex-wrap justify-between gap-2 text-[11px] font-extrabold text-[#073B4C]">
+            <span className="inline-flex items-center gap-1 bg-[#D9F99D] border-[1.5px] border-[#073B4C] px-3 py-1 rounded-full tabular-nums">
+              <TrendingUp className="w-3.5 h-3.5 shrink-0" /> Pemasukan: {formatIDR(periodIncome)}
             </span>
-            <span className="flex items-center gap-1 text-red-700 font-bold">
-              <TrendingDown className="w-3.5 h-3.5" /> Pengeluaran: {formatIDR(periodExpense)}
+            <span className="inline-flex items-center gap-1 bg-[#FFE0E5] text-[#911D35] border-[1.5px] border-[#073B4C] px-3 py-1 rounded-full tabular-nums">
+              <TrendingDown className="w-3.5 h-3.5 shrink-0" /> Pengeluaran: {formatIDR(periodExpense)}
             </span>
           </div>
         </div>
       </div>
+
+      {/* Pagu Anggaran Bulanan per Kategori */}
+      <CategoryBudgetSection periodTransactions={transactions} periodLabel={periodLabel} />
+
+      {/* Arena Streak & Tantangan Hemat Keluarga */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-[#FFD166] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-2xl shrink-0">
+            🏆
+          </div>
+          <div className="min-w-0">
+            <div className="font-extrabold text-sm sm:text-base text-[#073B4C]">
+              Streak {streak.currentStreak} Hari · {familyChallenges.length} Tantangan Aktif
+            </div>
+            <p className="text-xs font-bold text-[#073B4C]/85">
+              Kumpulkan stiker pencapaian & mulai tantangan hemat bareng keluarga!
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsGamificationOpen(true)}
+          className="nb-btn bg-[#06D6A0] text-[#073B4C] px-4 py-2.5 text-xs shrink-0"
+        >
+          🔥 Buka Arena Keluarga
+        </button>
+      </div>
+
+      <FamilyGamificationModal
+        isOpen={isGamificationOpen}
+        onClose={() => setIsGamificationOpen(false)}
+      />
 
       {/* Tab Switcher for Reports */}
       <div className="flex bg-white p-1.5 rounded-3xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] gap-1.5">
@@ -295,6 +336,7 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* TAB CONTENT 1: KATEGORI & INTERACTIVE DONUT CHART */}
+      <div key={reportTab} className="view-stage-enter">
       {reportTab === 'kategori' && (
         <div className="space-y-4">
           {/* Interactive Donut Chart Container */}
@@ -460,35 +502,51 @@ export const ReportsView: React.FC = () => {
       {reportTab === 'tren' && (
         <div className="space-y-4">
           {/* Savings Rate Card */}
-          <div className="soft-summary rounded-3xl p-5 shadow-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Percent className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Rasio Tabungan Keluarga (Savings Rate)
-                </span>
-              </div>
-              <span className="text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-0.5 rounded-full">
+          <div
+            className={`saldo-hero ${
+              savingsRate >= 20
+                ? 'saldo-hero--mint'
+                : savingsRate >= 0
+                ? 'saldo-hero--mango'
+                : 'saldo-hero--coral'
+            } rounded-3xl p-5 space-y-3`}
+          >
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="nb-chip inline-flex items-center gap-1.5 bg-white px-3 py-0.5 text-xs uppercase tracking-wide text-[#073B4C]">
+                <Percent className="w-3.5 h-3.5 stroke-[2.8]" />
+                <span>Rasio Tabungan Keluarga</span>
+              </span>
+              <span
+                className={`nb-chip text-xs px-3 py-0.5 ${
+                  savingsRate >= 20
+                    ? 'bg-[#D9F99D] text-[#073B4C]'
+                    : savingsRate >= 0
+                    ? 'bg-white text-[#073B4C]'
+                    : 'bg-[#FF6B6B] text-white'
+                }`}
+              >
                 {savingsRate >= 20 ? 'Kondisi Prima' : savingsRate >= 0 ? 'Cukup Sehat' : 'Defisit Anggaran'}
               </span>
             </div>
 
-            <div className="flex items-baseline gap-2">
-              <div className="text-3xl sm:text-4xl font-black text-white tabular-nums">
+            <div className="flex items-baseline gap-2.5 flex-wrap">
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#073B4C] tabular-nums">
                 {savingsRate}%
               </div>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs font-bold text-[#073B4C]/85">
                 dari total pemasukan dialokasikan ke tabungan & saldo akhir
               </span>
             </div>
 
             {/* Visual Gauge Bar */}
-            <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700/80">
+            <div className="w-full h-3.5 bg-white rounded-full overflow-hidden border-2 border-[#073B4C]">
               <div
-                className={`h-full transition-all duration-500 ${
-                  savingsRate >= 20 ? 'bg-emerald-400' : savingsRate >= 0 ? 'bg-amber-400' : 'bg-red-400'
-                }`}
-                style={{ width: `${Math.max(0, Math.min(100, savingsRate))}%` }}
+                className="h-full transition-all duration-500"
+                style={{
+                  width: `${Math.max(0, Math.min(100, savingsRate))}%`,
+                  backgroundColor:
+                    savingsRate >= 20 ? '#FFD166' : savingsRate >= 0 ? '#06D6A0' : '#FF6B6B'
+                }}
               />
             </div>
           </div>
@@ -649,6 +707,7 @@ export const ReportsView: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
 
       {/* Member Spending Share */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-3">

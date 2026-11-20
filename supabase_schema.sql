@@ -125,6 +125,59 @@ CREATE TABLE IF NOT EXISTS public.app_users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 9. Tabel Savings Goals (Kantong Impian / Target Tabungan Keluarga)
+CREATE TABLE IF NOT EXISTS public.savings_goals (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  target_amount BIGINT NOT NULL,
+  current_amount BIGINT NOT NULL DEFAULT 0,
+  linked_wallet_id TEXT,
+  deadline TEXT,
+  icon TEXT DEFAULT '🎯',
+  color TEXT DEFAULT '#06D6A0',
+  notes TEXT,
+  is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 10. Tabel Category Budgets (Pagu Anggaran Bulanan per Kategori)
+CREATE TABLE IF NOT EXISTS public.category_budgets (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
+  category_id TEXT,
+  category_name TEXT NOT NULL,
+  monthly_limit BIGINT NOT NULL,
+  alert_threshold INT NOT NULL DEFAULT 80,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 11. Tabel Family Challenges (Tantangan Hemat Keluarga)
+CREATE TABLE IF NOT EXISTS public.family_challenges (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  target_type TEXT NOT NULL DEFAULT 'spending_cap',
+  category_name TEXT,
+  max_amount BIGINT DEFAULT 0,
+  target_days INT DEFAULT 7,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  reward_badge TEXT DEFAULT '🏆',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 12. Tabel Household Labels (Label Kustom per Household)
+CREATE TABLE IF NOT EXISTS public.household_labels (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ==============================================================================
 -- INDEXES & PERFORMANCE OPTIMIZATIONS
 -- ==============================================================================
@@ -137,9 +190,13 @@ CREATE INDEX IF NOT EXISTS idx_wallets_household ON public.wallets(household_id)
 CREATE INDEX IF NOT EXISTS idx_categories_household ON public.categories(household_id);
 CREATE INDEX IF NOT EXISTS idx_debts_household ON public.debts(household_id);
 CREATE INDEX IF NOT EXISTS idx_debts_settled ON public.debts(is_settled);
+CREATE INDEX IF NOT EXISTS idx_savings_goals_household ON public.savings_goals(household_id);
+CREATE INDEX IF NOT EXISTS idx_category_budgets_household ON public.category_budgets(household_id);
+CREATE INDEX IF NOT EXISTS idx_family_challenges_household ON public.family_challenges(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_labels_household ON public.household_labels(household_id);
 
 -- ==============================================================================
--- ROW LEVEL SECURITY (RLS) - BUKA AKSES DENGAN ANON KEY UNTUK LOCAL-FIRST SYNC
+-- ROW LEVEL SECURITY (RLS) - IDEMPOTENT STANDAR POSTGRESQL
 -- ==============================================================================
 ALTER TABLE public.households ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.household_members ENABLE ROW LEVEL SECURITY;
@@ -149,32 +206,43 @@ ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ledger_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.debts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.savings_goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.category_budgets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.family_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.household_labels ENABLE ROW LEVEL SECURITY;
 
--- Allow anon & authenticated users to perform all operations
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_households') THEN
-    CREATE POLICY allow_all_households ON public.households FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_members') THEN
-    CREATE POLICY allow_all_members ON public.household_members FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_wallets') THEN
-    CREATE POLICY allow_all_wallets ON public.wallets FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_categories') THEN
-    CREATE POLICY allow_all_categories ON public.categories FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_transactions') THEN
-    CREATE POLICY allow_all_transactions ON public.transactions FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_ledger_entries') THEN
-    CREATE POLICY allow_all_ledger_entries ON public.ledger_entries FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_debts') THEN
-    CREATE POLICY allow_all_debts ON public.debts FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'allow_all_app_users') THEN
-    CREATE POLICY allow_all_app_users ON public.app_users FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-END $$;
+DROP POLICY IF EXISTS allow_all_households ON public.households;
+CREATE POLICY allow_all_households ON public.households FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_members ON public.household_members;
+CREATE POLICY allow_all_members ON public.household_members FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_wallets ON public.wallets;
+CREATE POLICY allow_all_wallets ON public.wallets FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_categories ON public.categories;
+CREATE POLICY allow_all_categories ON public.categories FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_transactions ON public.transactions;
+CREATE POLICY allow_all_transactions ON public.transactions FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_ledger_entries ON public.ledger_entries;
+CREATE POLICY allow_all_ledger_entries ON public.ledger_entries FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_debts ON public.debts;
+CREATE POLICY allow_all_debts ON public.debts FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_app_users ON public.app_users;
+CREATE POLICY allow_all_app_users ON public.app_users FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_savings_goals ON public.savings_goals;
+CREATE POLICY allow_all_savings_goals ON public.savings_goals FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_category_budgets ON public.category_budgets;
+CREATE POLICY allow_all_category_budgets ON public.category_budgets FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_family_challenges ON public.family_challenges;
+CREATE POLICY allow_all_family_challenges ON public.family_challenges FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_all_household_labels ON public.household_labels;
+CREATE POLICY allow_all_household_labels ON public.household_labels FOR ALL USING (true) WITH CHECK (true);

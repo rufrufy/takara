@@ -201,13 +201,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       {/* Main Container */}
       <div className="w-full max-w-md flex flex-col items-center my-auto py-4 text-center">
         {/* Brand Icon */}
-        <div className="w-14 h-14 rounded-2xl bg-teal-800/90 border border-teal-500/40 flex items-center justify-center mb-2 shadow-xl shadow-teal-950/50 p-2 overflow-hidden">
-          <img
-            src="/Takara_logo_original_transparan.png"
-            alt="Takara"
-            className="w-full h-full object-contain"
-          />
-        </div>
+        <img
+          src="/Takara.png"
+          alt="Takara"
+          className="w-20 h-20 object-contain mb-2"
+        />
         <h1 className="text-2xl font-extrabold tracking-tight">Takara Keuangan</h1>
         <p className="text-teal-200/90 text-xs mt-0.5">
           Akses Masuk & Pendaftaran Pengguna
@@ -314,7 +312,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             </div>
 
             {/* Numeric Keypad */}
-            <div className="w-full max-w-[260px] grid grid-cols-3 gap-2.5 my-2">
+            <div className="w-full max-w-[330px] grid grid-cols-3 gap-2.5 my-2">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
                 <button
                   key={num}
@@ -354,7 +352,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               type="button"
               disabled={isLoading || !username.trim()}
               onClick={() => handleExecuteLogin(username.trim(), code)}
-              className="auth-submit mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-teal-950 font-extrabold text-sm rounded-xl shadow-lg shadow-teal-950/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
+              className="auth-submit mt-3 w-full max-w-[330px] py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-teal-950 font-extrabold text-sm rounded-xl shadow-lg shadow-teal-950/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
             >
               {isLoading ? (
                 <span>Memuat akun dan saldo…</span>
@@ -490,7 +488,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             </div>
 
             {/* Numeric Keypad */}
-            <div className="w-full max-w-[260px] grid grid-cols-3 gap-2.5 my-2">
+            <div className="w-full max-w-[330px] grid grid-cols-3 gap-2.5 my-2">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
                 <button
                   key={num}
@@ -530,7 +528,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               type="button"
               disabled={isLoading}
               onClick={() => handleExecuteLogin('admin', code)}
-              className="auth-submit mt-3 w-full max-w-[260px] py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
+              className="auth-submit mt-3 w-full max-w-[330px] py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
             >
               <Shield className="w-4 h-4 text-slate-950" />
               <span>Masuk Admin Dashboard</span>

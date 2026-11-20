@@ -59,13 +59,11 @@ export const PWAInstallModal: React.FC<{ isOpen: boolean; onClose: () => void }>
         {/* Modal Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-teal-800 border border-teal-600/50 flex items-center justify-center p-1.5 shadow-md shadow-teal-950/20">
-              <img
-                src="/Takara_logo_original_transparan.png"
-                alt="Takara"
-                className="w-full h-full object-contain"
-              />
-            </div>
+            <img
+              src="/Takara-192.png"
+              alt="Takara"
+              className="w-14 h-14 object-contain shrink-0"
+            />
             <div>
               <h3 className="font-extrabold text-slate-900 text-base leading-tight">
                 Install Takara

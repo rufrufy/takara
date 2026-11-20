@@ -9,9 +9,53 @@ import type {
   Household,
   HouseholdMember,
   LedgerEntry,
+  SavingsGoal,
+  CategoryBudget,
+  FamilyChallenge,
   User,
   AppState
 } from '../types';
+
+interface LocalHouseholdExtras {
+  savingsGoals: SavingsGoal[];
+  categoryBudgets: CategoryBudget[];
+  familyChallenges: FamilyChallenge[];
+}
+
+const getExtrasKey = (householdId: string) => `takara_extras_v1_${householdId || 'default'}`;
+
+export const readLocalHouseholdExtras = (householdId: string): LocalHouseholdExtras => {
+  if (typeof window === 'undefined') {
+    return { savingsGoals: [], categoryBudgets: [], familyChallenges: [] };
+  }
+  try {
+    const raw = localStorage.getItem(getExtrasKey(householdId));
+    if (!raw) return { savingsGoals: [], categoryBudgets: [], familyChallenges: [] };
+    const parsed = JSON.parse(raw) as Partial<LocalHouseholdExtras>;
+    return {
+      savingsGoals: Array.isArray(parsed.savingsGoals) ? parsed.savingsGoals : [],
+      categoryBudgets: Array.isArray(parsed.categoryBudgets) ? parsed.categoryBudgets : [],
+      familyChallenges: Array.isArray(parsed.familyChallenges) ? parsed.familyChallenges : []
+    };
+  } catch {
+    return { savingsGoals: [], categoryBudgets: [], familyChallenges: [] };
+  }
+};
+
+export const writeLocalHouseholdExtras = (householdId: string, patch: Partial<LocalHouseholdExtras>): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    const prev = readLocalHouseholdExtras(householdId);
+    const next: LocalHouseholdExtras = {
+      savingsGoals: patch.savingsGoals !== undefined ? patch.savingsGoals : prev.savingsGoals,
+      categoryBudgets: patch.categoryBudgets !== undefined ? patch.categoryBudgets : prev.categoryBudgets,
+      familyChallenges: patch.familyChallenges !== undefined ? patch.familyChallenges : prev.familyChallenges
+    };
+    localStorage.setItem(getExtrasKey(householdId), JSON.stringify(next));
+  } catch {
+    // ignore storage quota errors
+  }
+};
 
 interface RawSupabaseTx {
   id: string;
@@ -613,6 +657,72 @@ export const pushAllDataToSupabase = async (
     const changedHouseholds = new Set((state.transactions || []).map(tx => tx.householdId));
     for (const householdId of changedHouseholds) await refreshHouseholdWalletBalances(householdId, config);
 
+    // 8. Optional Expansion Tables (non-blocking if SQL not yet executed in Supabase)
+    try {
+      if (state.savingsGoals?.length) {
+        await postSupabaseTable(
+          cleanUrl,
+          'savings_goals',
+          headers,
+          state.savingsGoals.map(g => ({
+            id: g.id,
+            household_id: g.householdId,
+            title: g.title,
+            target_amount: Math.round(g.targetAmount),
+            current_amount: Math.round(g.currentAmount || 0),
+            linked_wallet_id: g.linkedWalletId || null,
+            deadline: g.deadline || null,
+            icon: g.icon || '🎯',
+            color: g.color || '#06D6A0',
+            notes: g.notes || null,
+            is_completed: g.isCompleted || false,
+            created_at: g.createdAt,
+            updated_at: g.updatedAt || new Date().toISOString()
+          }))
+        );
+      }
+      if (state.categoryBudgets?.length) {
+        await postSupabaseTable(
+          cleanUrl,
+          'category_budgets',
+          headers,
+          state.categoryBudgets.map(b => ({
+            id: b.id,
+            household_id: b.householdId,
+            category_id: b.categoryId || null,
+            category_name: b.categoryName,
+            monthly_limit: Math.round(b.monthlyLimit),
+            alert_threshold: b.alertThreshold || 80,
+            updated_at: b.updatedAt || new Date().toISOString()
+          }))
+        );
+      }
+      if (state.familyChallenges?.length) {
+        await postSupabaseTable(
+          cleanUrl,
+          'family_challenges',
+          headers,
+          state.familyChallenges.map(ch => ({
+            id: ch.id,
+            household_id: ch.householdId,
+            title: ch.title,
+            target_type: ch.targetType,
+            category_name: ch.categoryName || null,
+            max_amount: Math.round(ch.maxAmount || 0),
+            target_days: ch.targetDays || 7,
+            start_date: ch.startDate,
+            end_date: ch.endDate,
+            reward_badge: ch.rewardBadge || '🏆',
+            status: ch.status || 'ACTIVE',
+            created_by: ch.createdBy || null,
+            created_at: ch.createdAt
+          }))
+        );
+      }
+    } catch {
+      // Optional tables not yet created in Supabase; kept safely in local fallback
+    }
+
     const totalCount =
       (state.transactions?.length || 0) +
       (state.wallets?.length || 0) +
@@ -665,7 +775,7 @@ export const pullAllDataFromSupabase = async (
     };
     const filterQuery = householdId ? `?household_id=eq.${encodeURIComponent(householdId)}` : '';
 
-    const [txRes, walletsRes, catRes, debtsRes, houseRes, membersRes, ledgerRes, labelsRes] = await Promise.all([
+    const [txRes, walletsRes, catRes, debtsRes, houseRes, membersRes, ledgerRes, labelsRes, goalsRes, budgetsRes, challengesRes] = await Promise.all([
       readAll(`${cleanUrl}/rest/v1/transactions${filterQuery}${filterQuery ? '&' : '?'}order=effective_at.desc`),
       readAll(`${cleanUrl}/rest/v1/wallets${filterQuery}`),
       readAll(`${cleanUrl}/rest/v1/categories${filterQuery}`),
@@ -673,7 +783,10 @@ export const pullAllDataFromSupabase = async (
       readAll(`${cleanUrl}/rest/v1/households${householdId ? '?id=eq.' + encodeURIComponent(householdId) : ''}`),
       readAll(`${cleanUrl}/rest/v1/household_members${filterQuery}`),
       readAll(`${cleanUrl}/rest/v1/ledger_entries${filterQuery}`),
-      readAll(`${cleanUrl}/rest/v1/household_labels${filterQuery}`)
+      readAll(`${cleanUrl}/rest/v1/household_labels${filterQuery}`),
+      readAll(`${cleanUrl}/rest/v1/savings_goals${filterQuery}`).catch(() => null),
+      readAll(`${cleanUrl}/rest/v1/category_budgets${filterQuery}`).catch(() => null),
+      readAll(`${cleanUrl}/rest/v1/family_challenges${filterQuery}`).catch(() => null)
     ]);
 
     for (const [table, response] of [['transactions', txRes], ['wallets', walletsRes], ['categories', catRes], ['debts', debtsRes], ['households', houseRes], ['household_members', membersRes], ['ledger_entries', ledgerRes],['household_labels', labelsRes]] as const) {
@@ -792,6 +905,65 @@ export const pullAllDataFromSupabase = async (
       createdAt: le.created_at
     }));
 
+    const localExtras = readLocalHouseholdExtras(householdId || rawHouses[0]?.id || 'default');
+
+    let savingsGoals: SavingsGoal[] = localExtras.savingsGoals;
+    if (goalsRes && goalsRes.ok) {
+      const rawGoals = (await goalsRes.json()) as Array<Record<string, unknown>>;
+      savingsGoals = rawGoals.map(g => ({
+        id: String(g.id),
+        householdId: String(g.household_id),
+        title: String(g.title || ''),
+        targetAmount: Number(g.target_amount || 0),
+        currentAmount: Number(g.current_amount || 0),
+        linkedWalletId: g.linked_wallet_id ? String(g.linked_wallet_id) : undefined,
+        deadline: g.deadline ? String(g.deadline) : undefined,
+        icon: String(g.icon || '🎯'),
+        color: String(g.color || '#06D6A0'),
+        notes: g.notes ? String(g.notes) : undefined,
+        isCompleted: Boolean(g.is_completed),
+        createdAt: String(g.created_at || new Date().toISOString()),
+        updatedAt: String(g.updated_at || new Date().toISOString())
+      }));
+      if (householdId) writeLocalHouseholdExtras(householdId, { savingsGoals });
+    }
+
+    let categoryBudgets: CategoryBudget[] = localExtras.categoryBudgets;
+    if (budgetsRes && budgetsRes.ok) {
+      const rawBudgets = (await budgetsRes.json()) as Array<Record<string, unknown>>;
+      categoryBudgets = rawBudgets.map(b => ({
+        id: String(b.id),
+        householdId: String(b.household_id),
+        categoryId: b.category_id ? String(b.category_id) : undefined,
+        categoryName: String(b.category_name || ''),
+        monthlyLimit: Number(b.monthly_limit || 0),
+        alertThreshold: Number(b.alert_threshold || 80),
+        updatedAt: String(b.updated_at || new Date().toISOString())
+      }));
+      if (householdId) writeLocalHouseholdExtras(householdId, { categoryBudgets });
+    }
+
+    let familyChallenges: FamilyChallenge[] = localExtras.familyChallenges;
+    if (challengesRes && challengesRes.ok) {
+      const rawChallenges = (await challengesRes.json()) as Array<Record<string, unknown>>;
+      familyChallenges = rawChallenges.map(ch => ({
+        id: String(ch.id),
+        householdId: String(ch.household_id),
+        title: String(ch.title || ''),
+        targetType: (ch.target_type as FamilyChallenge['targetType']) || 'spending_cap',
+        categoryName: ch.category_name ? String(ch.category_name) : undefined,
+        maxAmount: ch.max_amount ? Number(ch.max_amount) : undefined,
+        targetDays: ch.target_days ? Number(ch.target_days) : undefined,
+        startDate: String(ch.start_date || ''),
+        endDate: String(ch.end_date || ''),
+        rewardBadge: String(ch.reward_badge || '🏆'),
+        status: (ch.status as FamilyChallenge['status']) || 'ACTIVE',
+        createdBy: ch.created_by ? String(ch.created_by) : undefined,
+        createdAt: String(ch.created_at || new Date().toISOString())
+      }));
+      if (householdId) writeLocalHouseholdExtras(householdId, { familyChallenges });
+    }
+
     return {
       success: true,
       data: {
@@ -799,6 +971,9 @@ export const pullAllDataFromSupabase = async (
         wallets,
         categories,
         debts,
+        savingsGoals,
+        categoryBudgets,
+        familyChallenges,
         labels:(await labelsRes.json() as Array<{name:string}>).map(l=>l.name),
         ...(members.length > 0 ? { members } : {}),
         ...(ledgerEntries.length > 0 ? { ledgerEntries } : {}),
@@ -858,4 +1033,156 @@ export const saveCategoryToSupabase = async (category:Category, mode:'create'|'u
 export const removeCategoryFromSupabase = async (category:Category,config:SupabaseConfig=DEFAULT_SUPABASE_CONFIG):Promise<void> => {
   // Archive removes it from new entries and preserves the category on historical transactions.
   await saveCategoryToSupabase({...category,isArchived:true},'update',config);
+};
+
+export const syncSavingsGoalToSupabase = async (
+  goal: SavingsGoal,
+  allGoals: SavingsGoal[],
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean; error?: string }> => {
+  writeLocalHouseholdExtras(goal.householdId, { savingsGoals: allGoals });
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: true };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    await fetch(`${cleanUrl}/rest/v1/savings_goals?on_conflict=id`, {
+      method: 'POST',
+      headers: getHeaders(config),
+      body: JSON.stringify({
+        id: goal.id,
+        household_id: goal.householdId,
+        title: goal.title,
+        target_amount: Math.round(goal.targetAmount),
+        current_amount: Math.round(goal.currentAmount || 0),
+        linked_wallet_id: goal.linkedWalletId || null,
+        deadline: goal.deadline || null,
+        icon: goal.icon || '🎯',
+        color: goal.color || '#06D6A0',
+        notes: goal.notes || null,
+        is_completed: goal.isCompleted || false,
+        created_at: goal.createdAt,
+        updated_at: goal.updatedAt || new Date().toISOString()
+      })
+    });
+  } catch {
+    // Kept safely in local fallback
+  }
+  return { success: true };
+};
+
+export const deleteSavingsGoalFromSupabase = async (
+  goalId: string,
+  householdId: string,
+  remainingGoals: SavingsGoal[],
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean }> => {
+  writeLocalHouseholdExtras(householdId, { savingsGoals: remainingGoals });
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: true };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    await fetch(`${cleanUrl}/rest/v1/savings_goals?id=eq.${encodeURIComponent(goalId)}`, {
+      method: 'DELETE',
+      headers: getHeaders(config)
+    });
+  } catch {}
+  return { success: true };
+};
+
+export const syncCategoryBudgetToSupabase = async (
+  budget: CategoryBudget,
+  allBudgets: CategoryBudget[],
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean }> => {
+  writeLocalHouseholdExtras(budget.householdId, { categoryBudgets: allBudgets });
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: true };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    await fetch(`${cleanUrl}/rest/v1/category_budgets?on_conflict=id`, {
+      method: 'POST',
+      headers: getHeaders(config),
+      body: JSON.stringify({
+        id: budget.id,
+        household_id: budget.householdId,
+        category_id: budget.categoryId || null,
+        category_name: budget.categoryName,
+        monthly_limit: Math.round(budget.monthlyLimit),
+        alert_threshold: budget.alertThreshold || 80,
+        updated_at: budget.updatedAt || new Date().toISOString()
+      })
+    });
+  } catch {}
+  return { success: true };
+};
+
+export const deleteCategoryBudgetFromSupabase = async (
+  budgetId: string,
+  householdId: string,
+  remainingBudgets: CategoryBudget[],
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean }> => {
+  writeLocalHouseholdExtras(householdId, { categoryBudgets: remainingBudgets });
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: true };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    await fetch(`${cleanUrl}/rest/v1/category_budgets?id=eq.${encodeURIComponent(budgetId)}`, {
+      method: 'DELETE',
+      headers: getHeaders(config)
+    });
+  } catch {}
+  return { success: true };
+};
+
+export const syncFamilyChallengeToSupabase = async (
+  challenge: FamilyChallenge,
+  allChallenges: FamilyChallenge[],
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean }> => {
+  writeLocalHouseholdExtras(challenge.householdId, { familyChallenges: allChallenges });
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: true };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    await fetch(`${cleanUrl}/rest/v1/family_challenges?on_conflict=id`, {
+      method: 'POST',
+      headers: getHeaders(config),
+      body: JSON.stringify({
+        id: challenge.id,
+        household_id: challenge.householdId,
+        title: challenge.title,
+        target_type: challenge.targetType,
+        category_name: challenge.categoryName || null,
+        max_amount: Math.round(challenge.maxAmount || 0),
+        target_days: challenge.targetDays || 7,
+        start_date: challenge.startDate,
+        end_date: challenge.endDate,
+        reward_badge: challenge.rewardBadge || '🏆',
+        status: challenge.status || 'ACTIVE',
+        created_by: challenge.createdBy || null,
+        created_at: challenge.createdAt
+      })
+    });
+  } catch {}
+  return { success: true };
+};
+
+export const deleteFamilyChallengeFromSupabase = async (
+  challengeId: string,
+  householdId: string,
+  remainingChallenges: FamilyChallenge[],
+  config: SupabaseConfig = DEFAULT_SUPABASE_CONFIG
+): Promise<{ success: boolean }> => {
+  writeLocalHouseholdExtras(householdId, { familyChallenges: remainingChallenges });
+  const clientKey = resolveClientKey(config);
+  if (!config.url || !clientKey) return { success: true };
+  try {
+    const cleanUrl = config.url.replace(/\/+$/, '');
+    await fetch(`${cleanUrl}/rest/v1/family_challenges?id=eq.${encodeURIComponent(challengeId)}`, {
+      method: 'DELETE',
+      headers: getHeaders(config)
+    });
+  } catch {}
+  return { success: true };
 };

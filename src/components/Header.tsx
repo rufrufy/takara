@@ -1,15 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { ChevronDown, Building, Plus, Lock, Check, LogOut, Download, Users, Link as LinkIcon, House, UserRound } from 'lucide-react';
+import { ChevronDown, Building, Plus, Lock, Check, LogOut, Download, Link as LinkIcon, House, UserRound, Bell, CheckCheck, Trash2 } from 'lucide-react';
 import { getSyncStatus, SYNC_EVENT_NAME, processSyncQueue, type SyncEngineStatus } from '../lib/syncEngine';
+import { formatRelativeTime, getNotificationVisual } from './HouseholdNotificationToasts';
+import type { ActiveTab } from './BottomNav';
+
 interface HeaderProps {
   onOpenImport?: () => void;
   onOpenInstall?: () => void;
+  onNavigateFromNotification?: (tab: ActiveTab, entityId?: string) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) => {
-  const { activeHousehold, households, switchHousehold, createHousehold, joinHouseholdByCode, lockApp, logoutUser, state } = useApp();
+export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall, onNavigateFromNotification }) => {
+  const {
+    activeHousehold,
+    households,
+    switchHousehold,
+    createHousehold,
+    joinHouseholdByCode,
+    lockApp,
+    logoutUser,
+    state,
+    notifications,
+    unreadNotificationCount,
+    markNotificationRead,
+    markAllNotificationsRead,
+    clearNotifications
+  } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isCreatingHousehold, setIsCreatingHousehold] = useState(false);
   const [newHouseholdName, setNewHouseholdName] = useState('');
@@ -66,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
     <header className="app-header">
       <div className="header-inner">
         <div className="brand-cluster">
-          <span className="brand-badge" aria-hidden="true">T</span>
+          <img src="/Takara-192.png" alt="Takara" className="brand-logo-img" />
           <span className="wordmark">Takara</span>
         </div>
         {/* Household Switcher */}
@@ -221,7 +240,137 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall }) =
         </div>
 
         <div className="profile-area">
-          <button className="profile-button" onClick={()=>setProfileOpen(!profileOpen)} aria-label="Menu akun" aria-expanded={profileOpen}><UserRound size={21} strokeWidth={1.6}/></button>
+          <div className="relative">
+            <button
+              type="button"
+              className="notif-button"
+              onClick={() => {
+                setNotifOpen(!notifOpen);
+                setProfileOpen(false);
+              }}
+              aria-label={`Notifikasi aktivitas household${unreadNotificationCount > 0 ? ` (${unreadNotificationCount} belum dibaca)` : ''}`}
+              aria-expanded={notifOpen}
+            >
+              <Bell size={20} strokeWidth={1.9} />
+              {unreadNotificationCount > 0 && (
+                <span className="notif-badge">
+                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                </span>
+              )}
+            </button>
+            {notifOpen && (
+              <>
+                <button
+                  className="menu-dismiss"
+                  onClick={() => setNotifOpen(false)}
+                  aria-label="Tutup panel notifikasi"
+                />
+                <div className="notif-menu" role="dialog" aria-label="Aktivitas Household">
+                  <div className="flex items-center justify-between gap-2 pb-2.5 mb-2 border-b-2 border-dashed border-[#073B4C]/20">
+                    <div>
+                      <strong className="text-sm font-extrabold text-[#073B4C] block">
+                        Aktivitas Household
+                      </strong>
+                      <span className="text-[11px] font-bold text-[#365664] block">
+                        {unreadNotificationCount > 0
+                          ? `${unreadNotificationCount} pembaruan belum dibaca`
+                          : 'Semua pembaruan sudah dibaca'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {unreadNotificationCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={markAllNotificationsRead}
+                          className="px-2 py-1 text-[11px] font-extrabold bg-[#06D6A0]/25 hover:bg-[#06D6A0]/50 text-[#073B4C] border border-[#073B4C] rounded-lg inline-flex items-center gap-1"
+                          title="Tandai semua dibaca"
+                        >
+                          <CheckCheck size={13} />
+                          <span>Dibaca</span>
+                        </button>
+                      )}
+                      {notifications.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearNotifications}
+                          className="p-1.5 bg-[#FFE0E5] hover:bg-[#FF6B6B] hover:text-white text-[#073B4C] border border-[#073B4C] rounded-lg"
+                          aria-label="Hapus semua notifikasi"
+                          title="Bersihkan riwayat"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <p className="text-xs font-bold text-[#365664] py-6 text-center">
+                      Belum ada aktivitas baru dari anggota household lain.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-0.5">
+                      {notifications.map((n) => {
+                        const { bg, color, Icon } = getNotificationVisual(n.kind);
+                        return (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => {
+                              markNotificationRead(n.id);
+                              setNotifOpen(false);
+                              if (onNavigateFromNotification) {
+                                onNavigateFromNotification(n.targetTab || 'beranda', n.entityId);
+                              }
+                            }}
+                            className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl border-2 text-left transition-colors ${
+                              n.read
+                                ? 'bg-slate-50/80 border-slate-200 hover:border-[#073B4C]/40 hover:bg-[#FEF3C7]/50'
+                                : 'bg-[#FFFDF5] border-[#073B4C] shadow-[2px_2px_0_#073B4C] hover:bg-[#FEF3C7]'
+                            }`}
+                          >
+                            <span
+                              style={{ backgroundColor: bg, color }}
+                              className="w-8 h-8 rounded-xl border-[1.5px] border-[#073B4C] flex items-center justify-center shrink-0 mt-0.5"
+                            >
+                              <Icon size={15} strokeWidth={2.5} />
+                            </span>
+                            <span className="min-w-0 flex-1 block">
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-extrabold text-[#073B4C] truncate">
+                                  {n.title}
+                                </span>
+                                {!n.read && (
+                                  <span className="w-2 h-2 rounded-full bg-[#FF6B6B] border border-[#073B4C] shrink-0" />
+                                )}
+                              </span>
+                              <span className="text-[11px] font-bold text-[#365664] block mt-0.5 line-clamp-2">
+                                {n.message}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 block mt-0.5">
+                                {formatRelativeTime(n.createdAt)}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            className="profile-button"
+            onClick={() => {
+              setProfileOpen(!profileOpen);
+              setNotifOpen(false);
+            }}
+            aria-label="Menu akun"
+            aria-expanded={profileOpen}
+          >
+            <UserRound size={21} strokeWidth={1.6} />
+          </button>
           {profileOpen&&<>
             <button className="menu-dismiss" onClick={()=>setProfileOpen(false)} aria-label="Tutup menu akun"/>
             <div className="profile-menu">

@@ -1,9 +1,10 @@
-import type {AppState,Wallet,Category,DebtItem,FinancialTransaction,ExcelImportSummary} from '../types';
+import type {AppState,Wallet,Category,DebtItem,SavingsGoal,CategoryBudget,FamilyChallenge,FinancialTransaction,ExcelImportSummary} from '../types';
 
 export interface FinancialBackup {
  format:'takara-financial-backup';version:1;exportedAt:string;
  household:{id:string;name:string};wallets:Wallet[];categories:Category[];
  transactions:FinancialTransaction[];debts:DebtItem[];labels:string[];
+ savingsGoals?:SavingsGoal[];categoryBudgets?:CategoryBudget[];familyChallenges?:FamilyChallenge[];
 }
 const record=(v:unknown):Record<string,unknown>=>{if(!v||typeof v!=='object'||Array.isArray(v))throw Error('Struktur cadangan JSON tidak valid.');return v as Record<string,unknown>;};
 const text=(v:unknown,f:string,optional=false):string|undefined=>{if(optional&&(v===undefined||v===null))return undefined;if(typeof v!=='string'||(!optional&&!v.trim()))throw Error(`${f} pada cadangan tidak valid.`);return v;};
@@ -44,13 +45,16 @@ export function parseFinancialBackup(contents:string,householdId:string):Financi
  }
  const labels=Array.isArray(root.labels)?[...new Set(root.labels.map(v=>text(v,'Label')!))]:[];
  if(labels.some(l=>l.length>100))throw Error('Label pada cadangan terlalu panjang.');
- return {format:'takara-financial-backup',version:1,exportedAt:typeof root.exportedAt==='string'?root.exportedAt:new Date().toISOString(),household:{id:householdId,name:text(household.name,'Nama household')!},wallets,categories,debts,transactions,labels};
+ const savingsGoals:SavingsGoal[]=rows('savingsGoals',true).map(r=>({id:text(r.id,'ID impian')!,householdId,title:text(r.title,'Nama impian')!,targetAmount:money(r.targetAmount,'Target impian'),currentAmount:money(r.currentAmount||0,'Saldo impian'),linkedWalletId:optional(r,'linkedWalletId'),deadline:optional(r,'deadline'),icon:optional(r,'icon')||'🎯',color:optional(r,'color')||'#06D6A0',notes:optional(r,'notes'),isCompleted:r.isCompleted===true,createdAt:date(r.createdAt,'Tanggal impian'),updatedAt:date(r.updatedAt||r.createdAt,'Tanggal impian')}));
+ const categoryBudgets:CategoryBudget[]=rows('categoryBudgets',true).map(r=>({id:text(r.id,'ID pagu')!,householdId,categoryId:optional(r,'categoryId'),categoryName:text(r.categoryName,'Kategori pagu')!,monthlyLimit:money(r.monthlyLimit,'Batas pagu'),alertThreshold:typeof r.alertThreshold==='number'?r.alertThreshold:80,updatedAt:date(r.updatedAt||new Date().toISOString(),'Tanggal pagu')}));
+ const familyChallenges:FamilyChallenge[]=rows('familyChallenges',true).map(r=>({id:text(r.id,'ID tantangan')!,householdId,title:text(r.title,'Judul tantangan')!,targetType:choice(r.targetType,['spending_cap','no_spend_category','streak_days'],'Tipe tantangan'),categoryName:optional(r,'categoryName'),maxAmount:r.maxAmount===undefined?undefined:money(r.maxAmount,'Batas tantangan'),targetDays:typeof r.targetDays==='number'?r.targetDays:7,startDate:text(r.startDate,'Mulai tantangan')!,endDate:text(r.endDate,'Akhir tantangan')!,rewardBadge:optional(r,'rewardBadge')||'🏆',status:choice(r.status||'ACTIVE',['ACTIVE','COMPLETED','FAILED'],'Status tantangan'),createdBy:optional(r,'createdBy'),createdAt:date(r.createdAt||new Date().toISOString(),'Tanggal tantangan')}));
+ return {format:'takara-financial-backup',version:1,exportedAt:typeof root.exportedAt==='string'?root.exportedAt:new Date().toISOString(),household:{id:householdId,name:text(household.name,'Nama household')!},wallets,categories,debts,transactions,labels,savingsGoals,categoryBudgets,familyChallenges};
 }
 
 export function createFinancialBackup(state:AppState):FinancialBackup {
  const household=state.households.find(h=>h.id===state.activeHouseholdId);if(!household)throw Error('Household belum dimuat.');
  const scoped=<T extends {householdId:string}>(rows:T[])=>rows.filter(r=>r.householdId===household.id);
- const backup=parseFinancialBackup(JSON.stringify({format:'takara-financial-backup',version:1,exportedAt:new Date().toISOString(),household,wallets:scoped(state.wallets),categories:scoped(state.categories),transactions:scoped(state.transactions),debts:scoped(state.debts||[]),labels:state.labels}),household.id);
+ const backup=parseFinancialBackup(JSON.stringify({format:'takara-financial-backup',version:1,exportedAt:new Date().toISOString(),household,wallets:scoped(state.wallets),categories:scoped(state.categories),transactions:scoped(state.transactions),debts:scoped(state.debts||[]),savingsGoals:scoped(state.savingsGoals||[]),categoryBudgets:scoped(state.categoryBudgets||[]),familyChallenges:scoped(state.familyChallenges||[]),labels:state.labels}),household.id);
  backup.wallets=backup.wallets.map(w=>({...w,balance:state.wallets.find(original=>original.id===w.id)!.balance}));
  return backup;
 }

@@ -5,7 +5,8 @@ import {inviteAccount,authenticateAccount,getCurrentAccount,changeAccountPin,reg
 import {jakartaDateTime} from '../lib/dateTime';
 import {loadUserFinancialData} from '../lib/financialBootstrap';
 import {uploadReceiptPhoto,clearReceiptSession} from '../lib/attachments';
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
+import {formatIDR} from '../lib/money';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback, ReactNode } from 'react';
 import type {
   AppState,
   FinancialTransaction,
@@ -14,10 +15,15 @@ import type {
   Category,
   Household,
   HouseholdMember,
+  HouseholdNotification,
+  HouseholdNotificationKind,
   ExcelImportSummary,
   TransactionType,
   WalletType,
   DebtItem,
+  SavingsGoal,
+  CategoryBudget,
+  FamilyChallenge,
   UserRole,
   AIConfig,
   SupabaseConfig,
@@ -40,6 +46,13 @@ import {
   deleteTransactionFromSupabase,
   syncDebtToSupabase,
   deleteDebtFromSupabase,
+  syncSavingsGoalToSupabase,
+  deleteSavingsGoalFromSupabase,
+  syncCategoryBudgetToSupabase,
+  deleteCategoryBudgetFromSupabase,
+  syncFamilyChallengeToSupabase,
+  deleteFamilyChallengeFromSupabase,
+  readLocalHouseholdExtras,
   pushAllDataToSupabase,
   pullAllDataFromSupabase,
   fetchUsersFromSupabase,
@@ -84,6 +97,158 @@ if (typeof window !== 'undefined') {
     // abaikan jika storage terisolasi
   }
 }
+
+const NOTIFICATIONS_STORAGE_KEY = 'takara_notifications_v1';
+
+const loadStoredNotifications = (): HouseholdNotification[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as HouseholdNotification[]).slice(0, 30) : [];
+  } catch {
+    return [];
+  }
+};
+
+type NewNotificationPayload = Omit<HouseholdNotification, 'id' | 'createdAt' | 'read'>;
+
+const buildTransactionNotification = (tx: {
+  id: string;
+  householdId: string;
+  type?: string;
+  amount?: number;
+  description?: string;
+  categoryName?: string;
+  addedBy?: string;
+  status?: string;
+}): NewNotificationPayload | null => {
+  if (tx.status === 'VOIDED' || tx.type === 'opening_balance' || isDebtOpeningTransaction(tx)) {
+    return null;
+  }
+  const actor = String(tx.addedBy || 'Anggota').trim().split(' ')[0] || 'Anggota';
+  const amount = Math.round(Number(tx.amount || 0));
+  const detail = String(tx.description || tx.categoryName || 'Transaksi').trim();
+
+  let kind: HouseholdNotificationKind = 'transaction_expense';
+  let verb = 'mencatat Pengeluaran';
+  if (tx.type === 'income') {
+    kind = 'transaction_income';
+    verb = 'mencatat Pemasukan';
+  } else if (tx.type === 'transfer') {
+    kind = 'transaction_transfer';
+    verb = 'mencatat Transfer';
+  }
+
+  return {
+    householdId: tx.householdId,
+    kind,
+    title: `${actor} ${verb}`,
+    message: `${detail} · ${formatIDR(amount)}`,
+    actor: tx.addedBy,
+    amount,
+    entityId: tx.id,
+    targetTab: 'transaksi'
+  };
+};
+
+const buildWalletNotification = (w: { id: string; householdId: string; name?: string }): NewNotificationPayload => ({
+  householdId: w.householdId,
+  kind: 'wallet',
+  title: 'Dompet baru ditambahkan',
+  message: `Dompet ${String(w.name || 'Baru')}`,
+  entityId: w.id,
+  targetTab: 'profil-keuangan'
+});
+
+const buildDebtNotification = (d: {
+  id: string;
+  householdId: string;
+  type?: string;
+  personOrEntity?: string;
+  amount?: number;
+}): NewNotificationPayload => ({
+  householdId: d.householdId,
+  kind: 'debt',
+  title: d.type === 'receivable' ? 'Piutang baru dicatat' : 'Utang baru dicatat',
+  message: `${String(d.personOrEntity || 'Catatan')} · ${formatIDR(Number(d.amount || 0))}`,
+  amount: Number(d.amount || 0),
+  entityId: d.id,
+  targetTab: 'profil-keuangan'
+});
+
+const buildSavingsGoalNotification = (g: {
+  id: string;
+  householdId: string;
+  title?: string;
+  targetAmount?: number;
+}): NewNotificationPayload => ({
+  householdId: g.householdId,
+  kind: 'savings_goal',
+  title: 'Kantong impian baru',
+  message: `${String(g.title || 'Impian')} · Target ${formatIDR(Number(g.targetAmount || 0))}`,
+  amount: Number(g.targetAmount || 0),
+  entityId: g.id,
+  targetTab: 'profil-keuangan'
+});
+
+const buildCategoryBudgetNotification = (b: {
+  id: string;
+  householdId: string;
+  categoryName?: string;
+  monthlyLimit?: number;
+}): NewNotificationPayload => ({
+  householdId: b.householdId,
+  kind: 'budget',
+  title: 'Pagu anggaran diatur',
+  message: `${String(b.categoryName || 'Kategori')} · Maks ${formatIDR(Number(b.monthlyLimit || 0))}/bln`,
+  amount: Number(b.monthlyLimit || 0),
+  entityId: b.id,
+  targetTab: 'laporan'
+});
+
+const buildFamilyChallengeNotification = (ch: {
+  id: string;
+  householdId: string;
+  title?: string;
+  createdBy?: string;
+}): NewNotificationPayload => ({
+  householdId: ch.householdId,
+  kind: 'challenge',
+  title: 'Tantangan keluarga baru',
+  message: String(ch.title || 'Tantangan hemat baru'),
+  actor: ch.createdBy,
+  entityId: ch.id,
+  targetTab: 'beranda'
+});
+
+const buildMemberNotification = (m: {
+  id: string;
+  householdId: string;
+  displayName?: string;
+}): NewNotificationPayload => ({
+  householdId: m.householdId,
+  kind: 'member',
+  title: 'Anggota baru bergabung',
+  message: `${String(m.displayName || 'Anggota')} bergabung ke household`,
+  actor: m.displayName,
+  entityId: m.id,
+  targetTab: 'pengaturan'
+});
+
+const buildCategoryNotification = (c: {
+  id: string;
+  householdId: string;
+  name?: string;
+}): NewNotificationPayload => ({
+  householdId: c.householdId,
+  kind: 'category',
+  title: 'Kategori baru ditambahkan',
+  message: `Kategori ${String(c.name || 'Baru')}`,
+  entityId: c.id,
+  targetTab: 'pengaturan'
+});
 
 const getUserStorageKey = (username: string) => `dompetkita_app_state_user_${username.toLowerCase().trim()}`;
 
@@ -137,6 +302,17 @@ interface AppContextValue {
   payDebtInstallment: (id: string, walletId?: string, imageUrl?: string) => Promise<{ success: boolean; error?: string }>;
   updateDebt: (id: string, updates: Partial<DebtItem>) => Promise<{success:boolean;error?:string}>;
   deleteDebt: (id: string) => Promise<{success:boolean;error?:string}>;
+  savingsGoals: SavingsGoal[];
+  addSavingsGoal: (input: Omit<SavingsGoal, 'id' | 'householdId' | 'isCompleted' | 'createdAt' | 'updatedAt'>) => Promise<{ success: boolean; error?: string }>;
+  updateSavingsGoal: (id: string, updates: Partial<SavingsGoal>) => Promise<{ success: boolean; error?: string }>;
+  contributeToSavingsGoal: (goalId: string, amount: number, sourceWalletId?: string) => Promise<{ success: boolean; error?: string }>;
+  deleteSavingsGoal: (id: string) => Promise<{ success: boolean; error?: string }>;
+  categoryBudgets: CategoryBudget[];
+  upsertCategoryBudget: (categoryName: string, monthlyLimit: number, categoryId?: string, alertThreshold?: number) => Promise<{ success: boolean; error?: string }>;
+  deleteCategoryBudget: (id: string) => Promise<{ success: boolean; error?: string }>;
+  familyChallenges: FamilyChallenge[];
+  addFamilyChallenge: (input: Omit<FamilyChallenge, 'id' | 'householdId' | 'status' | 'createdAt'>) => Promise<{ success: boolean; error?: string }>;
+  deleteFamilyChallenge: (id: string) => Promise<{ success: boolean; error?: string }>;
   addTransaction: (input: NewTransactionInput) => Promise<{ success: boolean; error?: string }>;
   voidTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
   clearCurrentMonthTransactions: () => Promise<{ success: boolean; count: number; error?: string }>;
@@ -182,6 +358,13 @@ interface AppContextValue {
   removeMemberFromHousehold: (memberId: string) => Promise<{success:boolean;error?:string}>;
   allHouseholds: Household[];
   allMembers: HouseholdMember[];
+  notifications: HouseholdNotification[];
+  activeToasts: HouseholdNotification[];
+  unreadNotificationCount: number;
+  dismissToast: (id: string) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  clearNotifications: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -301,9 +484,167 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const duringWrite=async<T,>(job:()=>Promise<T>):Promise<T>=>{activeMutationCount.current++;financialVersion.current++;try{return await job();}finally{activeMutationCount.current--;financialVersion.current++;}};
   const loadedHousehold = useRef('');
   const [isFinancialReady,setIsFinancialReady] = useState(false);
+  const isFinancialReadyRef = useRef(false);
+  isFinancialReadyRef.current = isFinancialReady;
   const [registeredUsers,setRegisteredUsers]=useState<User[]>([]);
   const [authReady,setAuthReady]=useState(false);
   const [state,setState]=useState<AppState>({...initialData,isAuthenticated:false,isLocked:true,transactions:[],ledgerEntries:[],wallets:[],categories:[],debts:[],members:[],households:[]});
+
+  // Top-right Household Activity Notifications & Toasts
+  const [allNotifications, setAllNotifications] = useState<HouseholdNotification[]>(loadStoredNotifications);
+  const [activeToasts, setActiveToasts] = useState<HouseholdNotification[]>([]);
+  const localMutationIdsRef = useRef<Set<string>>(new Set());
+  const notifiedKeysRef = useRef<Set<string>>(new Set());
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const snapshotRef = useRef<{
+    householdId: string;
+    ready: boolean;
+    txIds: Set<string>;
+    walletIds: Set<string>;
+    debtIds: Set<string>;
+    goalIds: Set<string>;
+    budgetIds: Set<string>;
+    challengeIds: Set<string>;
+    memberIds: Set<string>;
+    catIds: Set<string>;
+  }>({
+    householdId: '',
+    ready: false,
+    txIds: new Set(),
+    walletIds: new Set(),
+    debtIds: new Set(),
+    goalIds: new Set(),
+    budgetIds: new Set(),
+    challengeIds: new Set(),
+    memberIds: new Set(),
+    catIds: new Set()
+  });
+
+  const markLocalMutation = useCallback((id?: string) => {
+    if (!id) return;
+    localMutationIdsRef.current.add(id);
+    setTimeout(() => {
+      localMutationIdsRef.current.delete(id);
+    }, 60_000);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    const timer = toastTimersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      toastTimersRef.current.delete(id);
+    }
+    setActiveToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(allNotifications.slice(0, 30)));
+    } catch {}
+  }, [allNotifications]);
+
+  useEffect(() => {
+    return () => {
+      toastTimersRef.current.forEach(timer => clearTimeout(timer));
+      toastTimersRef.current.clear();
+    };
+  }, []);
+
+  const pushHouseholdNotification = useCallback(
+    (dedupeKey: string, payload: NewNotificationPayload) => {
+      if (notifiedKeysRef.current.has(dedupeKey)) return;
+      notifiedKeysRef.current.add(dedupeKey);
+      const notif: HouseholdNotification = {
+        ...payload,
+        id: `notif-${crypto.randomUUID()}`,
+        createdAt: new Date().toISOString(),
+        read: false
+      };
+      setAllNotifications(prev => [notif, ...prev].slice(0, 30));
+      setActiveToasts(prev => [notif, ...prev].slice(0, 3));
+      const timer = setTimeout(() => {
+        dismissToast(notif.id);
+      }, 6000);
+      toastTimersRef.current.set(notif.id, timer);
+    },
+    [dismissToast]
+  );
+
+  const markNotificationRead = useCallback((id: string) => {
+    setAllNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+  }, []);
+
+  const markAllNotificationsRead = useCallback(() => {
+    const hid = state.activeHouseholdId;
+    setAllNotifications(prev => prev.map(n => (n.householdId === hid ? { ...n, read: true } : n)));
+  }, [state.activeHouseholdId]);
+
+  const clearNotifications = useCallback(() => {
+    const hid = state.activeHouseholdId;
+    setAllNotifications(prev => prev.filter(n => n.householdId !== hid));
+    setActiveToasts(prev => prev.filter(t => t.householdId !== hid));
+  }, [state.activeHouseholdId]);
+
+  const notifications = useMemo(
+    () => allNotifications.filter(n => n.householdId === state.activeHouseholdId),
+    [allNotifications, state.activeHouseholdId]
+  );
+
+  const householdToasts = useMemo(
+    () => activeToasts.filter(t => t.householdId === state.activeHouseholdId),
+    [activeToasts, state.activeHouseholdId]
+  );
+
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter(n => !n.read).length,
+    [notifications]
+  );
+
+  // Reset known-ID snapshot whenever active household/user changes
+  useEffect(() => {
+    snapshotRef.current = {
+      householdId: state.activeHouseholdId,
+      ready: false,
+      txIds: new Set(),
+      walletIds: new Set(),
+      debtIds: new Set(),
+      goalIds: new Set(),
+      budgetIds: new Set(),
+      challengeIds: new Set(),
+      memberIds: new Set(),
+      catIds: new Set()
+    };
+  }, [state.activeHouseholdId, state.currentUser.id, state.isAuthenticated]);
+
+  // Keep snapshot populated with known household IDs once financial data is ready
+  useEffect(() => {
+    if (!isFinancialReady || !state.isAuthenticated || !state.activeHouseholdId) return;
+    const hid = state.activeHouseholdId;
+    const snap = snapshotRef.current;
+    if (snap.householdId !== hid) return;
+
+    for (const t of state.transactions || []) if (t.householdId === hid) snap.txIds.add(t.id);
+    for (const w of state.wallets || []) if (w.householdId === hid) snap.walletIds.add(w.id);
+    for (const d of state.debts || []) if (d.householdId === hid) snap.debtIds.add(d.id);
+    for (const g of state.savingsGoals || []) if (g.householdId === hid) snap.goalIds.add(g.id);
+    for (const b of state.categoryBudgets || []) if (b.householdId === hid) snap.budgetIds.add(b.id);
+    for (const c of state.familyChallenges || []) if (c.householdId === hid) snap.challengeIds.add(c.id);
+    for (const m of state.members || []) if (m.householdId === hid) snap.memberIds.add(m.id);
+    for (const cat of state.categories || []) if (cat.householdId === hid) snap.catIds.add(cat.id);
+    snap.ready = true;
+  }, [
+    isFinancialReady,
+    state.isAuthenticated,
+    state.activeHouseholdId,
+    state.transactions,
+    state.wallets,
+    state.debts,
+    state.savingsGoals,
+    state.categoryBudgets,
+    state.familyChallenges,
+    state.members,
+    state.categories
+  ]);
   useEffect(()=>{let live=true;(async()=>{try{const user=await getCurrentAccount();if(!live||!user)return;let next={...createFreshUserData(user.username,user.displayName,''),currentUser:user,isAuthenticated:true,isLocked:false,transactions:[] as FinancialTransaction[],ledgerEntries:[] as LedgerEntry[],wallets:[] as Wallet[],categories:[] as Category[],debts:[] as DebtItem[],members:[] as HouseholdMember[],households:[] as Household[]};if(user.role==='ADMIN'){const pulled=await pullAllDataFromSupabase(DEFAULT_SUPABASE_CONFIG);if(!pulled.success)throw new Error(pulled.error||'Gagal memuat admin.');next={...next,...pulled.data};}if(live)setState(next);}catch(error){if(live)setSupabaseSyncStatus({status:'error',error:error instanceof Error?error.message:'Sesi tidak dapat dipulihkan.'});}finally{if(live)setAuthReady(true);}})();return()=>{live=false;};},[]);
 
   // Legacy offline queue is retained for explicit recovery, never replayed over confirmed server records.
@@ -648,6 +989,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try { newTx.imageUrl = await uploadReceiptPhoto(newTx.imageUrl, newTx.householdId, state.currentUser); }
       catch(error) { return {success:false,error:error instanceof Error?error.message:'Unggah lampiran gagal.'}; }
     }
+    markLocalMutation(txId);
     setSupabaseSyncStatus({ status: 'syncing' });
     const saved = await syncTransactionToSupabase(newTx,state.supabaseConfig);
     if (!saved.success) {
@@ -858,6 +1200,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addDebt=async(item:Omit<DebtItem,'id'|'householdId'|'createdAt'>)=>{
     const debt:DebtItem={...item,id:crypto.randomUUID(),householdId:state.activeHouseholdId,createdAt:new Date().toISOString()};
+    markLocalMutation(debt.id);
     const saved=await syncDebtToSupabase(debt,state.supabaseConfig);if(!saved.success)return saved;
     setState(prev=>({...prev,debts:[debt,...(prev.debts||[])]}));return {success:true};
   };
@@ -874,8 +1217,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const now = new Date();
     const updated = { ...debt, remainingAmount: debt.remainingAmount - amount, isSettled: debt.remainingAmount <= amount, isPaidThisMonth: true, lastPaidMonth: now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') };
     const incoming = debt.type === 'receivable';
+    const paymentTxId = 'tx-payment-' + debt.id + '-' + debt.remainingAmount;
+    markLocalMutation(paymentTxId);
     return persistDebtActivity(updated, {
-      id: 'tx-payment-' + debt.id + '-' + debt.remainingAmount, householdId: debt.householdId,
+      id: paymentTxId, householdId: debt.householdId,
       debtId: debt.id,
       type: incoming ? 'income' : 'expense', amount,
       sourceWalletId: incoming ? undefined : wallet.id, destinationWalletId: incoming ? wallet.id : undefined,
@@ -886,6 +1231,212 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteDebt=async(id:string)=>{const saved=await deleteDebtFromSupabase(id,state.supabaseConfig);if(saved.success)setState(prev=>({...prev,debts:(prev.debts||[]).filter(d=>d.id!==id)}));return saved;};
+
+  // === SAVINGS GOALS, CATEGORY BUDGETS & FAMILY CHALLENGES ===
+  const savingsGoals = useMemo(() => {
+    const list = state.savingsGoals !== undefined
+      ? state.savingsGoals
+      : readLocalHouseholdExtras(state.activeHouseholdId).savingsGoals;
+    return list.filter(g => g.householdId === state.activeHouseholdId);
+  }, [state.savingsGoals, state.activeHouseholdId]);
+
+  const categoryBudgets = useMemo(() => {
+    const list = state.categoryBudgets !== undefined
+      ? state.categoryBudgets
+      : readLocalHouseholdExtras(state.activeHouseholdId).categoryBudgets;
+    return list.filter(b => b.householdId === state.activeHouseholdId);
+  }, [state.categoryBudgets, state.activeHouseholdId]);
+
+  const familyChallenges = useMemo(() => {
+    const list = state.familyChallenges !== undefined
+      ? state.familyChallenges
+      : readLocalHouseholdExtras(state.activeHouseholdId).familyChallenges;
+    return list.filter(ch => ch.householdId === state.activeHouseholdId);
+  }, [state.familyChallenges, state.activeHouseholdId]);
+
+  const addSavingsGoal = async (
+    input: Omit<SavingsGoal, 'id' | 'householdId' | 'isCompleted' | 'createdAt' | 'updatedAt'>
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!input.title.trim()) return { success: false, error: 'Nama impian wajib diisi.' };
+    if (input.targetAmount <= 0) return { success: false, error: 'Target tabungan harus lebih dari 0.' };
+    const now = new Date().toISOString();
+    const goal: SavingsGoal = {
+      ...input,
+      id: 'goal-' + crypto.randomUUID(),
+      householdId: state.activeHouseholdId,
+      title: input.title.trim(),
+      currentAmount: Math.max(0, Math.round(input.currentAmount || 0)),
+      targetAmount: Math.round(input.targetAmount),
+      isCompleted: (input.currentAmount || 0) >= input.targetAmount,
+      createdAt: now,
+      updatedAt: now
+    };
+    markLocalMutation(goal.id);
+    const nextGoals = [goal, ...savingsGoals];
+    await syncSavingsGoalToSupabase(goal, nextGoals, state.supabaseConfig);
+    setState(prev => ({
+      ...prev,
+      savingsGoals: [goal, ...(prev.savingsGoals || []).filter(g => g.id !== goal.id)]
+    }));
+    return { success: true };
+  };
+
+  const updateSavingsGoal = async (id: string, updates: Partial<SavingsGoal>): Promise<{ success: boolean; error?: string }> => {
+    const existing = savingsGoals.find(g => g.id === id);
+    if (!existing) return { success: false, error: 'Kantong impian tidak ditemukan.' };
+    const nextTarget = updates.targetAmount !== undefined ? Math.round(updates.targetAmount) : existing.targetAmount;
+    const nextCurrent = updates.currentAmount !== undefined ? Math.max(0, Math.round(updates.currentAmount)) : existing.currentAmount;
+    const updated: SavingsGoal = {
+      ...existing,
+      ...updates,
+      id: existing.id,
+      householdId: existing.householdId,
+      targetAmount: nextTarget,
+      currentAmount: nextCurrent,
+      isCompleted: updates.isCompleted !== undefined ? updates.isCompleted : nextCurrent >= nextTarget,
+      updatedAt: new Date().toISOString()
+    };
+    const nextGoals = savingsGoals.map(g => (g.id === id ? updated : g));
+    await syncSavingsGoalToSupabase(updated, nextGoals, state.supabaseConfig);
+    setState(prev => ({
+      ...prev,
+      savingsGoals: (prev.savingsGoals || savingsGoals).map(g => (g.id === id ? updated : g))
+    }));
+    return { success: true };
+  };
+
+  const contributeToSavingsGoal = async (
+    goalId: string,
+    amount: number,
+    sourceWalletId?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const goal = savingsGoals.find(g => g.id === goalId);
+    if (!goal) return { success: false, error: 'Kantong impian tidak ditemukan.' };
+    const cleanAmt = Math.round(amount);
+    if (cleanAmt <= 0) return { success: false, error: 'Nominal menabung harus lebih dari 0.' };
+
+    // If user chose to deduct from a wallet, record official ledger transaction
+    if (sourceWalletId && sourceWalletId !== 'none') {
+      if (goal.linkedWalletId && goal.linkedWalletId !== sourceWalletId) {
+        const txRes = await addTransaction({
+          type: 'transfer',
+          amount: cleanAmt,
+          sourceWalletId,
+          destinationWalletId: goal.linkedWalletId,
+          description: `Tabung Impian: ${goal.title}`,
+          label: 'Impian'
+        });
+        if (!txRes.success) return txRes;
+      } else {
+        const txRes = await addTransaction({
+          type: 'expense',
+          amount: cleanAmt,
+          sourceWalletId,
+          categoryName: 'Tabungan & Emas',
+          description: `Alokasi Impian: ${goal.title}`,
+          label: 'Impian'
+        });
+        if (!txRes.success) return txRes;
+      }
+    }
+
+    const nextCurrent = goal.currentAmount + cleanAmt;
+    return updateSavingsGoal(goalId, {
+      currentAmount: nextCurrent,
+      isCompleted: nextCurrent >= goal.targetAmount
+    });
+  };
+
+  const deleteSavingsGoal = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const remaining = savingsGoals.filter(g => g.id !== id);
+    await deleteSavingsGoalFromSupabase(id, state.activeHouseholdId, remaining, state.supabaseConfig);
+    setState(prev => ({
+      ...prev,
+      savingsGoals: (prev.savingsGoals || savingsGoals).filter(g => g.id !== id)
+    }));
+    return { success: true };
+  };
+
+  const upsertCategoryBudget = async (
+    categoryName: string,
+    monthlyLimit: number,
+    categoryId?: string,
+    alertThreshold = 80
+  ): Promise<{ success: boolean; error?: string }> => {
+    const cleanName = categoryName.trim();
+    if (!cleanName) return { success: false, error: 'Pilih kategori terlebih dahulu.' };
+    if (monthlyLimit <= 0) return { success: false, error: 'Batas anggaran harus lebih dari 0.' };
+
+    const existing = categoryBudgets.find(
+      b => (categoryId && b.categoryId === categoryId) || b.categoryName.toLowerCase() === cleanName.toLowerCase()
+    );
+    const budget: CategoryBudget = {
+      id: existing?.id || `bgt-${state.activeHouseholdId}-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      householdId: state.activeHouseholdId,
+      categoryId: categoryId || existing?.categoryId,
+      categoryName: cleanName,
+      monthlyLimit: Math.round(monthlyLimit),
+      alertThreshold: Math.min(100, Math.max(50, Math.round(alertThreshold))),
+      updatedAt: new Date().toISOString()
+    };
+    markLocalMutation(budget.id);
+    const nextBudgets = existing
+      ? categoryBudgets.map(b => (b.id === existing.id ? budget : b))
+      : [...categoryBudgets, budget];
+
+    await syncCategoryBudgetToSupabase(budget, nextBudgets, state.supabaseConfig);
+    setState(prev => {
+      const base = prev.categoryBudgets || categoryBudgets;
+      const updatedList = base.some(b => b.id === budget.id)
+        ? base.map(b => (b.id === budget.id ? budget : b))
+        : [...base, budget];
+      return { ...prev, categoryBudgets: updatedList };
+    });
+    return { success: true };
+  };
+
+  const deleteCategoryBudget = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const remaining = categoryBudgets.filter(b => b.id !== id);
+    await deleteCategoryBudgetFromSupabase(id, state.activeHouseholdId, remaining, state.supabaseConfig);
+    setState(prev => ({
+      ...prev,
+      categoryBudgets: (prev.categoryBudgets || categoryBudgets).filter(b => b.id !== id)
+    }));
+    return { success: true };
+  };
+
+  const addFamilyChallenge = async (
+    input: Omit<FamilyChallenge, 'id' | 'householdId' | 'status' | 'createdAt'>
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!input.title.trim()) return { success: false, error: 'Judul tantangan wajib diisi.' };
+    const challenge: FamilyChallenge = {
+      ...input,
+      id: 'chl-' + crypto.randomUUID(),
+      householdId: state.activeHouseholdId,
+      title: input.title.trim(),
+      status: 'ACTIVE',
+      createdBy: input.createdBy || state.currentUser.displayName,
+      createdAt: new Date().toISOString()
+    };
+    markLocalMutation(challenge.id);
+    const nextChallenges = [challenge, ...familyChallenges];
+    await syncFamilyChallengeToSupabase(challenge, nextChallenges, state.supabaseConfig);
+    setState(prev => ({
+      ...prev,
+      familyChallenges: [challenge, ...(prev.familyChallenges || familyChallenges).filter(c => c.id !== challenge.id)]
+    }));
+    return { success: true };
+  };
+
+  const deleteFamilyChallenge = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const remaining = familyChallenges.filter(c => c.id !== id);
+    await deleteFamilyChallengeFromSupabase(id, state.activeHouseholdId, remaining, state.supabaseConfig);
+    setState(prev => ({
+      ...prev,
+      familyChallenges: (prev.familyChallenges || familyChallenges).filter(c => c.id !== id)
+    }));
+    return { success: true };
+  };
   const categoryWritable = () => state.households.some(h=>h.id===state.activeHouseholdId&&h.createdById===state.currentUser.id)
     || state.members.some(m=>m.householdId===state.activeHouseholdId&&m.userId===state.currentUser.id&&m.role!=='VIEWER');
   const addCategory = async (name:string,type:'income'|'expense'|'transfer',icon='Tag',color='#06D6A0') => {
@@ -894,6 +1445,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const existing=state.categories.find(c=>c.householdId===state.activeHouseholdId&&!c.isArchived&&c.type===type&&c.name.trim().toLowerCase()===clean.toLowerCase());
     if(existing)return {success:false,error:'Kategori dengan nama dan tipe ini sudah ada.'};
     const category:Category={id:'cat-'+crypto.randomUUID(),householdId:state.activeHouseholdId,name:clean,type,icon,color,isArchived:false};
+    markLocalMutation(category.id);
     try {
       await saveCategoryToSupabase(category,'create');
       setState(prev=>prev.currentUser.id!==state.currentUser.id?prev:({...prev,categories:[...prev.categories,category]}));
@@ -925,6 +1477,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addWallet = async (name: string, type: WalletType, openingBalance = 0, color = '#06D6A0') => {
     const walletId = `w-${Date.now()}`;
     const dateNow = new Date().toISOString();
+    markLocalMutation(walletId);
 
     const newWallet: Wallet = {
       id: walletId,
@@ -946,6 +1499,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (openingBalance > 0) {
       const txId = `tx-open-${Date.now()}`;
+      markLocalMutation(txId);
       newTxs.push({
         id: txId,
         householdId: state.activeHouseholdId,
@@ -1017,6 +1571,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const diff = Math.round(updates.targetBalance) - currentBal;
       if (diff !== 0) {
         const txId = `tx-adj-${Date.now()}`;
+        markLocalMutation(txId);
         const isPositive = diff > 0;
         const absDiff = Math.abs(diff);
 
@@ -1418,7 +1973,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
   const deleteUser=async(username:string)=>{const user=registeredUsers.find(u=>u.username===username);if(!user)return {success:false,error:'User tidak ditemukan.'};const result=await adminDeleteAccount(user.id);if(result.success)setRegisteredUsers(prev=>prev.filter(u=>u.id!==user.id));return result;};
 
-  const addMemberToHousehold=async(householdId:string,displayName:string,username:string,role:UserRole='MEMBER')=>{const user=registeredUsers.find(u=>u.username===username.trim().toLowerCase());if(!user)return {success:false,error:'Akun belum terdaftar. Buat akun atau gunakan kode undangan.'};const mem:HouseholdMember={id:crypto.randomUUID(),householdId,userId:user.id,displayName:displayName.trim()||user.displayName,role,joinedAt:new Date().toISOString()};const {error}=await getReceiptAuthClient().from('household_members').insert({id:mem.id,household_id:mem.householdId,user_id:mem.userId,display_name:mem.displayName,role:mem.role,joined_at:mem.joinedAt});if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:[...prev.members,mem]}));return {success:true};};
+  const addMemberToHousehold=async(householdId:string,displayName:string,username:string,role:UserRole='MEMBER')=>{const user=registeredUsers.find(u=>u.username===username.trim().toLowerCase());if(!user)return {success:false,error:'Akun belum terdaftar. Buat akun atau gunakan kode undangan.'};const mem:HouseholdMember={id:crypto.randomUUID(),householdId,userId:user.id,displayName:displayName.trim()||user.displayName,role,joinedAt:new Date().toISOString()};markLocalMutation(mem.id);const {error}=await getReceiptAuthClient().from('household_members').insert({id:mem.id,household_id:mem.householdId,user_id:mem.userId,display_name:mem.displayName,role:mem.role,joined_at:mem.joinedAt});if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:[...prev.members,mem]}));return {success:true};};
   const removeMemberFromHousehold=async(id:string)=>{const {error}=await getReceiptAuthClient().from('household_members').delete().eq('id',id);if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:prev.members.filter(m=>m.id!==id)}));return {success:true};};
 
   const logoutUser = () => {
@@ -1463,7 +2018,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       sessions: (prev.sessions || initialData.sessions || []).filter(s => s.id !== sessionId)
     }));
   };
-  const inviteMember=async(displayName:string,username:string,role:UserRole,pin:string)=>{const result=await inviteAccount(displayName,username,pin,state.activeHouseholdId,role);if(!result.success)return result;const membership=await fetchUserHouseholds(state.currentUser.id);setState(prev=>({...prev,members:membership.members,households:membership.households}));return {success:true};};
+  const inviteMember=async(displayName:string,username:string,role:UserRole,pin:string)=>{const result=await inviteAccount(displayName,username,pin,state.activeHouseholdId,role);if(!result.success)return result;const membership=await fetchUserHouseholds(state.currentUser.id);membership.members.forEach(m=>markLocalMutation(m.id));setState(prev=>({...prev,members:membership.members,households:membership.households}));return {success:true};};
   const updateMember=async(id:string,updates:{displayName?:string;role?:UserRole;username?:string;pin5Digit?:string})=>{const mem=state.members.find(m=>m.id===id);if(!mem)return {success:false,error:'Anggota tidak ditemukan.'};if(updates.pin5Digit||updates.username){const account=await adminUpdateAccount(mem.userId,updates);if(!account.success)return account;}const {error}=await getReceiptAuthClient().from('household_members').update({display_name:updates.displayName||mem.displayName,role:updates.role||mem.role}).eq('id',id);if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:prev.members.map(m=>m.id===id?{...m,displayName:updates.displayName||m.displayName,role:updates.role||m.role}:m)}));return {success:true};};
   const removeMember=removeMemberFromHousehold;
 
@@ -1563,6 +2118,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if(!authReady||!state.isAuthenticated||!state.activeHouseholdId)return;
     const householdId=state.activeHouseholdId,userId=state.currentUser.id,admin=state.currentUser.role==='ADMIN';
     let disposed=false,refreshing=false,refreshTimer:ReturnType<typeof setTimeout>|undefined;
+
+    const handleRealtimeInsert=(table:string,row:Record<string,unknown>)=>{
+      const entityId=String(row.id||'');
+      const rowHouseholdId=String(row.household_id||householdId);
+      if(!entityId||rowHouseholdId!==householdId)return;
+      if(localMutationIdsRef.current.has(entityId)||activeMutationCount.current>0)return;
+      const snap=snapshotRef.current;
+      if(!isFinancialReadyRef.current||!snap.ready||snap.householdId!==householdId)return;
+
+      if(table==='transactions'){
+        if(snap.txIds.has(entityId))return;
+        snap.txIds.add(entityId);
+        const notif=buildTransactionNotification({
+          id:entityId,
+          householdId:rowHouseholdId,
+          type:row.type?String(row.type):undefined,
+          amount:Number(row.amount||0),
+          description:row.description?String(row.description):undefined,
+          categoryName:row.category_name?String(row.category_name):undefined,
+          addedBy:row.added_by?String(row.added_by):undefined,
+          status:row.status?String(row.status):undefined
+        });
+        if(notif)pushHouseholdNotification(`tx:${entityId}`,notif);
+      }else if(table==='wallets'){
+        if(snap.walletIds.has(entityId))return;
+        snap.walletIds.add(entityId);
+        pushHouseholdNotification(`wallet:${entityId}`,buildWalletNotification({id:entityId,householdId:rowHouseholdId,name:row.name?String(row.name):undefined}));
+      }else if(table==='debts'){
+        if(snap.debtIds.has(entityId))return;
+        snap.debtIds.add(entityId);
+        pushHouseholdNotification(`debt:${entityId}`,buildDebtNotification({id:entityId,householdId:rowHouseholdId,type:row.type?String(row.type):undefined,personOrEntity:row.person_or_entity?String(row.person_or_entity):undefined,amount:Number(row.amount||0)}));
+      }else if(table==='savings_goals'){
+        if(snap.goalIds.has(entityId))return;
+        snap.goalIds.add(entityId);
+        pushHouseholdNotification(`goal:${entityId}`,buildSavingsGoalNotification({id:entityId,householdId:rowHouseholdId,title:row.title?String(row.title):undefined,targetAmount:Number(row.target_amount||0)}));
+      }else if(table==='category_budgets'){
+        if(snap.budgetIds.has(entityId))return;
+        snap.budgetIds.add(entityId);
+        pushHouseholdNotification(`budget:${entityId}`,buildCategoryBudgetNotification({id:entityId,householdId:rowHouseholdId,categoryName:row.category_name?String(row.category_name):undefined,monthlyLimit:Number(row.monthly_limit||0)}));
+      }else if(table==='family_challenges'){
+        if(snap.challengeIds.has(entityId))return;
+        snap.challengeIds.add(entityId);
+        pushHouseholdNotification(`challenge:${entityId}`,buildFamilyChallengeNotification({id:entityId,householdId:rowHouseholdId,title:row.title?String(row.title):undefined,createdBy:row.created_by?String(row.created_by):undefined}));
+      }else if(table==='household_members'){
+        if(snap.memberIds.has(entityId))return;
+        snap.memberIds.add(entityId);
+        pushHouseholdNotification(`member:${entityId}`,buildMemberNotification({id:entityId,householdId:rowHouseholdId,displayName:row.display_name?String(row.display_name):undefined}));
+      }else if(table==='categories'){
+        if(snap.catIds.has(entityId))return;
+        snap.catIds.add(entityId);
+        pushHouseholdNotification(`cat:${entityId}`,buildCategoryNotification({id:entityId,householdId:rowHouseholdId,name:row.name?String(row.name):undefined}));
+      }
+    };
+
     const refresh=async()=>{
       if(disposed||refreshing||activeMutationCount.current||document.visibilityState==='hidden')return;
       refreshing=true;const version=financialVersion.current;
@@ -1570,18 +2179,92 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const pulled=await pullAllDataFromSupabase(DEFAULT_SUPABASE_CONFIG,admin?undefined:householdId);
         if(disposed||activeMutationCount.current||version!==financialVersion.current)return;
         if(!pulled.success||!pulled.data){setSupabaseSyncStatus({status:'error',error:pulled.error||'Pembaruan household belum tersedia.'});return;}
-        setState(prev=>prev.currentUser.id!==userId||prev.activeHouseholdId!==householdId?prev:({...prev,...pulled.data,currentUser:prev.currentUser,activeHouseholdId:householdId,ledgerEntries:reconstructMissingLedgers(pulled.data!.transactions||[],pulled.data!.ledgerEntries||[],householdId,pulled.data!.wallets||[])}));
+
+        const data=pulled.data;
+        const snap=snapshotRef.current;
+        if(isFinancialReadyRef.current&&snap.ready&&snap.householdId===householdId){
+          const newTxs=(data.transactions||[]).filter(
+            (tx)=>tx.householdId===householdId&&tx.status!=='VOIDED'&&tx.type!=='opening_balance'&&!isDebtOpeningTransaction(tx)&&!snap.txIds.has(tx.id)&&!localMutationIdsRef.current.has(tx.id)&&!notifiedKeysRef.current.has(`tx:${tx.id}`)
+          );
+          if(newTxs.length>3){
+            for(const tx of newTxs)notifiedKeysRef.current.add(`tx:${tx.id}`);
+            pushHouseholdNotification(`tx-batch:${newTxs.map((t)=>t.id).sort().join(',')}`,{
+              householdId,
+              kind:'transaction_expense',
+              title:'Pembaruan Household',
+              message:`${newTxs.length} transaksi baru ditambahkan ke household`,
+              targetTab:'transaksi'
+            });
+          }else{
+            for(const tx of newTxs){
+              const notif=buildTransactionNotification(tx);
+              if(notif)pushHouseholdNotification(`tx:${tx.id}`,notif);
+            }
+          }
+
+          for(const w of data.wallets||[]){
+            if(w.householdId===householdId&&!snap.walletIds.has(w.id)&&!localMutationIdsRef.current.has(w.id)){
+              pushHouseholdNotification(`wallet:${w.id}`,buildWalletNotification(w));
+            }
+          }
+          for(const d of data.debts||[]){
+            if(d.householdId===householdId&&!snap.debtIds.has(d.id)&&!localMutationIdsRef.current.has(d.id)){
+              pushHouseholdNotification(`debt:${d.id}`,buildDebtNotification(d));
+            }
+          }
+          for(const g of data.savingsGoals||[]){
+            if(g.householdId===householdId&&!snap.goalIds.has(g.id)&&!localMutationIdsRef.current.has(g.id)){
+              pushHouseholdNotification(`goal:${g.id}`,buildSavingsGoalNotification(g));
+            }
+          }
+          for(const b of data.categoryBudgets||[]){
+            if(b.householdId===householdId&&!snap.budgetIds.has(b.id)&&!localMutationIdsRef.current.has(b.id)){
+              pushHouseholdNotification(`budget:${b.id}`,buildCategoryBudgetNotification(b));
+            }
+          }
+          for(const ch of data.familyChallenges||[]){
+            if(ch.householdId===householdId&&!snap.challengeIds.has(ch.id)&&!localMutationIdsRef.current.has(ch.id)){
+              pushHouseholdNotification(`challenge:${ch.id}`,buildFamilyChallengeNotification(ch));
+            }
+          }
+          for(const m of data.members||[]){
+            if(m.householdId===householdId&&!snap.memberIds.has(m.id)&&!localMutationIdsRef.current.has(m.id)){
+              pushHouseholdNotification(`member:${m.id}`,buildMemberNotification(m));
+            }
+          }
+        }
+
+        if(isFinancialReadyRef.current&&snap.householdId===householdId){
+          for(const t of data.transactions||[])if(t.householdId===householdId)snap.txIds.add(t.id);
+          for(const w of data.wallets||[])if(w.householdId===householdId)snap.walletIds.add(w.id);
+          for(const d of data.debts||[])if(d.householdId===householdId)snap.debtIds.add(d.id);
+          for(const g of data.savingsGoals||[])if(g.householdId===householdId)snap.goalIds.add(g.id);
+          for(const b of data.categoryBudgets||[])if(b.householdId===householdId)snap.budgetIds.add(b.id);
+          for(const ch of data.familyChallenges||[])if(ch.householdId===householdId)snap.challengeIds.add(ch.id);
+          for(const m of data.members||[])if(m.householdId===householdId)snap.memberIds.add(m.id);
+          for(const c of data.categories||[])if(c.householdId===householdId)snap.catIds.add(c.id);
+          snap.ready=true;
+        }
+
+        setState(prev=>prev.currentUser.id!==userId||prev.activeHouseholdId!==householdId?prev:({...prev,...data,currentUser:prev.currentUser,activeHouseholdId:householdId,ledgerEntries:reconstructMissingLedgers(data.transactions||[],data.ledgerEntries||[],householdId,data.wallets||[])}));
         setSupabaseSyncStatus({status:'synced',lastSynced:new Date().toLocaleTimeString('id-ID')});
       }catch{if(!disposed)setSupabaseSyncStatus({status:'error',error:'Belum dapat memperbarui household. Periksa koneksi Anda.'});}finally{refreshing=false;}
     };
     const schedule=()=>{if(refreshTimer)clearTimeout(refreshTimer);refreshTimer=setTimeout(refresh,400);};
     const client=getReceiptAuthClient();let channel=client.channel('takara-household-'+householdId+'-'+userId);
-    for(const table of ['transactions','ledger_entries','wallets','categories','debts','household_members','household_labels'])channel=channel.on('postgres_changes',{event:'*',schema:'public',table,...(!admin?{filter:'household_id=eq.'+householdId}:{})},schedule);
+    for(const table of ['transactions','ledger_entries','wallets','categories','debts','household_members','household_labels','savings_goals','category_budgets','family_challenges'] as const){
+      channel=channel.on('postgres_changes',{event:'*',schema:'public',table,...(!admin?{filter:'household_id=eq.'+householdId}:{})},(payload)=>{
+        schedule();
+        if(disposed||table==='ledger_entries'||table==='household_labels'||activeMutationCount.current>0||payload.eventType!=='INSERT')return;
+        const row=payload.new as Record<string,unknown>|undefined;
+        if(row)handleRealtimeInsert(table,row);
+      });
+    }
     channel.subscribe();
-    const interval=setInterval(refresh,30000);
+    const interval=setInterval(refresh,15000);
     window.addEventListener('focus',schedule);document.addEventListener('visibilitychange',schedule);
     return()=>{disposed=true;if(refreshTimer)clearTimeout(refreshTimer);clearInterval(interval);window.removeEventListener('focus',schedule);document.removeEventListener('visibilitychange',schedule);void client.removeChannel(channel);};
-  },[authReady,state.isAuthenticated,state.activeHouseholdId,state.currentUser.id,state.currentUser.role]);
+  },[authReady,state.isAuthenticated,state.activeHouseholdId,state.currentUser.id,state.currentUser.role,pushHouseholdNotification]);
 
   return (
     <AppContext.Provider
@@ -1614,6 +2297,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         payDebtInstallment:(...args)=>duringWrite(()=>payDebtInstallment(...args)),
         updateDebt:(...args)=>duringWrite(()=>updateDebt(...args)),
         deleteDebt:(...args)=>duringWrite(()=>deleteDebt(...args)),
+        savingsGoals,
+        addSavingsGoal:(...args)=>duringWrite(()=>addSavingsGoal(...args)),
+        updateSavingsGoal:(...args)=>duringWrite(()=>updateSavingsGoal(...args)),
+        contributeToSavingsGoal:(...args)=>duringWrite(()=>contributeToSavingsGoal(...args)),
+        deleteSavingsGoal:(...args)=>duringWrite(()=>deleteSavingsGoal(...args)),
+        categoryBudgets,
+        upsertCategoryBudget:(...args)=>duringWrite(()=>upsertCategoryBudget(...args)),
+        deleteCategoryBudget:(...args)=>duringWrite(()=>deleteCategoryBudget(...args)),
+        familyChallenges,
+        addFamilyChallenge:(...args)=>duringWrite(()=>addFamilyChallenge(...args)),
+        deleteFamilyChallenge:(...args)=>duringWrite(()=>deleteFamilyChallenge(...args)),
         addWallet:(...args)=>duringWrite(()=>addWallet(...args)),
         updateWallet:(...args)=>duringWrite(()=>updateWallet(...args)),
         deleteWallet:(...args)=>duringWrite(()=>deleteWallet(...args)),
@@ -1653,7 +2347,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addMemberToHousehold:(...args)=>duringWrite(()=>addMemberToHousehold(...args)),
         removeMemberFromHousehold:(...args)=>duringWrite(()=>removeMemberFromHousehold(...args)),
         allHouseholds,
-        allMembers
+        allMembers,
+        notifications,
+        activeToasts: householdToasts,
+        unreadNotificationCount,
+        dismissToast,
+        markNotificationRead,
+        markAllNotificationsRead,
+        clearNotifications
       }}
     >
       {children}
