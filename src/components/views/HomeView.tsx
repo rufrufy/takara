@@ -8,6 +8,7 @@ import { CategoryIcon, categoryAppearance } from '../CategoryIcon';
 import { MagicInputBar } from '../MagicInputBar';
 import { FamilyGamificationModal } from '../FamilyGamificationModal';
 import { WalletStack } from '../WalletStack';
+import { GoalStack } from '../GoalStack';
 import {
   Eye,
   EyeOff,
@@ -29,6 +30,7 @@ interface HomeViewProps {
   onOpenAIScan?: () => void;
   onOpenImport: () => void;
   onChangeTab: (tab: ActiveTab) => void;
+  onOpenProfileTab?: (subTab: 'dompet' | 'impian' | 'utang' | 'pemasukan') => void;
   onOpenTransaction: (id: string) => void;
 }
 
@@ -37,6 +39,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenAIScan,
   onOpenImport,
   onChangeTab,
+  onOpenProfileTab,
   onOpenTransaction
 }) => {
   const {
@@ -179,48 +182,46 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </section>
 
-      <WalletStack
-        variant="home"
-        wallets={wallets}
-        showBalance={showBalance}
-        onManageWallets={() => onChangeTab('profil-keuangan')}
-      />
+      <div className="home-decks-row">
+        <WalletStack
+          variant="home"
+          compact
+          wallets={wallets}
+          showBalance={showBalance}
+          onManageWallets={() =>
+            onOpenProfileTab ? onOpenProfileTab('dompet') : onChangeTab('profil-keuangan')
+          }
+        />
+        <GoalStack
+          compact
+          goals={savingsGoals}
+          showBalance={showBalance}
+          onManageGoals={() =>
+            onOpenProfileTab ? onOpenProfileTab('impian') : onChangeTab('profil-keuangan')
+          }
+        />
+      </div>
 
       {/* Magic Natural Language & Voice Quick Input */}
       <div className="mt-2 mb-4">
         <MagicInputBar mode="standalone" />
       </div>
 
-      {/* Smart Budget Alert or Savings Goal Teaser Pills */}
-      {(budgetWarnings.length > 0 || savingsGoals.length > 0) && (
+      {/* Smart Budget Alert Pill */}
+      {budgetWarnings.length > 0 && budgetWarnings[0] && (
         <div className="flex flex-wrap gap-2 mb-4">
-          {budgetWarnings[0] && (
-            <button
-              type="button"
-              onClick={() => onChangeTab('laporan')}
-              className={`nb-chip px-3 py-1.5 text-xs inline-flex items-center gap-1.5 ${
-                budgetWarnings[0].pct >= 100 ? 'bg-[#FFE0E5] text-[#911D35]' : 'bg-[#FEF3C7] text-[#073B4C]'
-              }`}
-            >
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                Pagu {budgetWarnings[0].budget.categoryName}: {budgetWarnings[0].pct}% terpakai →
-              </span>
-            </button>
-          )}
-          {savingsGoals[0] && (
-            <button
-              type="button"
-              onClick={() => onChangeTab('profil-keuangan')}
-              className="nb-chip bg-[#DDD6FE] text-[#073B4C] px-3 py-1.5 text-xs inline-flex items-center gap-1.5"
-            >
-              <span>{savingsGoals[0].icon || '🎯'}</span>
-              <span>
-                Impian {savingsGoals[0].title}:{' '}
-                {Math.min(100, Math.round((savingsGoals[0].currentAmount / Math.max(1, savingsGoals[0].targetAmount)) * 100))}%
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => onChangeTab('laporan')}
+            className={`nb-chip px-3 py-1.5 text-xs inline-flex items-center gap-1.5 ${
+              budgetWarnings[0].pct >= 100 ? 'bg-[#FFE0E5] text-[#911D35]' : 'bg-[#FEF3C7] text-[#073B4C]'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              Pagu {budgetWarnings[0].budget.categoryName}: {budgetWarnings[0].pct}% terpakai →
+            </span>
+          </button>
         </div>
       )}
 

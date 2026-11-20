@@ -157,25 +157,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
           <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 font-extrabold text-lg flex items-center justify-center border border-teal-200">
             {state.currentUser.displayName.slice(0, 2).toUpperCase()}
           </div>
-          <div>
-            <h2 className="font-bold text-slate-900 text-sm leading-tight">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <h2 className="font-extrabold text-[#073B4C] text-sm leading-snug truncate">
               {state.currentUser.displayName}
             </h2>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-xs text-slate-500 font-mono">@{state.currentUser.username}</span>
-              <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded-full font-bold border border-teal-200">
+            <p className="text-xs text-[#365664] font-bold truncate">
+              @{state.currentUser.username}
+            </p>
+            <div className="settings-profile-badges flex flex-wrap items-center gap-2 pt-0.5">
+              <span className="settings-role-badge">
                 {state.currentUser.username === 'admin' || state.currentUser.role === 'ADMIN'
                   ? 'Superadmin'
                   : state.currentUser.role === 'OWNER'
-                  ? 'Kepala keluarga'
+                  ? 'Kepala Keluarga'
                   : state.currentUser.role === 'MEMBER'
                   ? 'Anggota Keluarga'
                   : 'Pengguna'}
               </span>
+              <span className="settings-household-badge">
+                🏡 {activeHousehold.name}
+              </span>
             </div>
-            <span className="inline-block mt-1.5 text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-full border border-slate-200">
-              {activeHousehold.name}
-            </span>
           </div>
         </div>
         <button

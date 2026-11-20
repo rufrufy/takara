@@ -34,6 +34,7 @@ interface HomeWalletStackProps {
   wallets: Wallet[];
   showBalance: boolean;
   onManageWallets: () => void;
+  compact?: boolean;
 }
 
 interface ProfileWalletStackProps {
@@ -58,7 +59,8 @@ export const WalletStack: React.FC<WalletStackProps> = (props) => {
 const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
   wallets,
   showBalance,
-  onManageWallets
+  onManageWallets,
+  compact = false
 }) => {
   const sortedWallets = useMemo(
     () => [...wallets].sort((a, b) => b.balance - a.balance || a.name.localeCompare(b.name, 'id')),
@@ -87,6 +89,52 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
   };
 
   if (count === 0) {
+    if (compact) {
+      return (
+        <section className="wallet-deck-wrapper is-compact" aria-label="Kartu dompet">
+          <div className="wallet-deck-stage">
+            <div className="wallet-deck-card" data-active="true" onClick={onManageWallets} role="button" tabIndex={0}>
+              <div
+                style={{ backgroundColor: '#06D6A0', color: '#073B4C' }}
+                className="wallet-deck-card-header"
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="w-7 h-7 rounded-lg bg-white border-2 border-[#073B4C] shadow-[1.5px_1.5px_0_#073B4C] flex items-center justify-center shrink-0">
+                    <WalletIcon className="w-3.5 h-3.5 text-[#073B4C]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="deck-title truncate">Dompet</p>
+                    <p className="deck-sub truncate">Belum ada</p>
+                  </div>
+                </div>
+              </div>
+              <div className="wallet-deck-card-body">
+                <div className="flex flex-col justify-between h-full gap-2">
+                  <div>
+                    <span className="deck-sub block text-[#365664]">Kosong</span>
+                    <strong className="deck-amount block text-[#073B4C] mt-0.5">Tambah</strong>
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onManageWallets();
+                      }}
+                      className="deck-manage-btn"
+                    >
+                      <Plus className="w-3 h-3 stroke-[2.8]" />
+                      <span>Buat</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
     return (
       <div className="my-3">
         <button
@@ -109,13 +157,18 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
     );
   }
 
-  const visibleLayers = Math.min(count, 4);
+  const maxLayers = compact ? 3 : 4;
+  const visibleLayers = Math.min(count, maxLayers);
+  const layerStepY = compact ? 7 : 11;
 
   return (
-    <section className="wallet-deck-wrapper" aria-label="Tumpukan kartu dompet">
+    <section
+      className={`wallet-deck-wrapper ${compact ? 'is-compact' : ''}`}
+      aria-label="Tumpukan kartu dompet"
+    >
       <div
         className="wallet-deck-stage"
-        style={{ paddingBottom: `${Math.max(0, visibleLayers - 1) * 11}px` }}
+        style={{ paddingBottom: `${Math.max(0, visibleLayers - 1) * layerStepY}px` }}
         onTouchStart={(e) => {
           touchStartX.current = e.touches[0]?.clientX ?? null;
         }}
@@ -124,22 +177,39 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
           const endX = e.changedTouches[0]?.clientX ?? touchStartX.current;
           const deltaX = endX - touchStartX.current;
           touchStartX.current = null;
-          if (deltaX < -38) triggerShuffle('next');
-          else if (deltaX > 38) triggerShuffle('prev');
+          if (deltaX < -32) triggerShuffle('next');
+          else if (deltaX > 32) triggerShuffle('prev');
         }}
       >
         {sortedWallets.map((w, idx) => {
           const offset = (idx - safeIndex + count) % count;
-          const isHidden = offset >= 4;
+          const isHidden = offset >= maxLayers;
           const hc = resolveWalletHeaderColor(w);
           const ht = getReadableHeaderText(hc);
           const isFront = offset === 0;
 
-          const tiltDeg =
-            offset === 0 ? 0 : offset === 1 ? -1.4 : offset === 2 ? 1.5 : -0.9;
-          const translateX = offset === 0 ? 0 : offset === 1 ? 4 : offset === 2 ? -4 : 2;
-          const translateY = offset * 11;
-          const scale = Math.max(0.88, 1 - offset * 0.036);
+          const tiltDeg = compact
+            ? 0
+            : offset === 0
+            ? 0
+            : offset === 1
+            ? -1.4
+            : offset === 2
+            ? 1.5
+            : -0.9;
+          const translateX = compact
+            ? 0
+            : offset === 0
+            ? 0
+            : offset === 1
+            ? 4
+            : offset === 2
+            ? -4
+            : 2;
+          const translateY = offset * layerStepY;
+          const scale = compact
+            ? Math.max(0.9, 1 - offset * 0.04)
+            : Math.max(0.88, 1 - offset * 0.036);
 
           return (
             <div
@@ -173,8 +243,8 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
                 }
               }}
               style={{
-                zIndex: isHidden ? 1 : 40 - offset,
-                opacity: isHidden ? 0 : Math.max(0.75, 1 - offset * 0.07),
+                zIndex: isHidden ? 1 : 30 - offset,
+                opacity: isHidden ? 0 : Math.max(0.78, 1 - offset * 0.08),
                 pointerEvents: isFront ? 'auto' : 'none',
                 transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale}) rotate(${tiltDeg}deg)`
               }}
@@ -191,53 +261,103 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
                 style={{ backgroundColor: hc, color: ht }}
                 className="wallet-deck-card-header"
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
-                    {renderWalletIcon(w.type)}
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div
+                    className={`${
+                      compact ? 'w-7 h-7 rounded-lg' : 'w-8 h-8 rounded-xl'
+                    } bg-white border-2 border-[#073B4C] shadow-[1.5px_1.5px_0_#073B4C] flex items-center justify-center shrink-0`}
+                  >
+                    {renderWalletIcon(w.type, compact ? 'w-3.5 h-3.5' : 'w-4 h-4')}
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-extrabold leading-tight truncate" style={{ color: ht }}>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`${compact ? 'deck-title' : 'text-sm font-extrabold leading-tight'} truncate`}
+                      style={{ color: ht }}
+                    >
                       {w.name}
                     </p>
-                    <p className="text-[11px] font-bold opacity-85 leading-none mt-0.5" style={{ color: ht }}>
+                    <p
+                      className={`${compact ? 'deck-sub' : 'wallet-sub-label text-[11px] font-bold leading-none mt-0.5'} opacity-85 truncate`}
+                      style={{ color: ht }}
+                    >
                       {getWalletTypeLabel(w.type)}
                     </p>
                   </div>
                 </div>
 
-                <span className="text-[11px] font-extrabold bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] px-2.5 py-0.5 rounded-full shrink-0">
+                <span
+                  className={`${
+                    compact
+                      ? 'deck-count'
+                      : 'text-[11px] font-extrabold px-2.5 py-0.5'
+                  } bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] rounded-full shrink-0`}
+                >
                   {idx + 1}/{count}
                 </span>
               </div>
 
               {/* Card Body */}
               <div className="wallet-deck-card-body">
-                <div className="flex items-end justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-[#365664] block">
-                      Saldo dompet
-                    </span>
-                    <strong
-                      className={`text-xl sm:text-2xl font-extrabold tabular-nums tracking-tight block mt-0.5 truncate ${
-                        w.balance < 0 ? 'text-red-600' : 'text-[#073B4C]'
-                      }`}
-                    >
-                      {showBalance ? formatIDR(w.balance) : 'Rp ••••••'}
-                    </strong>
-                  </div>
+                {compact ? (
+                  <div className="flex flex-col justify-between h-full gap-1.5">
+                    <div>
+                      <span className="deck-sub block uppercase tracking-wide text-[#365664]">
+                        Saldo dompet
+                      </span>
+                      <strong
+                        className={`deck-amount block tabular-nums truncate mt-0.5 ${
+                          w.balance < 0 ? 'text-red-600' : 'text-[#073B4C]'
+                        }`}
+                      >
+                        {showBalance ? formatIDR(w.balance) : 'Rp ••••'}
+                      </strong>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onManageWallets();
-                    }}
-                    className="nb-chip bg-[#FEF3C7] hover:bg-[#FFD166] text-[#073B4C] px-3 py-1.5 text-xs inline-flex items-center gap-1 shrink-0 transition-colors"
-                  >
-                    <span>Kelola</span>
-                    <ArrowRight className="w-3.5 h-3.5 stroke-[2.6]" />
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                      <span className="deck-sub text-[#365664] truncate">
+                        {count > 1 ? 'Ketuk ↻' : 'Aktif'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onManageWallets();
+                        }}
+                        className="deck-manage-btn shrink-0"
+                      >
+                        <span>Kelola</span>
+                        <ArrowRight className="w-3 h-3 stroke-[2.8]" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-[#365664] block">
+                        Saldo dompet
+                      </span>
+                      <strong
+                        className={`text-xl sm:text-2xl font-extrabold tabular-nums tracking-tight block mt-0.5 truncate ${
+                          w.balance < 0 ? 'text-red-600' : 'text-[#073B4C]'
+                        }`}
+                      >
+                        {showBalance ? formatIDR(w.balance) : 'Rp ••••••'}
+                      </strong>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onManageWallets();
+                      }}
+                      className="nb-chip bg-[#FEF3C7] hover:bg-[#FFD166] text-[#073B4C] px-3 py-1.5 text-xs inline-flex items-center gap-1 shrink-0 transition-colors"
+                    >
+                      <span>Kelola</span>
+                      <ArrowRight className="w-3.5 h-3.5 stroke-[2.6]" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -247,17 +367,17 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
       {/* Deck Controls & Indicator Dots */}
       <div className="wallet-deck-controls">
         {count > 1 ? (
-          <div className="flex items-center gap-2 min-w-0">
+          <div className={`flex items-center ${compact ? 'justify-between gap-1.5 w-full' : 'gap-2'} min-w-0`}>
             <button
               type="button"
               onClick={() => triggerShuffle('prev')}
               aria-label="Dompet sebelumnya"
               className="wallet-deck-nav-btn"
             >
-              <ChevronLeft className="w-4 h-4 stroke-[2.8]" />
+              <ChevronLeft className={compact ? 'w-3.5 h-3.5 stroke-[2.8]' : 'w-4 h-4 stroke-[2.8]'} />
             </button>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            <div className={`flex items-center ${compact ? 'gap-1' : 'gap-1.5'} overflow-x-auto no-scrollbar py-0.5`}>
               {sortedWallets.map((w, idx) => {
                 const isSelected = idx === safeIndex;
                 const hc = resolveWalletHeaderColor(w);
@@ -269,8 +389,16 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
                     aria-label={`Pilih dompet ${w.name}`}
                     title={w.name}
                     style={{ backgroundColor: isSelected ? hc : '#FFFFFF' }}
-                    className={`h-2.5 rounded-full border-[1.5px] border-[#073B4C] transition-all shrink-0 ${
-                      isSelected ? 'w-7 shadow-[1.5px_1.5px_0_#073B4C]' : 'w-2.5 opacity-60 hover:opacity-100'
+                    className={`${
+                      compact ? 'h-2' : 'h-2.5'
+                    } rounded-full border border-[#073B4C] transition-all shrink-0 ${
+                      isSelected
+                        ? compact
+                          ? 'w-5'
+                          : 'w-7 shadow-[1.5px_1.5px_0_#073B4C]'
+                        : compact
+                        ? 'w-2 opacity-65'
+                        : 'w-2.5 opacity-60 hover:opacity-100'
                     }`}
                   />
                 );
@@ -283,21 +411,25 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
               aria-label="Dompet berikutnya"
               className="wallet-deck-nav-btn"
             >
-              <ChevronRight className="w-4 h-4 stroke-[2.8]" />
+              <ChevronRight className={compact ? 'w-3.5 h-3.5 stroke-[2.8]' : 'w-4 h-4 stroke-[2.8]'} />
             </button>
           </div>
         ) : (
-          <span className="text-[11px] font-bold text-[#365664]">1 dompet aktif</span>
+          <span className={compact ? 'deck-sub text-[#365664] truncate' : 'text-[11px] font-bold text-[#365664]'}>
+            1 dompet aktif
+          </span>
         )}
 
-        <button
-          type="button"
-          onClick={onManageWallets}
-          className="text-xs font-extrabold text-[#073B4C] hover:underline inline-flex items-center gap-1 shrink-0"
-        >
-          <WalletIcon className="w-3.5 h-3.5" />
-          <span>{count > 1 ? `Semua Dompet (${count})` : 'Detail Dompet'}</span>
-        </button>
+        {!compact && (
+          <button
+            type="button"
+            onClick={onManageWallets}
+            className="text-xs font-extrabold text-[#073B4C] hover:underline inline-flex items-center gap-1 shrink-0"
+          >
+            <WalletIcon className="w-3.5 h-3.5" />
+            <span>{count > 1 ? `Semua Dompet (${count})` : 'Detail Dompet'}</span>
+          </button>
+        )}
       </div>
     </section>
   );
@@ -389,7 +521,13 @@ const ProfileWalletStack: React.FC<ProfileWalletStackProps> = ({
         {wallets.map((w, idx) => {
           const isSelected = selectedWalletId === w.id;
           const prevWasSelected = idx > 0 && wallets[idx - 1]?.id === selectedWalletId;
-          const isCollapsed =
+          const isLast = idx === wallets.length - 1;
+          const isHeaderCollapsed =
+            layoutMode === 'stack' &&
+            !isExpandedAll &&
+            !isSelected &&
+            !isLast;
+          const isTucked =
             layoutMode === 'stack' &&
             idx > 0 &&
             !isExpandedAll &&
@@ -421,43 +559,42 @@ const ProfileWalletStack: React.FC<ProfileWalletStackProps> = ({
               }
               className={`wallet-account-card rounded-3xl border-[2.5px] border-[#073B4C] cursor-pointer overflow-hidden bg-white ${
                 layoutMode === 'stack' ? 'wallet-stack-item' : ''
-              } ${isCollapsed ? 'is-collapsed' : ''} ${isSelected ? 'is-selected' : ''}`}
+              } ${isHeaderCollapsed ? 'is-header-collapsed' : ''} ${
+                isTucked ? 'is-tucked' : ''
+              } ${isSelected ? 'is-selected' : ''}`}
             >
               {/* Colored Card Header */}
               <div
                 style={{ backgroundColor: headerColor, color: headerText }}
-                className="px-4 py-3.5 border-b-[2.5px] border-[#073B4C] flex items-start justify-between gap-2"
+                className="wallet-stack-header px-3.5 sm:px-4 py-3 border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2"
               >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-10 h-10 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
-                    {renderWalletIcon(w.type, 'w-5 h-5')}
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
+                    {renderWalletIcon(w.type, 'w-4 h-4 sm:w-5 sm:h-5')}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h2 className="font-extrabold text-sm leading-tight break-words" style={{ color: headerText }}>
+                    <h2 className="font-extrabold text-sm leading-tight truncate" style={{ color: headerText }}>
                       {w.name}
                     </h2>
-                    <span className="text-[11px] font-bold opacity-90 block mt-0.5" style={{ color: headerText }}>
+                    <span className="wallet-sub-label text-[11px] font-bold opacity-90 block mt-0.5 truncate" style={{ color: headerText }}>
                       {getWalletTypeLabel(w.type)}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                <div className="flex items-center gap-1.5 shrink-0 justify-end">
                   {layoutMode === 'stack' && (
-                    <span className="text-[11px] font-extrabold bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] px-2.5 py-0.5 rounded-full tabular-nums whitespace-nowrap">
+                    <span className="wallet-header-balance font-extrabold bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] px-2.5 py-0.5 rounded-full tabular-nums whitespace-nowrap">
                       {formatIDR(w.balance)}
                     </span>
                   )}
-                  <span className="text-[10px] font-extrabold bg-white/95 text-[#073B4C] border-[1.5px] border-[#073B4C] px-2 py-0.5 rounded-full whitespace-nowrap">
-                    {wTxs.length} mutasi
-                  </span>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditWallet(w);
                     }}
-                    className="w-7 h-7 bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] hover:bg-[#FFFBEB] rounded-full flex items-center justify-center transition-colors"
+                    className="w-7 h-7 bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] hover:bg-[#FFFBEB] rounded-full flex items-center justify-center shrink-0 transition-colors"
                     title="Edit Dompet & Warna Header"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -466,25 +603,34 @@ const ProfileWalletStack: React.FC<ProfileWalletStackProps> = ({
               </div>
 
               {/* Card Balance Body */}
-              <div className="p-4 bg-white">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-500">Saldo Tersedia</span>
-                  <span
-                    className={`text-lg font-extrabold tabular-nums break-all ${
-                      w.balance < 0 ? 'text-red-600' : 'text-[#073B4C]'
-                    }`}
-                  >
-                    {formatIDR(w.balance)}
-                  </span>
-                </div>
+              <div className="wallet-stack-body-wrap">
+                <div className="wallet-stack-body-inner">
+                  <div className="p-4 bg-white">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-bold text-slate-500">Saldo Tersedia</span>
+                        <span className="wallet-mutasi-chip font-extrabold bg-[#FFFBEB] text-[#073B4C] border-[1.5px] border-[#073B4C] px-2 py-0.5 rounded-full whitespace-nowrap">
+                          {wTxs.length} mutasi
+                        </span>
+                      </div>
+                      <span
+                        className={`text-lg font-extrabold tabular-nums break-all ${
+                          w.balance < 0 ? 'text-red-600' : 'text-[#073B4C]'
+                        }`}
+                      >
+                        {formatIDR(w.balance)}
+                      </span>
+                    </div>
 
-                {isSelected && (
-                  <div className="mt-2 pt-2 border-t border-dashed border-[#073B4C]/20 text-right">
-                    <span className="text-[11px] text-teal-800 font-extrabold">
-                      Melihat mutasi dompet ini ▼
-                    </span>
+                    {isSelected && (
+                      <div className="mt-2 pt-2 border-t border-dashed border-[#073B4C]/20 text-right">
+                        <span className="text-[11px] text-teal-800 font-extrabold">
+                          Melihat mutasi dompet ini ▼
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           );

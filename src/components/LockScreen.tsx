@@ -21,7 +21,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   onBackToLanding,
   initialTab = 'login'
 }) => {
-  const { loginUser, registerUser, registeredUsers } = useApp();
+  const { loginUser, registerUser } = useApp();
 
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'admin'>(initialTab);
 
@@ -39,7 +39,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const pinInputRef = useRef<HTMLInputElement>(null);
 
   // Sync tab change
   useEffect(() => {
@@ -63,10 +62,12 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           e.preventDefault();
           if (activeTab === 'login') {
             const targetUser = username.trim();
-            if (targetUser && code.length === 5) {
+            if (!targetUser) {
+              setErrorMsg('Username wajib diisi terlebih dahulu.');
+            } else if (code.length === 5) {
               handleExecuteLogin(targetUser, code);
             } else {
-              pinInputRef.current?.focus();
+              (activeEl as HTMLElement)?.blur();
             }
           } else if (activeTab === 'register') {
             handleExecuteRegister();
@@ -90,7 +91,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           e.preventDefault();
           const targetUser = activeTab === 'admin' ? 'admin' : username.trim();
           if (!targetUser) {
-            setErrorMsg('Silakan pilih akun atau ketik username terlebih dahulu.');
+            setErrorMsg('Username atau PIN salah. Masukkan username terlebih dahulu.');
+            setCode('');
             return;
           }
           handleExecuteLogin(targetUser, code.trim());
@@ -103,6 +105,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   }, [code, username, activeTab, isLoading, regFullName, regUsername, regPin, regConfirmPin]);
 
   const handleKeyPress = (digit: string) => {
+    if (isLoading || loginInFlight.current) return;
     if (code.length < 5) {
       const nextCode = code + digit;
       setCode(nextCode);
@@ -110,9 +113,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
       // Auto submit on 5 digits
       if (nextCode.length === 5) {
-        const targetUser = activeTab === 'admin' ? 'admin' : (username.trim() || 'maruf');
-        if (!username && targetUser === 'maruf') {
-          setUsername('maruf');
+        if (activeTab === 'admin') {
+          handleExecuteLogin('admin', nextCode);
+          return;
+        }
+        const targetUser = username.trim();
+        if (!targetUser) {
+          setErrorMsg('Username atau PIN salah. Masukkan username terlebih dahulu.');
+          setCode('');
+          return;
         }
         handleExecuteLogin(targetUser, nextCode);
       }
@@ -130,14 +139,35 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   };
 
   const loginInFlight = useRef(false);
-  const handleExecuteLogin = async (userToLogin:string,codeToVerify:string) => {
-    if(loginInFlight.current)return;
-    loginInFlight.current=true;setIsLoading(true);setErrorMsg('');
+  const handleExecuteLogin = async (userToLogin: string, codeToVerify: string) => {
+    if (loginInFlight.current) return;
+    const cleanUser = userToLogin.trim().toLowerCase();
+    const cleanCode = codeToVerify.trim();
+    if (!cleanUser) {
+      setErrorMsg('Username atau PIN salah. Masukkan username terlebih dahulu.');
+      setCode('');
+      return;
+    }
+    if (!/^\d{5}$/.test(cleanCode)) {
+      setErrorMsg('PIN harus terdiri dari 5 digit angka.');
+      return;
+    }
+    loginInFlight.current = true;
+    setIsLoading(true);
+    setErrorMsg('');
     try {
-      const res=await loginUser(userToLogin,codeToVerify);
-      if(!res.success){setErrorMsg(res.error||'Login gagal.');setCode('');}
-    }catch(error){setErrorMsg(error instanceof Error?error.message:'Gagal memuat akun dan saldo.');}
-    finally{loginInFlight.current=false;setIsLoading(false);}
+      const res = await loginUser(cleanUser, cleanCode);
+      if (!res.success) {
+        setErrorMsg(res.error || 'Login gagal.');
+        setCode('');
+      }
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Gagal memuat akun dan saldo.');
+      setCode('');
+    } finally {
+      loginInFlight.current = false;
+      setIsLoading(false);
+    }
   };
 
   const handleExecuteRegister = async () => {
@@ -212,23 +242,24 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         </p>
 
         {/* 3 MODE TABS */}
-        <div className="mt-4 w-full bg-teal-950/70 p-1 rounded-2xl border border-teal-700/60 flex gap-1">
+        <div className="auth-mode-tabs mt-3.5 w-full bg-teal-950/70 p-1 rounded-2xl border border-teal-700/60 grid grid-cols-3 gap-1">
           <button
             type="button"
             onClick={() => {
               setActiveTab('login');
               setErrorMsg('');
+              setSuccessMsg('');
               setCode('');
             }}
             aria-pressed={activeTab === 'login'} data-mode="login"
-            className={`auth-mode-tab flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`auth-mode-tab py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 ${
               activeTab === 'login'
                 ? 'bg-white text-teal-950 shadow-md ring-2 ring-teal-300'
                 : 'text-teal-200 hover:text-white'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-teal-700" />
-            <span>Masuk</span>
+            <Users className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+            <span className="truncate">Masuk</span>
           </button>
 
           <button
@@ -236,17 +267,19 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             onClick={() => {
               setActiveTab('register');
               setErrorMsg('');
+              setSuccessMsg('');
               setCode('');
             }}
             aria-pressed={activeTab === 'register'} data-mode="register"
-            className={`auth-mode-tab flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`auth-mode-tab py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 ${
               activeTab === 'register'
                 ? 'bg-emerald-400 text-slate-950 shadow-md ring-2 ring-emerald-200'
                 : 'text-emerald-200/90 hover:text-white'
             }`}
           >
-            <UserPlus className="w-3.5 h-3.5 text-emerald-950" />
-            <span>Daftar Baru</span>
+            <UserPlus className="w-3.5 h-3.5 text-emerald-950 shrink-0" />
+            <span className="truncate sm:hidden">Daftar</span>
+            <span className="hidden sm:inline truncate">Daftar Baru</span>
           </button>
 
           <button
@@ -254,17 +287,18 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             onClick={() => {
               setActiveTab('admin');
               setErrorMsg('');
+              setSuccessMsg('');
               setCode('');
             }}
             aria-pressed={activeTab === 'admin'} data-mode="admin"
-            className={`auth-mode-tab flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`auth-mode-tab py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 ${
               activeTab === 'admin'
                 ? 'bg-amber-300 text-slate-950 shadow-md ring-2 ring-amber-200'
                 : 'text-amber-300/80 hover:text-amber-200'
             }`}
           >
-            <Shield className="w-3.5 h-3.5 text-amber-600" />
-            <span>Admin</span>
+            <Shield className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span className="truncate">Admin</span>
           </button>
         </div>
 
@@ -280,6 +314,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 <input
                   type="text"
                   id="username-input"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={username}
                   onChange={e => {
                     setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''));

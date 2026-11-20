@@ -25,6 +25,8 @@ import { Camera, Sparkles } from 'lucide-react';
 export const TakaraMainLayout: React.FC = () => {
   const { state, isAuthReady, isFinancialReady, supabaseSyncStatus, logoutUser } = useApp();
   const [activeTab, setActiveTab] = useState<ActiveTab>('beranda');
+  const [profileSubTab, setProfileSubTab] = useState<'dompet' | 'impian' | 'utang' | 'pemasukan'>('dompet');
+  const [profileSubTabNonce, setProfileSubTabNonce] = useState(0);
   const [selectedTransactionId,setSelectedTransactionId] = useState<string>();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddType, setQuickAddType] = useState<TransactionType>('expense');
@@ -52,6 +54,12 @@ export const TakaraMainLayout: React.FC = () => {
       setSelectedTransactionId(undefined);
     }
     setActiveTab(tab);
+  };
+
+  const handleOpenProfileSubTab = (subTab: 'dompet' | 'impian' | 'utang' | 'pemasukan') => {
+    setProfileSubTab(subTab);
+    setProfileSubTabNonce(n => n + 1);
+    setActiveTab('profil-keuangan');
   };
 
   if(!isAuthReady)return <main className="takara-app min-h-screen flex items-center justify-center p-6"><div role="status" className="nb-card max-w-xs w-full p-6 text-center space-y-2 bg-[#FFD166]"><img src="/Takara-192.png" alt="Takara" className="w-16 h-16 mx-auto mb-2 object-contain" /><h1 className="text-xl font-extrabold text-[#073B4C]">Membuka Takara</h1><p className="text-sm font-bold text-[#365664]">Memulihkan sesi akun keluarga Anda…</p></div></main>;
@@ -125,13 +133,20 @@ export const TakaraMainLayout: React.FC = () => {
               onOpenAIScan={() => setIsAIScanOpen(true)}
               onOpenImport={() => setIsImportOpen(true)}
               onChangeTab={setActiveTab}
+              onOpenProfileTab={handleOpenProfileSubTab}
               onOpenTransaction={id=>{setSelectedTransactionId(id);setActiveTab('transaksi');}}
             />
           )}
           {activeTab === 'transaksi' && (
             <TransactionsView onOpenQuickAdd={handleOpenQuickAdd} initialTransactionId={selectedTransactionId} />
           )}
-          {activeTab === 'profil-keuangan' && <FinancialProfileView onOpenQuickAdd={handleOpenQuickAdd} />}
+          {activeTab === 'profil-keuangan' && (
+            <FinancialProfileView
+              onOpenQuickAdd={handleOpenQuickAdd}
+              initialSubTab={profileSubTab}
+              initialSubTabKey={profileSubTabNonce}
+            />
+          )}
           {activeTab === 'laporan' && <ReportsView />}
           {activeTab === 'pengaturan' && (
             <SettingsView
@@ -146,7 +161,7 @@ export const TakaraMainLayout: React.FC = () => {
       {/* Mobile-First Bottom Navigation */}
       <BottomNav
         activeTab={activeTab}
-        onChangeTab={tab=>{setSelectedTransactionId(undefined);setActiveTab(tab);}}
+        onChangeTab={tab=>{setSelectedTransactionId(undefined);if(tab==='profil-keuangan'){setProfileSubTab('dompet');setProfileSubTabNonce(n=>n+1);}setActiveTab(tab);}}
       />
       {(activeTab==='beranda'||activeTab==='transaksi'||activeTab==='profil-keuangan')&&<div className="page-record-action"><button onClick={()=>handleOpenQuickAdd()} aria-label="Tambah transaksi"><Plus size={28} strokeWidth={2.8}/></button></div>}
 

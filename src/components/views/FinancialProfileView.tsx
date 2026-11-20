@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import {isBalanceReset} from '../../lib/monthlyBalance';
@@ -41,9 +41,15 @@ import {
 
 interface FinancialProfileViewProps {
   onOpenQuickAdd?: (type?: TransactionType) => void;
+  initialSubTab?: 'dompet' | 'impian' | 'utang' | 'pemasukan';
+  initialSubTabKey?: number;
 }
 
-export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOpenQuickAdd }) => {
+export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
+  onOpenQuickAdd,
+  initialSubTab,
+  initialSubTabKey
+}) => {
   const [writeBusy,setWriteBusy]=useState(false);
   const {
     wallets,
@@ -67,7 +73,15 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({ onOp
   } = useApp();
 
   // Sub-kategori tabs: 'dompet' | 'impian' | 'utang' | 'pemasukan'
-  const [subTab, setSubTab] = useState<'dompet' | 'impian' | 'utang' | 'pemasukan'>('dompet');
+  const [subTab, setSubTab] = useState<'dompet' | 'impian' | 'utang' | 'pemasukan'>(
+    initialSubTab || 'dompet'
+  );
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setSubTab(initialSubTab);
+    }
+  }, [initialSubTab, initialSubTabKey]);
 
   // Wallet detail & add modal
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);

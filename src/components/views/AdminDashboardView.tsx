@@ -63,6 +63,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     adminCreateUser,
     updateRegisteredUser,
     deleteUser,
+    refreshAdminDirectory,
     allHouseholds,
     allMembers
   } = useApp();
@@ -71,6 +72,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   const currentSupabase = state.supabaseConfig || DEFAULT_SUPABASE_CONFIG;
 
   const [activeTab, setActiveTab] = useState<'members' | 'households' | 'ai' | 'supabase' | 'sessions' | 'transactions'>('members');
+  const [userSearch, setUserSearch] = useState('');
+  const [householdSearch, setHouseholdSearch] = useState('');
+  const [isRefreshingDirectory, setIsRefreshingDirectory] = useState(false);
 
   const [databaseTransactions, setDatabaseTransactions] = useState<FinancialTransaction[]>([]);
   const [logLoading, setLogLoading] = useState(false);
@@ -113,22 +117,30 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
   const [newMemberUsername, setNewMemberUsername] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<UserRole>('OWNER');
   const [newMemberPin, setNewMemberPin] = useState('');
+  const [newMemberHouseholdId, setNewMemberHouseholdId] = useState('');
   const [memberError, setMemberError] = useState('');
   const [memberSuccess, setMemberSuccess] = useState('');
 
-  // Edit User State
+  // Edit / Delete User State
   const [editingRegisteredUser, setEditingRegisteredUser] = useState<User | null>(null);
   const [editMemberName, setEditMemberName] = useState('');
   const [editMemberUsername, setEditMemberUsername] = useState('');
   const [editMemberRole, setEditMemberRole] = useState<UserRole>('OWNER');
   const [editMemberPin, setEditMemberPin] = useState('');
   const [editMemberError, setEditMemberError] = useState('');
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+
   // Household Management State
   const [newHouseholdName, setNewHouseholdName] = useState('');
-  const [editingHousehold, setEditingHousehold] = useState<Household | null>(null);
+  const [newHouseholdOwnerId, setNewHouseholdOwnerId] = useState('');
+  const [editingHouseholdId, setEditingHouseholdId] = useState<string | null>(null);
+  const editingHousehold = editingHouseholdId
+    ? allHouseholds.find(h => h.id === editingHouseholdId) || null
+    : null;
   const [editHouseholdName, setEditHouseholdName] = useState('');
   const [householdError, setHouseholdError] = useState('');
   const [householdSuccess, setHouseholdSuccess] = useState('');
+  const [hhSelectedUserId, setHhSelectedUserId] = useState('');
   const [hhNewMemberName, setHhNewMemberName] = useState('');
   const [hhNewMemberUsername, setHhNewMemberUsername] = useState('');
   const [hhNewMemberRole, setHhNewMemberRole] = useState<UserRole>('MEMBER');
@@ -314,11 +326,28 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
     }
   };
 
+  const handleRefreshDirectory = async () => {
+    setIsRefreshingDirectory(true);
+    setMemberError('');
+    setHouseholdError('');
+    try {
+      const res = await refreshAdminDirectory();
+      if (!res.success) {
+        const msg = res.error || 'Gagal memuat ulang data pengguna dan household.';
+        setMemberError(msg);
+        setHouseholdError(msg);
+      }
+    } finally {
+      setIsRefreshingDirectory(false);
+    }
+  };
+
   const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
+    if (writeBusy) return;
     setMemberError('');
     setMemberSuccess('');
+
     if (!newMemberName.trim()) {
       setMemberError('Nama pengguna wajib diisi');
       return;
@@ -328,115 +357,255 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       setMemberError('Username minimal 3 karakter');
       return;
     }
-    if (newMemberPin.trim().length !== 5) {
+    if (!/^\d{5}$/.test(newMemberPin.trim())) {
       setMemberError('Kode PIN harus tepat 5 digit angka');
       return;
     }
 
-    const res = await adminCreateUser(
-      newMemberName.trim(),
-      cleanUser,
-      newMemberPin.trim(),
-      newMemberRole
-    );
-    if (res.success) {
-      setMemberSuccess(`✓ Pengguna "${newMemberName}" (@${cleanUser}) berhasil didaftarkan!`);
-      setNewMemberName('');
-      setNewMemberUsername('');
-      setNewMemberPin('12345');
-      setTimeout(() => setMemberSuccess(''), 4000);
-    } else {
-      setMemberError(res.error || 'Gagal menambahkan pengguna');
+    setWriteBusy(true);
+    try {
+      const res = await adminCreateUser(
+        newMemberName.trim(),
+        cleanUser,
+        newMemberPin.trim(),
+        newMemberRole,
+        newMemberHouseholdId || undefined
+      );
+      if (res.success) {
+        setMemberSuccess(`✓ Pengguna "${newMemberName.trim()}" (@${cleanUser}) berhasil didaftarkan!`);
+        setNewMemberName('');
+        setNewMemberUsername('');
+        setNewMemberPin('');
+        setNewMemberHouseholdId('');
+        setTimeout(() => setMemberSuccess(''), 4000);
+      } else {
+        setMemberError(res.error || 'Gagal menambahkan pengguna');
+      }
+    } catch (error) {
+      setMemberError(error instanceof Error ? error.message : 'Gagal menyimpan perubahan.');
+    } finally {
+      setWriteBusy(false);
     }
-    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
   };
 
   const handleSaveEditMember = async (e: React.FormEvent) => {
-    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
-    if (!editingRegisteredUser) return;
+    if (writeBusy || !editingRegisteredUser) return;
     setEditMemberError('');
 
     if (!editMemberName.trim()) {
       setEditMemberError('Nama pengguna wajib diisi');
       return;
     }
-    if (editMemberPin.trim() && editMemberPin.trim().length !== 5) {
+    const cleanEditUsername = editMemberUsername.trim().toLowerCase();
+    if (!/^[a-z0-9_-]{3,40}$/.test(cleanEditUsername)) {
+      setEditMemberError('Username minimal 3 karakter (huruf kecil, angka, _ atau -)');
+      return;
+    }
+    const trimmedPin = editMemberPin.trim();
+    if (trimmedPin && !/^\d{5}$/.test(trimmedPin)) {
       setEditMemberError('PIN harus tepat 5 digit angka');
       return;
     }
 
-    const res = await updateRegisteredUser(editingRegisteredUser.username, {
-      displayName: editMemberName.trim(),
-      role: editMemberRole,
-      pin5Digit: editMemberPin.trim() || undefined
-    });
+    setWriteBusy(true);
+    try {
+      const res = await updateRegisteredUser(editingRegisteredUser.id, {
+        displayName: editMemberName.trim(),
+        username: cleanEditUsername !== editingRegisteredUser.username ? cleanEditUsername : undefined,
+        role: editMemberRole,
+        pin5Digit: trimmedPin || undefined
+      });
 
-    if (res.success) {
-      setEditingRegisteredUser(null);
-      setMemberSuccess(`✓ Data pengguna @${editingRegisteredUser.username} berhasil diperbarui!`);
-      setTimeout(() => setMemberSuccess(''), 4000);
-    } else {
-      setEditMemberError(res.error || 'Gagal memperbarui pengguna');
+      if (res.success) {
+        setEditingRegisteredUser(null);
+        setMemberSuccess(`✓ Data pengguna @${cleanEditUsername} berhasil diperbarui!`);
+        setTimeout(() => setMemberSuccess(''), 4000);
+      } else {
+        setEditMemberError(res.error || 'Gagal memperbarui pengguna');
+      }
+    } catch (error) {
+      setEditMemberError(error instanceof Error ? error.message : 'Gagal menyimpan perubahan pengguna.');
+    } finally {
+      setWriteBusy(false);
     }
-    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!deletingUser || writeBusy) return;
+    setWriteBusy(true);
+    setMemberError('');
+    setMemberSuccess('');
+    try {
+      const result = await deleteUser(deletingUser.id);
+      if (result.success) {
+        setMemberSuccess(`✓ Pengguna @${deletingUser.username} berhasil dihapus!`);
+        setTimeout(() => setMemberSuccess(''), 4000);
+      } else {
+        setMemberError(result.error || 'Gagal menghapus pengguna.');
+      }
+      setDeletingUser(null);
+    } catch (error) {
+      setMemberError(error instanceof Error ? error.message : 'Gagal menghapus pengguna.');
+      setDeletingUser(null);
+    } finally {
+      setWriteBusy(false);
+    }
   };
 
   const handleCreateNewHousehold = async (e: React.FormEvent) => {
-    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
+    if (writeBusy) return;
     setHouseholdError('');
+    setHouseholdSuccess('');
     const clean = newHouseholdName.trim();
     if (!clean) {
       setHouseholdError('Nama household / rumah tangga wajib diisi.');
       return;
     }
 
-    const saved=await createHousehold(clean);if(!saved.success){setHouseholdError(saved.error||'Gagal menyimpan household.');return;}
-    setNewHouseholdName('');
-    setHouseholdSuccess(`✓ Household "${clean}" berhasil dibuat! Data tersendiri & terisolasi.`);
-    setTimeout(() => setHouseholdSuccess(''), 4000);
-    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
+    setWriteBusy(true);
+    try {
+      const saved = await createHousehold(clean, newHouseholdOwnerId || undefined);
+      if (!saved.success) {
+        setHouseholdError(saved.error || 'Gagal menyimpan household.');
+        return;
+      }
+      setNewHouseholdName('');
+      setNewHouseholdOwnerId('');
+      setHouseholdSuccess(`✓ Household "${clean}" berhasil dibuat! Data tersendiri & terisolasi.`);
+      setTimeout(() => setHouseholdSuccess(''), 4000);
+    } catch (error) {
+      setHouseholdError(error instanceof Error ? error.message : 'Gagal membuat household.');
+    } finally {
+      setWriteBusy(false);
+    }
   };
 
   const handleSaveEditHousehold = async (e: React.FormEvent) => {
-    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
-    if (!editingHousehold) return;
+    if (writeBusy || !editingHousehold) return;
+    setHouseholdError('');
     const clean = editHouseholdName.trim();
-    if (!clean) return;
+    if (!clean) {
+      setHouseholdError('Nama household wajib diisi.');
+      return;
+    }
 
-    const saved=await updateHousehold(editingHousehold.id, clean);if(!saved.success){setHouseholdError(saved.error||'Gagal menyimpan household.');return;}
-    setHouseholdSuccess(`✓ Nama household berhasil diubah menjadi "${clean}"`);
-    setTimeout(() => setHouseholdSuccess(''), 3000);
-    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
+    setWriteBusy(true);
+    try {
+      const saved = await updateHousehold(editingHousehold.id, clean);
+      if (!saved.success) {
+        setHouseholdError(saved.error || 'Gagal menyimpan household.');
+        return;
+      }
+      setHouseholdSuccess(`✓ Nama household berhasil diubah menjadi "${clean}"`);
+      setTimeout(() => setHouseholdSuccess(''), 3000);
+    } catch (error) {
+      setHouseholdError(error instanceof Error ? error.message : 'Gagal memperbarui household.');
+    } finally {
+      setWriteBusy(false);
+    }
+  };
+
+  const handleRegenerateInviteCode = async () => {
+    if (!editingHousehold || writeBusy) return;
+    setWriteBusy(true);
+    setHouseholdError('');
+    try {
+      const saved = await updateHousehold(editingHousehold.id, editingHousehold.name, {
+        regenerateInviteCode: true
+      });
+      if (!saved.success) {
+        setHouseholdError(saved.error || 'Gagal membuat ulang kode undangan.');
+        return;
+      }
+      setHouseholdSuccess(`✓ Kode undangan ${editingHousehold.name} berhasil diperbarui!`);
+      setTimeout(() => setHouseholdSuccess(''), 3500);
+    } catch (error) {
+      setHouseholdError(error instanceof Error ? error.message : 'Gagal memperbarui kode undangan.');
+    } finally {
+      setWriteBusy(false);
+    }
   };
 
   const handleAddMemberToEditingHousehold = async (e: React.FormEvent) => {
-    e.preventDefault();if(writeBusy)return;setWriteBusy(true);try{
     e.preventDefault();
-    if (!editingHousehold) return;
+    if (writeBusy || !editingHousehold) return;
     setHhMemberError('');
-    if (!hhNewMemberName.trim()) {
+    const selectedUser = registeredUsers.find(u => u.id === hhSelectedUserId);
+    const identifier = selectedUser?.id || hhNewMemberUsername.trim();
+    if (!identifier) {
+      setHhMemberError('Pilih pengguna terdaftar terlebih dahulu.');
+      return;
+    }
+    const targetName = hhNewMemberName.trim() || selectedUser?.displayName || '';
+    if (!targetName) {
       setHhMemberError('Nama anggota keluarga wajib diisi.');
       return;
     }
-    const res = await addMemberToHousehold(
-      editingHousehold.id,
-      hhNewMemberName.trim(),
-      hhNewMemberUsername.trim(),
-      hhNewMemberRole
-    );
-    if (!res.success) {
-      setHhMemberError(res.error || 'Gagal menambahkan anggota.');
-    } else {
-      setHhNewMemberName('');
-      setHhNewMemberUsername('');
-      setHhNewMemberRole('MEMBER');
-      setHouseholdSuccess(`✓ Anggota "${hhNewMemberName}" berhasil ditambahkan ke ${editingHousehold.name}`);
-      setTimeout(() => setHouseholdSuccess(''), 3000);
+
+    setWriteBusy(true);
+    try {
+      const res = await addMemberToHousehold(
+        editingHousehold.id,
+        targetName,
+        identifier,
+        hhNewMemberRole
+      );
+      if (!res.success) {
+        setHhMemberError(res.error || 'Gagal menambahkan anggota.');
+      } else {
+        setHhSelectedUserId('');
+        setHhNewMemberName('');
+        setHhNewMemberUsername('');
+        setHhNewMemberRole('MEMBER');
+        setHouseholdSuccess(`✓ Anggota "${targetName}" berhasil ditambahkan ke ${editingHousehold.name}`);
+        setTimeout(() => setHouseholdSuccess(''), 3000);
+      }
+    } catch (error) {
+      setHhMemberError(error instanceof Error ? error.message : 'Gagal menambahkan anggota.');
+    } finally {
+      setWriteBusy(false);
     }
-    }catch(error){setMemberError(error instanceof Error?error.message:'Gagal menyimpan perubahan.');}finally{setWriteBusy(false);}
+  };
+
+  const handleUpdateMemberRole = async (memberId: string, nextRole: UserRole) => {
+    if (writeBusy) return;
+    setWriteBusy(true);
+    setHhMemberError('');
+    try {
+      const res = await updateMember(memberId, { role: nextRole });
+      if (!res.success) {
+        setHhMemberError(res.error || 'Gagal memperbarui peran anggota.');
+      } else {
+        setHouseholdSuccess('✓ Peran anggota household berhasil diperbarui.');
+        setTimeout(() => setHouseholdSuccess(''), 3000);
+      }
+    } catch (error) {
+      setHhMemberError(error instanceof Error ? error.message : 'Gagal memperbarui peran anggota.');
+    } finally {
+      setWriteBusy(false);
+    }
+  };
+
+  const handleRemoveMemberFromEditingHousehold = async (memberId: string, memberName: string) => {
+    if (writeBusy) return;
+    setWriteBusy(true);
+    setHhMemberError('');
+    try {
+      const result = await removeMemberFromHousehold(memberId);
+      if (!result.success) {
+        setHhMemberError(result.error || 'Gagal menghapus anggota.');
+      } else {
+        setHouseholdSuccess(`✓ ${memberName} dikeluarkan dari household.`);
+        setTimeout(() => setHouseholdSuccess(''), 3000);
+      }
+    } catch (error) {
+      setHhMemberError(error instanceof Error ? error.message : 'Gagal menghapus anggota.');
+    } finally {
+      setWriteBusy(false);
+    }
   };
 
   return (
@@ -577,230 +746,368 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
         </section>
       )}
       {/* TAB 1: MEMBERS / REGISTERED USERS MANAGEMENT */}
-      {activeTab === 'members' && (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Daftar Pengguna Aplikasi (Superadmin)</h2>
-                <p className="text-xs text-slate-500">
-                  Kelola seluruh pengguna terdaftar, hak akses peran, dan PIN 5-digit login
-                </p>
-              </div>
-              <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
-                Total: {registeredUsers.length} Pengguna
-              </span>
-            </div>
+      {activeTab === 'members' && (() => {
+        const query = userSearch.trim().toLowerCase();
+        const getUserHouseholds = (user: User) => {
+          const linkedIds = new Set<string>();
+          for (const m of allMembers) {
+            if (m.userId === user.id) linkedIds.add(m.householdId);
+          }
+          for (const h of allHouseholds) {
+            if (h.createdById === user.id) linkedIds.add(h.id);
+          }
+          return allHouseholds.filter(h => linkedIds.has(h.id));
+        };
+        const filteredUsers = registeredUsers.filter(u => {
+          if (!query) return true;
+          const hhNames = getUserHouseholds(u).map(h => h.name).join(' ');
+          return `${u.displayName} ${u.username} ${u.role} ${hhNames}`.toLowerCase().includes(query);
+        });
 
-            {memberSuccess && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold animate-in fade-in">
-                {memberSuccess}
+        return (
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Daftar Pengguna Aplikasi (Superadmin)</h2>
+                  <p className="text-xs text-slate-500">
+                    Kelola seluruh pengguna terdaftar, peran akses, household terkait, dan PIN 5-digit login
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
+                    Total: {registeredUsers.length} Pengguna
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isRefreshingDirectory || writeBusy}
+                    onClick={handleRefreshDirectory}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingDirectory ? 'animate-spin' : ''}`} />
+                    <span>Muat Ulang</span>
+                  </button>
+                </div>
               </div>
-            )}
 
-            {/* Registered Users Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border border-slate-200 rounded-2xl overflow-hidden">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="py-2.5 px-3">Nama Pengguna</th>
-                    <th className="py-2.5 px-3">Username</th>
-                    <th className="py-2.5 px-3">Peran Akses</th>
-                    <th className="py-2.5 px-3">PIN 5-Digit</th>
-                    <th className="py-2.5 px-3">Terdaftar</th>
-                    <th className="py-2.5 px-3 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {registeredUsers.length > 0 ? (
-                    registeredUsers.map(u => (
-                      <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-2.5 px-3 font-bold text-slate-900 flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-xl bg-teal-100 text-teal-900 font-bold flex items-center justify-center text-xs shrink-0 border border-teal-200">
-                            {u.displayName.slice(0, 2).toUpperCase()}
-                          </div>
-                          <span>{u.displayName}</span>
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600">
-                          @{u.username}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                            u.role === 'ADMIN'
-                              ? 'bg-amber-50 text-amber-900 border-amber-200'
-                              : u.role === 'OWNER'
-                              ? 'bg-teal-50 text-teal-800 border-teal-200'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
-                          }`}>
-                            {u.role === 'ADMIN' ? 'Superadmin' : u.role === 'OWNER' ? 'Kepala Keluarga (Owner)' : u.role}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                          •••••
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingRegisteredUser(u);
-                                setEditMemberName(u.displayName);
-                                setEditMemberUsername(u.username);
-                                setEditMemberRole(u.role || 'OWNER');
-                                setEditMemberPin('');
-                                setEditMemberError('');
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
-                              title="Edit Pengguna"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (confirm(`Yakin ingin menghapus pengguna @${u.username}?`)) {
-                                  const result=await deleteUser(u.username);if(!result.success)setMemberError(result.error||'Gagal menghapus pengguna.');
-                                }
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Hapus Pengguna"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
-                        Belum ada pengguna terdaftar. Daftarkan pengguna baru di form bawah.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+              <input
+                type="search"
+                aria-label="Cari pengguna terdaftar"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                placeholder="Cari nama, @username, peran, atau household..."
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
+              />
 
-            {/* Add New User Form */}
-            <form onSubmit={handleAddMember} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <Plus className="w-3.5 h-3.5 text-teal-700" />
-                <span>Daftarkan Pengguna Baru ke Aplikasi</span>
-              </div>
+              {memberSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold animate-in fade-in">
+                  {memberSuccess}
+                </div>
+              )}
 
               {memberError && (
-                <div className="text-xs text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-200">
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
                   {memberError}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                <input
-                  type="text"
-                  placeholder="Nama Lengkap (misal: Maruf H)"
-                  value={newMemberName}
-                  onChange={e => setNewMemberName(e.target.value)}
-                  className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Username (misal: maruf)"
-                  value={newMemberUsername}
-                  onChange={e => setNewMemberUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                  className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  required
-                />
-                <select
-                  value={newMemberRole}
-                  onChange={e => setNewMemberRole(e.target.value as UserRole)}
-                  className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
-                >
-                  <option value="OWNER">Pengguna / Kepala Keluarga</option>
-                  <option value="ADMIN">Superadmin</option>
-                  <option value="MEMBER">Anggota Keluarga</option>
-                  <option value="VIEWER">Viewer (Hanya Lihat)</option>
-                </select>
-                <input
-                  type="text"
-                  maxLength={5}
-                  placeholder="PIN 5-Digit (12345)"
-                  value={newMemberPin}
-                  onChange={e => setNewMemberPin(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  required
-                />
+              {/* Registered Users Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border border-slate-200 rounded-2xl overflow-hidden">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-3">Nama Pengguna</th>
+                      <th className="py-2.5 px-3">Username</th>
+                      <th className="py-2.5 px-3">Peran Akses</th>
+                      <th className="py-2.5 px-3">Household</th>
+                      <th className="py-2.5 px-3">PIN</th>
+                      <th className="py-2.5 px-3">Terdaftar</th>
+                      <th className="py-2.5 px-3 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredUsers.length > 0 ? (
+                      filteredUsers.map(u => {
+                        const userHouseholdsList = getUserHouseholds(u);
+                        const isSelf = u.id === state.currentUser.id;
+                        return (
+                          <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2.5 px-3 align-middle">
+                              <div className="font-bold text-slate-900 flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-xl bg-teal-100 text-teal-900 font-bold flex items-center justify-center text-xs shrink-0 border border-teal-200">
+                                  {u.displayName.slice(0, 2).toUpperCase()}
+                                </div>
+                                <span className="truncate max-w-[140px]">{u.displayName}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600 align-middle whitespace-nowrap">
+                              @{u.username}
+                            </td>
+                            <td className="py-2.5 px-3 align-middle whitespace-nowrap">
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                u.role === 'ADMIN'
+                                  ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                  : u.role === 'OWNER'
+                                  ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                              }`}>
+                                {u.role === 'ADMIN' ? 'Superadmin' : u.role === 'OWNER' ? 'Kepala Keluarga (Owner)' : u.role}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 align-middle">
+                              {userHouseholdsList.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                  {userHouseholdsList.map(h => (
+                                    <span
+                                      key={h.id}
+                                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 text-teal-900 border border-teal-200 text-[10px] font-semibold"
+                                    >
+                                      {h.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-slate-400">-</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-slate-800 align-middle">
+                              •••••
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500 text-[11px] align-middle whitespace-nowrap">
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  disabled={writeBusy}
+                                  onClick={() => {
+                                    setEditingRegisteredUser(u);
+                                    setEditMemberName(u.displayName);
+                                    setEditMemberUsername(u.username);
+                                    setEditMemberRole(u.role || 'OWNER');
+                                    setEditMemberPin('');
+                                    setEditMemberError('');
+                                  }}
+                                  className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors disabled:opacity-40"
+                                  title="Edit Pengguna"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isSelf || writeBusy}
+                                  onClick={() => setDeletingUser(u)}
+                                  className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title={isSelf ? 'Akun aktif tidak dapat dihapus' : 'Hapus Pengguna'}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-500 text-xs">
+                          {registeredUsers.length === 0
+                            ? 'Belum ada pengguna terdaftar. Daftarkan pengguna baru di form bawah.'
+                            : 'Tidak ada pengguna yang cocok dengan pencarian.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
 
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-                >
-                  + Daftarkan Pengguna
-                </button>
-              </div>
-            </form>
+              {/* Add New User Form */}
+              <form onSubmit={handleAddMember} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Daftarkan Pengguna Baru ke Aplikasi</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nama Lengkap (misal: Ahmad Fauzi)"
+                    value={newMemberName}
+                    onChange={e => setNewMemberName(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Username (misal: ahmad)"
+                    value={newMemberUsername}
+                    onChange={e => setNewMemberUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    required
+                  />
+                  <select
+                    value={newMemberRole}
+                    onChange={e => setNewMemberRole(e.target.value as UserRole)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  >
+                    <option value="OWNER">Pengguna / Kepala Keluarga</option>
+                    <option value="ADMIN">Superadmin</option>
+                    <option value="MEMBER">Anggota Keluarga</option>
+                    <option value="VIEWER">Viewer (Hanya Lihat)</option>
+                  </select>
+                  <input
+                    type="text"
+                    maxLength={5}
+                    placeholder="PIN 5-Digit"
+                    value={newMemberPin}
+                    onChange={e => setNewMemberPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    required
+                  />
+                  <select
+                    value={newMemberHouseholdId}
+                    onChange={e => setNewMemberHouseholdId(e.target.value)}
+                    disabled={newMemberRole === 'ADMIN'}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:opacity-50"
+                  >
+                    <option value="">
+                      {newMemberRole === 'ADMIN' ? 'Tanpa Household (Admin)' : 'Buat household baru otomatis'}
+                    </option>
+                    {allHouseholds.map(h => (
+                      <option key={h.id} value={h.id}>
+                        Gabung: {h.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={writeBusy}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
+                  >
+                    + Daftarkan Pengguna
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TAB 2: HOUSEHOLD VIEW & ISOLATION */}
-      {activeTab === 'households' && (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Manajemen Household (Rumah Tangga Terisolasi)</h2>
-              <p className="text-xs text-slate-500">
-                Pemisahan data keuangan antar rumah tangga. Setiap user/keluarga memiliki data transaksi, dompet, dan utang piutang masing-masing tanpa bercampur.
-              </p>
-            </div>
+      {activeTab === 'households' && (() => {
+        const hQuery = householdSearch.trim().toLowerCase();
+        const filteredHouseholds = allHouseholds.filter(h => {
+          if (!hQuery) return true;
+          const owner = registeredUsers.find(u => u.id === h.createdById);
+          const memberNames = allMembers.filter(m => m.householdId === h.id).map(m => m.displayName).join(' ');
+          return `${h.name} ${h.id} ${h.inviteCode || ''} ${owner?.displayName || ''} ${owner?.username || ''} ${memberNames}`
+            .toLowerCase()
+            .includes(hQuery);
+        });
 
-            {householdSuccess && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold">
-                {householdSuccess}
+        return (
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Manajemen Household (Rumah Tangga Terisolasi)</h2>
+                  <p className="text-xs text-slate-500">
+                    Kelola household, pemilik, kode undangan, serta anggota yang terhubung ke setiap buku kas.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isRefreshingDirectory || writeBusy}
+                  onClick={handleRefreshDirectory}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingDirectory ? 'animate-spin' : ''}`} />
+                  <span>Muat Ulang</span>
+                </button>
               </div>
-            )}
 
-            {householdError && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
-                {householdError}
-              </div>
-            )}
+              <input
+                type="search"
+                aria-label="Cari household"
+                value={householdSearch}
+                onChange={e => setHouseholdSearch(e.target.value)}
+                placeholder="Cari nama household, kode undangan, pemilik, atau anggota..."
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
+              />
 
-            {/* List of Households */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {allHouseholds.map(h => {
-                const isActive = h.id === activeHousehold.id;
-                const hMembers = allMembers.filter(m => m.householdId === h.id);
-                return (
-                  <div
-                    key={h.id}
-                    className={`p-4 rounded-2xl border transition-all ${
-                      isActive
-                        ? 'border-teal-700 bg-teal-50/40 ring-1 ring-teal-700'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-extrabold text-slate-900 text-sm">{h.name}</h3>
-                          {isActive && (
-                            <span className="text-[10px] font-bold bg-teal-700 text-white px-2 py-0.5 rounded-full">
-                              Aktif
-                            </span>
-                          )}
+              {householdSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold">
+                  {householdSuccess}
+                </div>
+              )}
+
+              {householdError && (
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+                  {householdError}
+                </div>
+              )}
+
+              {/* List of Households */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {filteredHouseholds.map(h => {
+                  const isActive = h.id === activeHousehold.id;
+                  const hMembers = allMembers.filter(m => m.householdId === h.id);
+                  const ownerUser = registeredUsers.find(u => u.id === h.createdById);
+                  return (
+                    <div
+                      key={h.id}
+                      className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
+                        isActive
+                          ? 'border-teal-700 bg-teal-50/40 ring-1 ring-teal-700'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-extrabold text-slate-900 text-sm truncate">{h.name}</h3>
+                              {isActive && (
+                                <span className="text-[10px] font-bold bg-teal-700 text-white px-2 py-0.5 rounded-full">
+                                  Aktif
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-mono truncate">
+                              ID: {h.id}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingHouseholdId(h.id);
+                              setEditHouseholdName(h.name);
+                              setHhSelectedUserId('');
+                              setHhNewMemberName('');
+                              setHhNewMemberUsername('');
+                              setHhMemberError('');
+                              setHouseholdError('');
+                            }}
+                            className="p-2 text-slate-500 hover:text-teal-700 rounded-xl hover:bg-slate-100 border border-slate-200 shrink-0"
+                            title="Kelola Nama, Kode & Anggota Household"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          ID: {h.id}
+
+                        <div className="text-[11px] text-slate-600">
+                          Pemilik:{' '}
+                          <strong className="text-slate-900">
+                            {ownerUser ? `${ownerUser.displayName} (@${ownerUser.username})` : h.createdById || '-'}
+                          </strong>
                         </div>
                         <div className="text-[11px] text-slate-500">
-                          Kode Undangan: <span className="font-mono font-bold text-teal-800">{h.inviteCode || 'DK-KLRG-8921'}</span>
+                          Kode Undangan: <span className="font-mono font-bold text-teal-800">{h.inviteCode || '-'}</span> •{' '}
+                          <span>{h.baseCurrency || 'IDR'}</span>
                         </div>
                         <div className="text-[11px] text-slate-700 font-semibold flex items-center gap-1.5 pt-0.5">
                           <Users className="w-3.5 h-3.5 text-teal-700" />
@@ -831,75 +1138,89 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingHousehold(h);
-                            setEditHouseholdName(h.name);
+                      <div className="pt-3 border-t border-slate-100 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          {!isActive ? (
+                            <button
+                              type="button"
+                              onClick={() => switchHousehold(h.id)}
+                              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                            >
+                              <ArrowRightLeft className="w-3 h-3" />
+                              <span>Pilih Household Ini</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs font-bold text-teal-700 flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5" /> Sedang Digunakan
+                            </span>
+                          )}
+                        </div>
+                        <HouseholdDeleteControl
+                          household={h}
+                          onDeleted={() => {
+                            if (editingHouseholdId === h.id) setEditingHouseholdId(null);
+                            setHouseholdSuccess(`✓ Household "${h.name}" berhasil dihapus dari Supabase.`);
+                            setTimeout(() => setHouseholdSuccess(''), 4000);
                           }}
-                          className="p-1.5 text-slate-400 hover:text-teal-700 rounded-lg hover:bg-slate-100"
-                          title="Ganti Nama Household"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <HouseholdDeleteControl household={h} onDeleted={() => setHouseholdSuccess('Household berhasil dihapus dari Supabase.')} />
+                        />
                       </div>
                     </div>
-
-                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-500">
-                        Mata Uang: <strong>{h.baseCurrency || 'IDR'}</strong>
-                      </span>
-                      {!isActive ? (
-                        <button
-                          type="button"
-                          onClick={() => switchHousehold(h.id)}
-                          className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
-                        >
-                          <ArrowRightLeft className="w-3 h-3" />
-                          <span>Pilih Household Ini</span>
-                        </button>
-                      ) : (
-                        <span className="text-xs font-bold text-teal-700 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" /> Sedang Digunakan
-                        </span>
-                      )}
-                    </div>
+                  );
+                })}
+                {filteredHouseholds.length === 0 && (
+                  <div className="col-span-full py-6 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-2xl">
+                    Tidak ada household yang ditemukan.
                   </div>
-                );
-              })}
+                )}
+              </div>
+
+              {/* Create New Household Form */}
+              <form onSubmit={handleCreateNewHousehold} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Buat Household / Entitas Keuangan Baru</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Membuat buku kas terpisah dan opsional langsung menetapkannya ke akun pemilik tertentu.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nama Household (e.g. Keluarga Utama)"
+                    value={newHouseholdName}
+                    onChange={e => setNewHouseholdName(e.target.value)}
+                    className="sm:col-span-2 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    required
+                  />
+                  <select
+                    value={newHouseholdOwnerId}
+                    onChange={e => setNewHouseholdOwnerId(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  >
+                    <option value="">Pemilik: Admin Saat Ini</option>
+                    {registeredUsers.map(u => (
+                      <option key={u.id} value={u.id}>
+                        Pemilik: {u.displayName} (@{u.username})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={writeBusy}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    + Tambah Household
+                  </button>
+                </div>
+              </form>
             </div>
-
-            {/* Create New Household Form */}
-            <form onSubmit={handleCreateNewHousehold} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <Plus className="w-3.5 h-3.5 text-teal-700" />
-                <span>Buat Household / Entitas Keuangan Baru</span>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                Membuat buku kas terpisah (misal: "Keluarga Utama", "Usaha / Side Hustle", "Keluarga Besar"). Data transaksi dan dompet tidak akan tercampur.
-              </p>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nama Household (e.g. Rumah Tangga Kedua, Bisnis Keluarga)"
-                  value={newHouseholdName}
-                  onChange={e => setNewHouseholdName(e.target.value)}
-                  className="flex-1 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors shrink-0"
-                >
-                  + Tambah Household
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TAB 3: AI VISION CONFIGURATION & REAL TEST */}
       {activeTab === 'ai' && (
@@ -1349,7 +1670,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-bold text-slate-900 text-base">Edit Pengguna</h2>
-                <p className="text-xs text-slate-500">Perbarui nama lengkap, peran, dan PIN pengguna</p>
+                <p className="text-xs text-slate-500">Perbarui nama, username, peran, dan PIN opsional</p>
               </div>
               <button
                 type="button"
@@ -1361,7 +1682,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
             </div>
 
             {editMemberError && (
-              <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+              <div role="alert" className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
                 {editMemberError}
               </div>
             )}
@@ -1379,12 +1700,13 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Username (ID Akun)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Username Akun</label>
                 <input
                   type="text"
                   value={editMemberUsername}
-                  disabled
-                  className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono text-slate-500 cursor-not-allowed"
+                  onChange={e => setEditMemberUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  required
                 />
               </div>
 
@@ -1403,14 +1725,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">PIN 5-Digit</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">PIN Baru 5-Digit (Opsional)</label>
                 <input
                   type="text"
                   maxLength={5}
+                  placeholder="Kosongkan jika tidak ganti PIN"
                   value={editMemberPin}
                   onChange={e => setEditMemberPin(e.target.value.replace(/[^0-9]/g, ''))}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  required
                 />
               </div>
 
@@ -1424,7 +1746,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-xl shadow-xs"
+                  disabled={writeBusy}
+                  className="px-4 py-2 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-xl shadow-xs disabled:opacity-50"
                 >
                   Simpan Perubahan
                 </button>
@@ -1434,36 +1757,104 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
         </div>
       )}
 
+      {/* DELETE USER CONFIRMATION MODAL */}
+      {deletingUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-red-200">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="font-bold text-red-900 text-base">Hapus Pengguna @{deletingUser.username}?</h2>
+                <p className="text-xs text-slate-600 mt-1">
+                  Akun login dan keanggotaan <strong>{deletingUser.displayName}</strong> di seluruh household akan dihapus permanen.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={writeBusy}
+                onClick={() => setDeletingUser(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={writeBusy}
+                onClick={() => setDeletingUser(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={writeBusy}
+                onClick={handleConfirmDeleteUser}
+                className="px-4 py-2 text-xs font-bold bg-red-600 text-white hover:bg-red-700 rounded-xl shadow-xs disabled:opacity-50"
+              >
+                {writeBusy ? 'Menghapus...' : 'Hapus Pengguna'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* EDIT HOUSEHOLD & MEMBERS MODAL */}
       {editingHousehold && (() => {
         const householdMembers = allMembers.filter(m => m.householdId === editingHousehold.id);
+        const availableUsersForHousehold = registeredUsers.filter(
+          u => !householdMembers.some(m => m.userId === u.id)
+        );
 
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
             <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-5 shadow-2xl border border-slate-200">
               {/* Modal Header */}
-              <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-800">
+              <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-800 shrink-0">
                     <Home className="w-5 h-5" />
                   </div>
-                  <div>
-                    <h2 className="font-extrabold text-slate-900 text-base leading-tight">
+                  <div className="min-w-0">
+                    <h2 className="font-extrabold text-slate-900 text-base leading-tight truncate">
                       {editingHousehold.name}
                     </h2>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      ID: <span className="font-mono">{editingHousehold.id}</span> • Kode: <strong className="text-teal-800">{editingHousehold.inviteCode || 'DK-KLRG-8921'}</strong>
-                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+                      <span className="font-mono truncate max-w-[170px]">{editingHousehold.id}</span>
+                      <span>•</span>
+                      <span>Kode: <strong className="font-mono text-teal-800">{editingHousehold.inviteCode || '-'}</strong></span>
+                      <button
+                        type="button"
+                        disabled={writeBusy}
+                        onClick={handleRegenerateInviteCode}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10px] font-bold disabled:opacity-50"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Buat Ulang Kode</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setEditingHousehold(null)}
-                  className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"
+                  onClick={() => setEditingHouseholdId(null)}
+                  className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
+
+              {householdSuccess && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold">
+                  {householdSuccess}
+                </div>
+              )}
+              {householdError && (
+                <div role="alert" className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+                  {householdError}
+                </div>
+              )}
 
               {/* SECTION 1: UBAH NAMA HOUSEHOLD */}
               <form onSubmit={handleSaveEditHousehold} className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-2.5">
@@ -1481,7 +1872,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2 text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 rounded-xl shadow-xs transition-colors shrink-0"
+                    disabled={writeBusy}
+                    className="px-4 py-2 text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 rounded-xl shadow-xs transition-colors shrink-0 disabled:opacity-50"
                   >
                     Simpan Nama
                   </button>
@@ -1504,46 +1896,52 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
 
                 {householdMembers.length > 0 ? (
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
-                    {householdMembers.map(m => (
-                      <div key={m.id} className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-900 font-bold flex items-center justify-center text-xs shrink-0 border border-teal-200">
-                            {m.displayName.slice(0, 2).toUpperCase()}
+                    {householdMembers.map(m => {
+                      const matchedAccount = registeredUsers.find(u => u.id === m.userId);
+                      const handle = matchedAccount?.username || m.userId.replace(/^user-/, '');
+                      return (
+                        <div key={m.id} className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-900 font-bold flex items-center justify-center text-xs shrink-0 border border-teal-200">
+                              {m.displayName.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 text-xs truncate">
+                                {m.displayName}
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono truncate">
+                                @{handle}
+                              </div>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-900 text-xs truncate">
-                              {m.displayName}
-                            </div>
-                            <div className="text-[10px] text-slate-500 font-mono truncate">
-                              @{m.userId.replace('user-', '')}
-                            </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <select
+                              aria-label={`Peran ${m.displayName}`}
+                              value={m.role}
+                              disabled={writeBusy}
+                              onChange={e => handleUpdateMemberRole(m.id, e.target.value as UserRole)}
+                              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-full text-[11px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
+                            >
+                              <option value="OWNER">OWNER</option>
+                              <option value="ADMIN">ADMIN</option>
+                              <option value="MEMBER">MEMBER</option>
+                              <option value="VIEWER">VIEWER</option>
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={writeBusy}
+                              onClick={() => handleRemoveMemberFromEditingHousehold(m.id, m.displayName)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                              title="Hapus / Keluarkan dari Household ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            m.role === 'OWNER'
-                              ? 'bg-teal-50 text-teal-800 border-teal-200'
-                              : m.role === 'ADMIN'
-                              ? 'bg-blue-50 text-blue-800 border-blue-200'
-                              : m.role === 'VIEWER'
-                              ? 'bg-purple-50 text-purple-800 border-purple-200'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
-                          }`}>
-                            {m.role}
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={async()=>{const result=await removeMemberFromHousehold(m.id);if(!result.success)setHhMemberError(result.error||'Gagal menghapus anggota.');}}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Hapus / Keluarkan dari Household ini"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="p-4 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
@@ -1561,7 +1959,37 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Pilih Akun Terdaftar</label>
+                    <select
+                      value={hhSelectedUserId}
+                      onChange={e => {
+                        const selectedId = e.target.value;
+                        setHhSelectedUserId(selectedId);
+                        const u = availableUsersForHousehold.find(item => item.id === selectedId);
+                        if (u) {
+                          setHhNewMemberName(u.displayName);
+                          setHhNewMemberUsername(u.username);
+                        } else {
+                          setHhNewMemberUsername('');
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-teal-700"
+                    >
+                      <option value="">
+                        {availableUsersForHousehold.length > 0
+                          ? '-- Pilih Pengguna --'
+                          : 'Semua pengguna sudah terdaftar'}
+                      </option>
+                      {availableUsersForHousehold.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.displayName} (@{u.username})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Nama Tampilan di Household</label>
                     <input
                       type="text"
                       value={hhNewMemberName}
@@ -1569,17 +1997,6 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                       placeholder="Nama anggota..."
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-teal-700"
                       required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Username (Opsional)</label>
-                    <input
-                      type="text"
-                      value={hhNewMemberUsername}
-                      onChange={e => setHhNewMemberUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                      placeholder="username unik..."
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-teal-700 font-mono"
                     />
                   </div>
                 </div>
@@ -1602,7 +2019,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                   <div className="pt-4">
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-xs transition-colors shrink-0"
+                      disabled={writeBusy || availableUsersForHousehold.length === 0}
+                      className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-xs transition-colors shrink-0 disabled:opacity-50"
                     >
                       + Tambahkan
                     </button>
@@ -1610,7 +2028,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                 </div>
 
                 {hhMemberError && (
-                  <p className="text-[11px] font-semibold text-red-600">{hhMemberError}</p>
+                  <p role="alert" className="text-[11px] font-semibold text-red-600">{hhMemberError}</p>
                 )}
               </form>
 
@@ -1618,7 +2036,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               <div className="pt-2 border-t border-slate-100 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setEditingHousehold(null)}
+                  onClick={() => setEditingHouseholdId(null)}
                   className="px-5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl shadow-xs transition-colors"
                 >
                   Selesai

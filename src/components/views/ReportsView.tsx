@@ -294,44 +294,46 @@ export const ReportsView: React.FC = () => {
       />
 
       {/* Tab Switcher for Reports */}
-      <div className="flex bg-white p-1.5 rounded-3xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] gap-1.5">
+      <div className="report-tabs grid grid-cols-3 bg-white p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] gap-1 sm:gap-1.5">
         <button
           type="button"
           onClick={() => setReportTab('kategori')}
-          className={`flex-1 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+          className={`report-tab-btn py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 min-w-0 transition-all ${
             reportTab === 'kategori'
               ? 'bg-[#FFD166] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
               : 'text-[#365664] hover:bg-[#FFFBEB]'
           }`}
         >
-          <PieChartIcon className="w-4 h-4" />
-          <span>Kategori ({categoryStats.length})</span>
+          <PieChartIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="truncate">Kategori ({categoryStats.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setReportTab('tren')}
-          className={`flex-1 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+          className={`report-tab-btn py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 min-w-0 transition-all ${
             reportTab === 'tren'
               ? 'bg-[#38BDF8] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
               : 'text-[#365664] hover:bg-[#FFFBEB]'
           }`}
         >
-          <BarChart3 className="w-4 h-4" />
-          <span>Tren & Arus Kas</span>
+          <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="truncate sm:hidden">Arus Kas</span>
+          <span className="hidden sm:inline truncate">Tren & Arus Kas</span>
         </button>
 
         <button
           type="button"
           onClick={() => setReportTab('label')}
-          className={`flex-1 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+          className={`report-tab-btn py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 min-w-0 transition-all ${
             reportTab === 'label'
               ? 'bg-[#06D6A0] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
               : 'text-[#365664] hover:bg-[#FFFBEB]'
           }`}
         >
-          <TagIcon className="w-4 h-4" />
-          <span>Label / Tag ({labelStats.length})</span>
+          <TagIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="truncate sm:hidden">Label ({labelStats.length})</span>
+          <span className="hidden sm:inline truncate">Label / Tag ({labelStats.length})</span>
         </button>
       </div>
 

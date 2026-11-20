@@ -1,7 +1,25 @@
 import {isDebtOpeningTransaction} from '../lib/transactionVisibility';
 import {monthlyActivity} from '../lib/monthlyBalance';
 import {parseFinancialBackup,backupSummary} from '../lib/jsonBackup';
-import {inviteAccount,authenticateAccount,getCurrentAccount,changeAccountPin,registerAccount,adminCreateAccount,adminUpdateAccount,adminDeleteAccount,signOutAccount,getReceiptAuthClient} from '../lib/receiptAuth';
+import {
+  inviteAccount,
+  authenticateAccount,
+  getCurrentAccount,
+  changeAccountPin,
+  registerAccount,
+  adminListDirectory,
+  adminCreateAccount,
+  adminUpdateAccount,
+  adminDeleteAccount,
+  adminCreateHousehold,
+  adminUpdateHousehold,
+  adminDeleteHousehold,
+  adminAddHouseholdMember,
+  adminUpdateHouseholdMember,
+  adminRemoveHouseholdMember,
+  signOutAccount,
+  getReceiptAuthClient
+} from '../lib/receiptAuth';
 import {jakartaDateTime} from '../lib/dateTime';
 import {loadUserFinancialData} from '../lib/financialBootstrap';
 import {uploadReceiptPhoto,clearReceiptSession} from '../lib/attachments';
@@ -326,8 +344,8 @@ interface AppContextValue {
   deleteCategory: (id:string) => Promise<{success:boolean;error?:string}>;
   addLabel: (name: string) => Promise<{success:boolean;error?:string}>;
   switchHousehold: (householdId: string) => void;
-  createHousehold: (name: string) => Promise<{success:boolean;error?:string}>;
-  updateHousehold: (householdId: string, name: string) => Promise<{success:boolean;error?:string}>;
+  createHousehold: (name: string, ownerUserId?: string) => Promise<{success:boolean;error?:string}>;
+  updateHousehold: (householdId: string, name: string, options?: { baseCurrency?: string; regenerateInviteCode?: boolean }) => Promise<{success:boolean;error?:string}>;
   deleteHousehold: (householdId: string) => Promise<{ success: boolean; error?: string }>;
   importExcelFile: (file: File) => Promise<{ success: boolean; summary?: ExcelImportSummary; error?: string }>;
   importJSONFile: (file:File) => Promise<{success:boolean;summary?:ExcelImportSummary;imported?:number;skipped?:number;error?:string}>;
@@ -351,10 +369,11 @@ interface AppContextValue {
   registeredUsers: User[];
   registerUser: (displayName: string, username: string, pin5Digit: string, householdCode?: string) => Promise<{ success: boolean; error?: string }>;
   joinHouseholdByCode: (inviteCode: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
-  adminCreateUser: (displayName: string, username: string, pin5Digit: string, role?: UserRole) => Promise<{ success: boolean; error?: string }>;
-  updateRegisteredUser: (username: string, updates: { displayName?: string; pin5Digit?: string; role?: UserRole }) => Promise<{ success: boolean; error?: string }>;
-  deleteUser: (username: string) => Promise<{ success: boolean; error?: string }>;
-  addMemberToHousehold: (householdId: string, displayName: string, username: string, role?: UserRole) => Promise<{success:boolean;error?:string}>;
+  adminCreateUser: (displayName: string, username: string, pin5Digit: string, role?: UserRole, householdId?: string) => Promise<{ success: boolean; error?: string }>;
+  updateRegisteredUser: (usernameOrId: string, updates: { displayName?: string; username?: string; pin5Digit?: string; role?: UserRole }) => Promise<{ success: boolean; error?: string }>;
+  deleteUser: (usernameOrId: string) => Promise<{ success: boolean; error?: string }>;
+  refreshAdminDirectory: () => Promise<{ success: boolean; error?: string }>;
+  addMemberToHousehold: (householdId: string, displayName: string, usernameOrUserId: string, role?: UserRole) => Promise<{success:boolean;error?:string}>;
   removeMemberFromHousehold: (memberId: string) => Promise<{success:boolean;error?:string}>;
   allHouseholds: Household[];
   allMembers: HouseholdMember[];
@@ -647,28 +666,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   ]);
   useEffect(()=>{let live=true;(async()=>{try{const user=await getCurrentAccount();if(!live||!user)return;let next={...createFreshUserData(user.username,user.displayName,''),currentUser:user,isAuthenticated:true,isLocked:false,transactions:[] as FinancialTransaction[],ledgerEntries:[] as LedgerEntry[],wallets:[] as Wallet[],categories:[] as Category[],debts:[] as DebtItem[],members:[] as HouseholdMember[],households:[] as Household[]};if(user.role==='ADMIN'){const pulled=await pullAllDataFromSupabase(DEFAULT_SUPABASE_CONFIG);if(!pulled.success)throw new Error(pulled.error||'Gagal memuat admin.');next={...next,...pulled.data};}if(live)setState(next);}catch(error){if(live)setSupabaseSyncStatus({status:'error',error:error instanceof Error?error.message:'Sesi tidak dapat dipulihkan.'});}finally{if(live)setAuthReady(true);}})();return()=>{live=false;};},[]);
 
+  const refreshAdminDirectory = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    const res = await adminListDirectory();
+    if (!res.success) return { success: false, error: res.error || 'Gagal memuat direktori admin.' };
+    const nextUsers = Array.isArray(res.users) ? (res.users as User[]) : [];
+    const nextHouseholds = Array.isArray(res.households) ? (res.households as Household[]) : [];
+    const nextMembers = Array.isArray(res.members) ? (res.members as HouseholdMember[]) : [];
+    setRegisteredUsers(nextUsers);
+    setState(prev => ({
+      ...prev,
+      households: nextHouseholds,
+      members: nextMembers,
+      activeHouseholdId:
+        prev.activeHouseholdId && nextHouseholds.some(h => h.id === prev.activeHouseholdId)
+          ? prev.activeHouseholdId
+          : nextHouseholds[0]?.id || prev.activeHouseholdId
+    }));
+    return { success: true };
+  }, []);
+
   // Legacy offline queue is retained for explicit recovery, never replayed over confirmed server records.
   // 1. Sync daftar pengguna terdaftar langsung dari Supabase saat aplikasi dimuat
   useEffect(() => {
-    if(!authReady||!state.isAuthenticated)return;
+    if (!authReady || !state.isAuthenticated) return;
+    if (state.currentUser.role === 'ADMIN') {
+      refreshAdminDirectory()
+        .then(res => {
+          if (!res.success && res.error) {
+            setSupabaseSyncStatus(prev => ({ ...prev, status: 'error', error: res.error }));
+          }
+        })
+        .catch(() => {});
+      return;
+    }
     fetchUsersFromSupabase(DEFAULT_SUPABASE_CONFIG)
       .then(res => {
         if (res.success && res.users.length > 0) {
-          setRegisteredUsers(prev => {
-            const merged = [...prev];
-            for (const u of res.users) {
-              if (!merged.some(m => m.username.toLowerCase() === u.username.toLowerCase())) {
-                merged.push(u);
-              }
-            }
-            return merged;
-          });
+          setRegisteredUsers(res.users);
         } else if (!res.success && res.error) {
           setSupabaseSyncStatus(prev => ({ ...prev, status: 'error', error: res.error }));
         }
       })
       .catch(() => {});
-  }, [authReady,state.isAuthenticated]);
+  }, [authReady, state.isAuthenticated, state.currentUser.role, refreshAdminDirectory]);
 
   useEffect(() => {
     if (!authReady || !state.isAuthenticated || !state.activeHouseholdId || state.currentUser.role === 'ADMIN') return;
@@ -1663,6 +1703,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true };
   };
 
+  const isSuperAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.username === 'admin';
+
   const switchHousehold = (householdId: string) => {
     const isAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.username === 'admin' || state.currentUser?.username === 'superadmin';
     const isAllowed = isAdmin || userHouseholds.some(h => h.id === householdId);
@@ -1675,8 +1717,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setState(prev => ({ ...prev, activeHouseholdId: householdId }));
     }
   };
-  const createHousehold=async(name:string)=>{const now=new Date().toISOString();const household:Household={id:crypto.randomUUID(),name:name.trim()||'Rumah Tangga',baseCurrency:'IDR',createdById:state.currentUser.id,inviteCode:'TK-'+crypto.randomUUID().slice(0,12).toUpperCase(),createdAt:now};const {error}=await getReceiptAuthClient().from('households').insert({id:household.id,name:household.name,base_currency:'IDR',created_by_id:household.createdById,invite_code:household.inviteCode,created_at:now});if(error)return {success:false,error:error.message};setState(prev=>({...prev,households:[...prev.households,household],activeHouseholdId:household.id}));return {success:true};};
-  const updateHousehold=async(id:string,name:string)=>{if(!name.trim())return {success:false,error:'Nama household wajib diisi.'};const {error}=await getReceiptAuthClient().from('households').update({name:name.trim()}).eq('id',id).select('id').single();if(error)return {success:false,error:error.message};setState(prev=>({...prev,households:prev.households.map(h=>h.id===id?{...h,name:name.trim()}:h)}));return {success:true};};
+  const createHousehold = async (name: string, ownerUserId?: string) => {
+    const cleanName = name.trim() || 'Rumah Tangga';
+    if (isSuperAdmin) {
+      const res = await adminCreateHousehold(cleanName, ownerUserId);
+      if (!res.success || !res.household) return { success: false, error: res.error || 'Gagal membuat household.' };
+      const created = res.household as Household;
+      const createdMember = res.member as HouseholdMember | undefined;
+      setState(prev => ({
+        ...prev,
+        households: [created, ...prev.households.filter(h => h.id !== created.id)],
+        members: createdMember ? [createdMember, ...prev.members.filter(m => m.id !== createdMember.id)] : prev.members,
+        activeHouseholdId: prev.activeHouseholdId || created.id
+      }));
+      return { success: true };
+    }
+    const now = new Date().toISOString();
+    const household: Household = { id: crypto.randomUUID(), name: cleanName, baseCurrency: 'IDR', createdById: state.currentUser.id, inviteCode: 'TK-' + crypto.randomUUID().slice(0, 12).toUpperCase(), createdAt: now };
+    const { error } = await getReceiptAuthClient().from('households').insert({ id: household.id, name: household.name, base_currency: 'IDR', created_by_id: household.createdById, invite_code: household.inviteCode, created_at: now });
+    if (error) return { success: false, error: error.message };
+    setState(prev => ({ ...prev, households: [...prev.households, household], activeHouseholdId: household.id }));
+    return { success: true };
+  };
+  const updateHousehold = async (
+    id: string,
+    name: string,
+    options?: { baseCurrency?: string; regenerateInviteCode?: boolean }
+  ) => {
+    const cleanName = name.trim();
+    if (!cleanName && !options?.regenerateInviteCode && !options?.baseCurrency) {
+      return { success: false, error: 'Nama household wajib diisi.' };
+    }
+    if (isSuperAdmin) {
+      const res = await adminUpdateHousehold(id, {
+        ...(cleanName ? { name: cleanName } : {}),
+        ...(options?.baseCurrency ? { baseCurrency: options.baseCurrency } : {}),
+        ...(options?.regenerateInviteCode ? { regenerateInviteCode: true } : {})
+      });
+      if (!res.success || !res.household) return { success: false, error: res.error || 'Gagal memperbarui household.' };
+      const updated = res.household as Household;
+      setState(prev => ({
+        ...prev,
+        households: prev.households.map(h => (h.id === id ? updated : h))
+      }));
+      return { success: true };
+    }
+    if (!cleanName) return { success: false, error: 'Nama household wajib diisi.' };
+    const { error } = await getReceiptAuthClient().from('households').update({ name: cleanName }).eq('id', id).select('id').single();
+    if (error) return { success: false, error: error.message };
+    setState(prev => ({ ...prev, households: prev.households.map(h => (h.id === id ? { ...h, name: cleanName } : h)) }));
+    return { success: true };
+  };
 
   const deleteHousehold = async (householdId: string): Promise<{ success: boolean; error?: string }> => {
     const target = allHouseholds.find(h => h.id === householdId);
@@ -1685,7 +1776,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isAdmin && target.createdById !== state.currentUser.id) return { success: false, error: 'Hanya pembuat household atau superadmin yang dapat menghapus.' };
     const remaining = userHouseholds.filter(h => h.id !== householdId);
     if (!isAdmin && remaining.length === 0) return { success: false, error: 'Sisakan minimal satu household untuk akun Anda.' };
-    const saved = await deleteHouseholdFromSupabase(householdId, state.supabaseConfig);
+    const saved = isAdmin
+      ? await adminDeleteHousehold(householdId)
+      : await deleteHouseholdFromSupabase(householdId, state.supabaseConfig);
     if (!saved.success) return saved;
     discardHouseholdSync(householdId);
     const withoutHousehold = (value: AppState): AppState => ({
@@ -1964,17 +2057,121 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Gagal bergabung ke Supabase.' }; }
   };
 
-  const adminCreateUser=async(displayName:string,username:string,pin:string,role:UserRole='OWNER')=>{
-    const result=await adminCreateAccount(displayName,username,pin,role);if(result.success&&result.user)setRegisteredUsers(prev=>[...prev,result.user!]);return result;
+  const adminCreateUser = async (
+    displayName: string,
+    username: string,
+    pin: string,
+    role: UserRole = 'OWNER',
+    householdId?: string
+  ) => {
+    const result = await adminCreateAccount(displayName, username, pin, role, householdId);
+    if (result.success) {
+      const dir = await refreshAdminDirectory();
+      if (!dir.success && result.user) {
+        setRegisteredUsers(prev => [result.user as User, ...prev]);
+      }
+    }
+    return result;
   };
-  const updateRegisteredUser=async(username:string,updates:{displayName?:string;pin5Digit?:string;role?:UserRole})=>{
-    const user=registeredUsers.find(u=>u.username===username);if(!user)return {success:false,error:'User tidak ditemukan.'};
-    const result=await adminUpdateAccount(user.id,updates);if(result.success)setRegisteredUsers(prev=>prev.map(u=>u.id===user.id?{...u,displayName:updates.displayName||u.displayName,role:updates.role||u.role,pinHash:''}:u));return result;
+  const updateRegisteredUser = async (
+    usernameOrId: string,
+    updates: { displayName?: string; username?: string; pin5Digit?: string; role?: UserRole }
+  ) => {
+    const user = registeredUsers.find(u => u.id === usernameOrId || u.username === usernameOrId);
+    if (!user) return { success: false, error: 'User tidak ditemukan.' };
+    const result = await adminUpdateAccount(user.id, updates);
+    if (result.success) {
+      const nextUser = (result.user as User | undefined) || {
+        ...user,
+        displayName: updates.displayName || user.displayName,
+        username: updates.username || user.username,
+        role: updates.role || user.role,
+        pinHash: ''
+      };
+      setRegisteredUsers(prev => prev.map(u => (u.id === user.id ? nextUser : u)));
+      if (updates.displayName) {
+        setState(prev => ({
+          ...prev,
+          members: prev.members.map(m =>
+            m.userId === user.id ? { ...m, displayName: nextUser.displayName } : m
+          )
+        }));
+      }
+    }
+    return result;
   };
-  const deleteUser=async(username:string)=>{const user=registeredUsers.find(u=>u.username===username);if(!user)return {success:false,error:'User tidak ditemukan.'};const result=await adminDeleteAccount(user.id);if(result.success)setRegisteredUsers(prev=>prev.filter(u=>u.id!==user.id));return result;};
+  const deleteUser = async (usernameOrId: string) => {
+    const user = registeredUsers.find(u => u.id === usernameOrId || u.username === usernameOrId);
+    if (!user) return { success: false, error: 'User tidak ditemukan.' };
+    const result = await adminDeleteAccount(user.id);
+    if (result.success) {
+      setRegisteredUsers(prev => prev.filter(u => u.id !== user.id));
+      setState(prev => ({ ...prev, members: prev.members.filter(m => m.userId !== user.id) }));
+    }
+    return result;
+  };
 
-  const addMemberToHousehold=async(householdId:string,displayName:string,username:string,role:UserRole='MEMBER')=>{const user=registeredUsers.find(u=>u.username===username.trim().toLowerCase());if(!user)return {success:false,error:'Akun belum terdaftar. Buat akun atau gunakan kode undangan.'};const mem:HouseholdMember={id:crypto.randomUUID(),householdId,userId:user.id,displayName:displayName.trim()||user.displayName,role,joinedAt:new Date().toISOString()};markLocalMutation(mem.id);const {error}=await getReceiptAuthClient().from('household_members').insert({id:mem.id,household_id:mem.householdId,user_id:mem.userId,display_name:mem.displayName,role:mem.role,joined_at:mem.joinedAt});if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:[...prev.members,mem]}));return {success:true};};
-  const removeMemberFromHousehold=async(id:string)=>{const {error}=await getReceiptAuthClient().from('household_members').delete().eq('id',id);if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:prev.members.filter(m=>m.id!==id)}));return {success:true};};
+  const addMemberToHousehold = async (
+    householdId: string,
+    displayName: string,
+    usernameOrUserId: string,
+    role: UserRole = 'MEMBER'
+  ) => {
+    const lookup = usernameOrUserId.trim().toLowerCase();
+    const matchedUser = registeredUsers.find(
+      u => u.id === usernameOrUserId.trim() || u.username.toLowerCase() === lookup
+    );
+    if (isSuperAdmin) {
+      const res = await adminAddHouseholdMember(householdId, {
+        userId: matchedUser?.id,
+        username: matchedUser?.username || lookup,
+        displayName: displayName.trim() || matchedUser?.displayName,
+        role
+      });
+      if (!res.success || !res.member) return { success: false, error: res.error || 'Gagal menambahkan anggota.' };
+      const added = res.member as HouseholdMember;
+      setState(prev => ({
+        ...prev,
+        members: [...prev.members.filter(m => m.id !== added.id), added]
+      }));
+      return { success: true };
+    }
+    if (!matchedUser) return { success: false, error: 'Akun belum terdaftar. Buat akun atau gunakan kode undangan.' };
+    const mem: HouseholdMember = {
+      id: crypto.randomUUID(),
+      householdId,
+      userId: matchedUser.id,
+      displayName: displayName.trim() || matchedUser.displayName,
+      role,
+      joinedAt: new Date().toISOString()
+    };
+    markLocalMutation(mem.id);
+    const { error } = await getReceiptAuthClient()
+      .from('household_members')
+      .insert({
+        id: mem.id,
+        household_id: mem.householdId,
+        user_id: mem.userId,
+        display_name: mem.displayName,
+        role: mem.role,
+        joined_at: mem.joinedAt
+      });
+    if (error) return { success: false, error: error.message };
+    setState(prev => ({ ...prev, members: [...prev.members, mem] }));
+    return { success: true };
+  };
+  const removeMemberFromHousehold = async (id: string) => {
+    if (isSuperAdmin) {
+      const res = await adminRemoveHouseholdMember(id);
+      if (!res.success) return { success: false, error: res.error || 'Gagal menghapus anggota.' };
+      setState(prev => ({ ...prev, members: prev.members.filter(m => m.id !== id) }));
+      return { success: true };
+    }
+    const { error } = await getReceiptAuthClient().from('household_members').delete().eq('id', id);
+    if (error) return { success: false, error: error.message };
+    setState(prev => ({ ...prev, members: prev.members.filter(m => m.id !== id) }));
+    return { success: true };
+  };
 
   const logoutUser = () => {
     void signOutAccount();
@@ -2019,7 +2216,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
   const inviteMember=async(displayName:string,username:string,role:UserRole,pin:string)=>{const result=await inviteAccount(displayName,username,pin,state.activeHouseholdId,role);if(!result.success)return result;const membership=await fetchUserHouseholds(state.currentUser.id);membership.members.forEach(m=>markLocalMutation(m.id));setState(prev=>({...prev,members:membership.members,households:membership.households}));return {success:true};};
-  const updateMember=async(id:string,updates:{displayName?:string;role?:UserRole;username?:string;pin5Digit?:string})=>{const mem=state.members.find(m=>m.id===id);if(!mem)return {success:false,error:'Anggota tidak ditemukan.'};if(updates.pin5Digit||updates.username){const account=await adminUpdateAccount(mem.userId,updates);if(!account.success)return account;}const {error}=await getReceiptAuthClient().from('household_members').update({display_name:updates.displayName||mem.displayName,role:updates.role||mem.role}).eq('id',id);if(error)return {success:false,error:error.message};setState(prev=>({...prev,members:prev.members.map(m=>m.id===id?{...m,displayName:updates.displayName||m.displayName,role:updates.role||m.role}:m)}));return {success:true};};
+  const updateMember = async (
+    id: string,
+    updates: { displayName?: string; role?: UserRole; username?: string; pin5Digit?: string }
+  ) => {
+    const mem = state.members.find(m => m.id === id);
+    if (!mem) return { success: false, error: 'Anggota tidak ditemukan.' };
+    if (updates.pin5Digit || updates.username) {
+      const account = await adminUpdateAccount(mem.userId, updates);
+      if (!account.success) return account;
+    }
+    if (isSuperAdmin) {
+      const res = await adminUpdateHouseholdMember(id, {
+        displayName: updates.displayName,
+        role: updates.role
+      });
+      if (!res.success) return { success: false, error: res.error || 'Gagal memperbarui anggota.' };
+      const updatedMember = (res.member as HouseholdMember | undefined) || {
+        ...mem,
+        displayName: updates.displayName || mem.displayName,
+        role: updates.role || mem.role
+      };
+      setState(prev => ({
+        ...prev,
+        members: prev.members.map(m => (m.id === id ? updatedMember : m))
+      }));
+      return { success: true };
+    }
+    const { error } = await getReceiptAuthClient()
+      .from('household_members')
+      .update({ display_name: updates.displayName || mem.displayName, role: updates.role || mem.role })
+      .eq('id', id);
+    if (error) return { success: false, error: error.message };
+    setState(prev => ({
+      ...prev,
+      members: prev.members.map(m =>
+        m.id === id ? { ...m, displayName: updates.displayName || m.displayName, role: updates.role || m.role } : m
+      )
+    }));
+    return { success: true };
+  };
   const removeMember=removeMemberFromHousehold;
 
   const updateAIConfig = (cfg: Partial<AIConfig>) => {
@@ -2344,6 +2580,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateRegisteredUser:(...args)=>duringWrite(()=>updateRegisteredUser(...args)),
         adminCreateUser:(...args)=>duringWrite(()=>adminCreateUser(...args)),
         deleteUser:(...args)=>duringWrite(()=>deleteUser(...args)),
+        refreshAdminDirectory,
         addMemberToHousehold:(...args)=>duringWrite(()=>addMemberToHousehold(...args)),
         removeMemberFromHousehold:(...args)=>duringWrite(()=>removeMemberFromHousehold(...args)),
         allHouseholds,

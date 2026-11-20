@@ -314,7 +314,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
       >
         {/* Header Tabs: Pengeluaran, Pemasukan, Transfer */}
         <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-          <div className="flex bg-slate-100 p-1 rounded-2xl w-full mr-2">
+          <div className="entry-type-tabs grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-2xl flex-1 min-w-0 mr-2">
             <button
               type="button"
               data-entry-type="expense"
@@ -323,14 +323,14 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                 changeType('expense');
                 setErrorMsg('');
               }}
-              className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+              className={`entry-type-tab py-1.5 px-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 min-w-0 transition-all ${
                 type === 'expense'
                   ? 'bg-teal-100 text-teal-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <ArrowDownRight className="w-3.5 h-3.5" />
-              <span>Pengeluaran</span>
+              <ArrowDownRight className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Pengeluaran</span>
             </button>
 
             <button
@@ -341,14 +341,14 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                 changeType('income');
                 setErrorMsg('');
               }}
-              className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+              className={`entry-type-tab py-1.5 px-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 min-w-0 transition-all ${
                 type === 'income'
                   ? 'bg-teal-100 text-teal-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>Pemasukan</span>
+              <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Pemasukan</span>
             </button>
 
             <button
@@ -359,14 +359,14 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                 changeType('transfer');
                 setErrorMsg('');
               }}
-              className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+              className={`entry-type-tab py-1.5 px-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 min-w-0 transition-all ${
                 type === 'transfer'
                   ? 'bg-teal-100 text-teal-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <ArrowRightLeft className="w-3.5 h-3.5" />
-              <span>Transfer</span>
+              <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Transfer</span>
             </button>
           </div>
 
@@ -435,7 +435,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
               </div>
             </div>
             <div className="flex items-baseline justify-center gap-1.5">
-              <span className="text-lg font-bold text-slate-400">Rp</span>
+              <span className="text-xl font-extrabold text-[#365664] shrink-0">Rp</span>
               <input
                 id="modal-nominal-amount"
                 aria-label="Nominal transaksi"

@@ -697,8 +697,116 @@ a {
 /* ==========================================================================
    ANIMATED WALLET STACK DECK (BERANDA HOME)
    ========================================================================== */
+.home-decks-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+  margin: 14px 0 8px;
+}
+.home-decks-row > * {
+  min-width: 0;
+}
+@media (min-width: 640px) {
+  .home-decks-row {
+    gap: 16px;
+    margin: 16px 0 10px;
+  }
+}
 .wallet-deck-wrapper {
   margin: 16px 0 8px;
+}
+.wallet-deck-wrapper.is-compact {
+  margin: 0;
+  min-width: 0;
+}
+.wallet-deck-wrapper.is-compact .wallet-deck-stage {
+  padding: 2px 5px 0 1px;
+}
+.wallet-deck-wrapper.is-compact .wallet-deck-card {
+  border-radius: 20px;
+  box-shadow: 3px 3px 0px #073B4C;
+}
+.wallet-deck-wrapper.is-compact .wallet-deck-card-header {
+  padding: 8px 9px;
+  gap: 6px;
+}
+.wallet-deck-wrapper.is-compact .wallet-deck-card-body {
+  padding: 9px 10px;
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.wallet-deck-wrapper.is-compact .deck-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.wallet-deck-wrapper.is-compact .deck-sub {
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.wallet-deck-wrapper.is-compact .deck-count {
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 1.5px 6px;
+}
+.wallet-deck-wrapper.is-compact .deck-amount {
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.wallet-deck-wrapper.is-compact .deck-pct-pill {
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  background: #EDE9FE;
+  color: #073B4C;
+  border: 1.5px solid #073B4C;
+}
+.deck-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #F7F4E8;
+  border: 1.5px solid #073B4C;
+  overflow: hidden;
+}
+.deck-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+.takara-app .wallet-deck-wrapper.is-compact .deck-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 0 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #073B4C;
+  background: #FEF3C7;
+  border: 1.5px solid #073B4C;
+  box-shadow: 1.5px 1.5px 0px #073B4C;
+}
+.wallet-deck-wrapper.is-compact .wallet-deck-controls {
+  margin-top: 8px;
+  padding: 0 2px;
+  min-height: 26px;
+}
+.wallet-deck-wrapper.is-compact .wallet-deck-nav-btn {
+  width: 26px;
+  height: 26px;
+  min-height: 0 !important;
 }
 .wallet-deck-stage {
   position: relative;
@@ -1084,19 +1192,19 @@ a {
    ========================================================================== */
 .bottom-dock {
   position: fixed;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 20px);
   max-width: 560px;
   display: flex;
-  gap: 4px;
-  padding: 8px;
+  gap: 5px;
+  padding: 6px;
   z-index: 35;
-  border-radius: 999px;
+  border-radius: 18px;
   background: #FFFFFF;
-  border: 3px solid #073B4C;
-  box-shadow: 5px 5px 0px #073B4C;
+  border: 2.5px solid #073B4C;
+  box-shadow: 4px 4px 0px #073B4C;
 }
 .bottom-dock button {
   display: flex;
@@ -1105,15 +1213,16 @@ a {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 56px;
-  border-radius: 999px;
+  gap: 3px;
+  min-height: 50px;
+  padding: 5px 3px;
+  border-radius: 12px;
   color: #073B4C;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   background: var(--nav-rest, #FFFFFF);
-  border: 1.5px solid rgba(7, 59, 76, 0.22);
-  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease, color 0.15s ease, box-shadow 0.18s ease, border-color 0.15s ease;
+  border: 1.5px solid transparent;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .bottom-dock button[data-nav-tab="beranda"] {
   --nav-rest: #E0F2FE;
@@ -1153,8 +1262,8 @@ a {
   background: var(--nav-active, #FFD166);
   color: #073B4C;
   border: 2px solid #073B4C;
-  box-shadow: 2.5px 2.5px 0px #073B4C;
-  transform: translateY(-2px);
+  box-shadow: 2px 2px 0px #073B4C;
+  transform: translateY(-1px);
 }
 .bottom-dock button[aria-current="page"] svg {
   animation: nbIconJelly 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -1425,11 +1534,28 @@ a {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0px #073B4C !important;
 }
+.auth-screen .auth-mode-tabs {
+  padding: 4px !important;
+  border-radius: 18px !important;
+}
 .auth-screen .auth-mode-tab {
+  min-height: 36px !important;
+  padding: 6px 8px !important;
+  border-radius: 14px !important;
+  font-size: 12.5px !important;
+  line-height: 1.15 !important;
+  white-space: nowrap !important;
+  gap: 5px !important;
   background: transparent !important;
   border: 2px solid transparent !important;
   box-shadow: none !important;
   color: #365664 !important;
+}
+@media (min-width: 640px) {
+  .auth-screen .auth-mode-tab {
+    min-height: 38px !important;
+    font-size: 13px !important;
+  }
 }
 .auth-screen .auth-mode-tab[aria-pressed="true"] {
   background: #FFD166 !important;
@@ -1781,8 +1907,36 @@ a {
 .takara-app .wallet-stack-item:first-child {
   margin-top: 0;
 }
-.takara-app .wallet-stack-item.is-collapsed {
-  margin-top: -66px;
+.takara-app :is(.wallet-account-card, .wallet-deck-card) .wallet-sub-label {
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+.takara-app .wallet-header-balance {
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+.takara-app .wallet-mutasi-chip {
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+.takara-app .wallet-stack-body-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.takara-app .wallet-stack-body-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.takara-app .wallet-stack-item.is-header-collapsed .wallet-stack-body-wrap {
+  grid-template-rows: 0fr;
+}
+.takara-app .wallet-stack-item.is-header-collapsed .wallet-stack-header {
+  border-bottom-width: 0;
+  padding-bottom: 24px;
+}
+.takara-app .wallet-stack-item.is-tucked {
+  margin-top: -16px;
 }
 .takara-app .wallet-stack-item:hover {
   transform: translate3d(0, -10px, 0) rotate(0deg);
@@ -1890,6 +2044,22 @@ a {
   padding: 6px 12px;
   cursor: pointer;
 }
+.takara-app .report-tabs .report-tab-btn {
+  min-height: 36px;
+  padding: 6px 6px;
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: nowrap;
+  border-radius: 14px !important;
+}
+@media (min-width: 640px) {
+  .takara-app .report-tabs .report-tab-btn {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 13.5px;
+    border-radius: 16px !important;
+  }
+}
 .settings-profile {
   gap: 16px;
   align-items: flex-start;
@@ -1932,6 +2102,67 @@ a {
   border: 2px solid #073B4C !important;
   box-shadow: 2.5px 2.5px 0px #073B4C !important;
 }
+.settings-profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.settings-role-badge,
+.settings-household-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  font-size: 11.5px;
+  line-height: 1.25;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1.5px solid #073B4C;
+  color: #073B4C;
+  overflow-wrap: anywhere;
+}
+.settings-role-badge {
+  background: #D1FAE5;
+}
+.settings-household-badge {
+  background: #FFFFFF;
+}
+.takara-app .monthly-balance-reset {
+  background: #FFFDF5 !important;
+  border: 2.5px solid #073B4C !important;
+  box-shadow: 4px 4px 0px #073B4C !important;
+}
+.takara-app .monthly-reset-action {
+  background: #FFD166;
+  color: #073B4C;
+  border: 2px solid #073B4C;
+  box-shadow: 3px 3px 0px #073B4C;
+  border-radius: 14px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease;
+}
+.takara-app .monthly-reset-action:hover:not(:disabled) {
+  background: #FFE08A;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #073B4C;
+}
+.takara-app .monthly-reset-action:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+.takara-app .monthly-reset-cancel {
+  background: #FFFFFF;
+  color: #073B4C;
+  border: 2px solid #073B4C;
+  box-shadow: 2px 2px 0px #073B4C;
+  border-radius: 14px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+}
 
 .transaction-summary {
   background: #FFF9DB !important;
@@ -1964,10 +2195,12 @@ a {
 /* ==========================================================================
    MODALS, QUICK ADD SHEET & PICKERS
    ========================================================================== */
-.takara-app .fixed.inset-0 {
+.takara-app .fixed.inset-0,
+.takara-modal-backdrop {
   backdrop-filter: blur(4px);
 }
-.takara-app .fixed.inset-0 > div {
+.takara-app .fixed.inset-0 > div,
+.takara-modal-backdrop > div {
   border-radius: 30px;
   border: 3px solid #073B4C;
   box-shadow: 7px 7px 0px #073B4C;
@@ -2010,13 +2243,30 @@ a {
   background: #38BDF8 !important;
 }
 
+.takara-app .entry-sheet .entry-type-tabs,
+.entry-sheet .entry-type-tabs {
+  border: 2px solid #073B4C;
+  border-radius: 18px !important;
+}
+.takara-app .entry-sheet .entry-type-tab,
+.entry-sheet .entry-type-tabs .entry-type-tab {
+  min-height: 38px !important;
+  padding: 6px 4px !important;
+  font-size: 12px !important;
+  line-height: 1.15 !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+  border-radius: 14px !important;
+  gap: 4px !important;
+}
 .entry-amount-input {
   border: 0 !important;
   box-shadow: none !important;
   background: transparent !important;
-  min-height: 0 !important;
+  min-height: 44px !important;
+  max-width: calc(100% - 42px);
   padding: 0 !important;
-  font-size: clamp(28px, 7vw, 38px);
+  font-size: clamp(32px, 8.8vw, 42px) !important;
   line-height: 1.1;
   text-align: center;
   color: #073B4C;
@@ -2295,6 +2545,26 @@ a {
   .wallet-deck-card-body {
     padding: 13px 14px;
   }
+  .wallet-deck-wrapper.is-compact .wallet-deck-card-header {
+    padding: 8px 9px;
+  }
+  .wallet-deck-wrapper.is-compact .wallet-deck-card-body {
+    padding: 9px 10px;
+    min-height: 88px;
+  }
+  .wallet-tabs > button {
+    min-height: 60px;
+    padding: 6px 3px;
+    border-radius: 16px;
+  }
+  .wallet-tabs .wallet-tab-label {
+    font-size: 11.5px;
+    line-height: 1.15;
+  }
+  .wallet-tabs .wallet-tab-count {
+    font-size: 10.5px;
+    line-height: 1.15;
+  }
   .activity-heading h1 {
     font-size: 23px;
   }
@@ -2331,14 +2601,17 @@ a {
     padding: 5px 11px;
   }
   .bottom-dock {
-    width: calc(100% - 14px);
-    padding: 7px 6px;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 16px);
+    padding: 5px;
+    gap: 4px;
+    border-radius: 16px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
   .bottom-dock button {
-    min-height: 62px;
-    font-size: 11.5px;
-    gap: 4px;
+    min-height: 54px;
+    border-radius: 11px;
+    font-size: 11px;
+    gap: 3px;
   }
   .page-record-action {
     right: 14px;
@@ -2348,7 +2621,7 @@ a {
     width: 62px;
     height: 62px;
   }
-  .takara-app :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+  .takara-app :is(input:not([type="checkbox"]):not([type="radio"]):not(.entry-amount-input), select, textarea),
   .auth-screen input {
     min-height: 48px;
     font-size: 16px !important;
@@ -2472,11 +2745,11 @@ a {
   }
   100% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: none;
   }
 }
 .view-stage-enter {
-  animation: nbViewEnter 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: nbViewEnter 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 
 @keyframes nbModalPop {
@@ -2489,7 +2762,8 @@ a {
     transform: translate3d(0, 0, 0) scale(1);
   }
 }
-.takara-app .fixed.inset-0 > div {
+.takara-app .fixed.inset-0 > div,
+.takara-modal-backdrop > div {
   animation: nbModalPop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 

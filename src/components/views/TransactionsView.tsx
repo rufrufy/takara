@@ -2,6 +2,7 @@ import {jakartaDateTime,jakartaDateTimeToISO} from '../../lib/dateTime';
 import {ReceiptAttachment} from '../ReceiptAttachment';
 import {isBalanceReset} from '../../lib/monthlyBalance';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
 import { formatIDR } from '../../lib/money';
 import { CategoryIcon, categoryAppearance } from '../CategoryIcon';
@@ -60,6 +61,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   const transactionCategory=(t:FinancialTransaction)=>categories.find(c=>c.householdId===t.householdId&&(c.id===t.categoryId||(c.type===t.type&&c.name.toLocaleLowerCase('id')===t.categoryName?.toLocaleLowerCase('id'))));
 
   // Search & Filter State (6 Kriteria: Tanggal, Tipe, Anggota, Aset, Kategori, Label)
+  const PAGE_SIZE = 30;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [startDateFilter, setStartDateFilter] = useState<string>('');
@@ -280,10 +283,33 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     wallets
   ]);
 
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [
+    startDateFilter,
+    endDateFilter,
+    typeFilter,
+    memberFilter,
+    assetFilter,
+    categoryFilter,
+    labelFilter,
+    searchQuery
+  ]);
+
+  const sortedFilteredTransactions = useMemo(
+    () => [...filteredTransactions].sort((a, b) => Date.parse(b.effectiveAt) - Date.parse(a.effectiveAt)),
+    [filteredTransactions]
+  );
+
+  const visibleTransactions = useMemo(
+    () => sortedFilteredTransactions.slice(0, visibleCount),
+    [sortedFilteredTransactions, visibleCount]
+  );
+
   const monthlyTransactions = useMemo(() => {
-    const months = new Map<string, typeof filteredTransactions>();
-    for (const transaction of [...filteredTransactions].sort((a,b) => Date.parse(b.effectiveAt)-Date.parse(a.effectiveAt))) {
-      const month = jakartaDateTime(transaction.effectiveAt).date.slice(0,7);
+    const months = new Map<string, typeof visibleTransactions>();
+    for (const transaction of visibleTransactions) {
+      const month = jakartaDateTime(transaction.effectiveAt).date.slice(0, 7);
       const items = months.get(month) || [];
       items.push(transaction);
       months.set(month, items);
@@ -292,7 +318,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       month, items,
       label: new Date(`${month}-01T12:00:00+07:00`).toLocaleDateString('id-ID', {month:'long',year:'numeric',timeZone:'Asia/Jakarta'})
     }));
-  }, [filteredTransactions]);
+  }, [visibleTransactions]);
 
   // Recalculate income, expense, and net balance dynamically from filtered transactions
   // Default is the whole active month's total when no filter is applied
@@ -1103,15 +1129,56 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
               );
             })}</section>)
           )}
+          {sortedFilteredTransactions.length > PAGE_SIZE && (
+            <div className="p-3.5 sm:p-4 bg-[#FFFDF5] border-t-[2.5px] border-[#073B4C] flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-extrabold text-[#365664]">
+                Menampilkan {visibleTransactions.length} dari {sortedFilteredTransactions.length} transaksi
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {visibleCount < sortedFilteredTransactions.length ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVisibleCount(c => Math.min(sortedFilteredTransactions.length, c + PAGE_SIZE))
+                      }
+                      className="nb-chip px-3 py-1.5 bg-[#FFD166] hover:bg-[#FFE08A] text-[#073B4C] text-xs font-extrabold"
+                    >
+                      Muat {Math.min(PAGE_SIZE, sortedFilteredTransactions.length - visibleCount)} lagi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount(sortedFilteredTransactions.length)}
+                      className="nb-chip px-3 py-1.5 bg-white hover:bg-[#FFFBEB] text-[#073B4C] text-xs font-extrabold"
+                    >
+                      Tampilkan semua ({sortedFilteredTransactions.length})
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(PAGE_SIZE)}
+                    className="nb-chip px-3 py-1.5 bg-white hover:bg-[#FFFBEB] text-[#073B4C] text-xs font-extrabold"
+                  >
+                    Ringkas ({PAGE_SIZE} terbaru)
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
       </div>
 
       {/* Transaction Detail Modal & Inline Edit Modal (Ref: pen.html '08 - Detail Transaksi & Kolaborasi') */}
-      {detailTransaction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+      {detailTransaction &&
+        createPortal(
           <div
-            className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
-            onClick={e => e.stopPropagation()}
+            className="takara-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+            onClick={() => setDetailTransaction(null)}
           >
+            <div
+              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh] animate-in zoom-in-95 duration-150"
+              onClick={e => e.stopPropagation()}
+            >
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -1542,13 +1609,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Void Confirmation Dialog */}
-      {voidConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4">
+      {voidConfirmId &&
+        createPortal(
+          <div
+            className="takara-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+            onClick={() => setVoidConfirmId(null)}
+          >
+            <div
+              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4"
+              onClick={e => e.stopPropagation()}
+            >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
                 <AlertCircle className="w-5 h-5" />
@@ -1576,7 +1651,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
