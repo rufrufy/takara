@@ -40,19 +40,98 @@ const getRequiredPinLength = (u: string) => (isSuperAdminUsername(u) ? 8 : 5);
 const isValidPinForUser = (u: string, pin: string) =>
   isSuperAdminUsername(u) ? /^\d{8}$/.test(String(pin || '')) : /^\d{5}$/.test(String(pin || ''));
 
+function extractProxyProto(request: Request): string {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  if (forwardedProto === 'http' || forwardedProto === 'https') return forwardedProto;
+  const cfVisitor = request.headers.get('cf-visitor');
+  if (cfVisitor) {
+    try {
+      const parsed = JSON.parse(cfVisitor) as { scheme?: string };
+      const scheme = parsed?.scheme?.trim().toLowerCase();
+      if (scheme === 'http' || scheme === 'https') return scheme;
+    } catch {}
+  }
+  return '';
+}
+
+function isAllowedOrigin(request: Request, url: URL, env: Env): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) return true;
+
+  let originUrl: URL;
+  try {
+    originUrl = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  if (originUrl.origin === url.origin) return true;
+
+  const originHost = originUrl.host.toLowerCase();
+  const originHostname = originUrl.hostname.toLowerCase();
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim().toLowerCase() || '';
+  const hostHeader = request.headers.get('host')?.split(',')[0]?.trim().toLowerCase() || '';
+  const candidateHosts = new Set([forwardedHost, hostHeader, url.host.toLowerCase()].filter(Boolean));
+  const proxyProto = extractProxyProto(request);
+
+  if (proxyProto) {
+    for (const h of candidateHosts) {
+      if (originUrl.origin === `${proxyProto}://${h}`) return true;
+    }
+  }
+
+  // Handle TLS-terminating reverse proxies (e.g. Cloudflare / Nginx -> http upstream)
+  if ((originUrl.protocol === 'http:' || originUrl.protocol === 'https:') && candidateHosts.has(originHost)) {
+    return true;
+  }
+
+  // Allow bkpp.dev and all *.bkpp.dev subdomains over HTTPS
+  if (originUrl.protocol === 'https:' && (originHostname === 'bkpp.dev' || originHostname.endsWith('.bkpp.dev'))) {
+    return true;
+  }
+
+  const configured = (env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  for (const entry of configured) {
+    if (originUrl.origin.toLowerCase() === entry || originHostname === entry || originHost === entry) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function handleAuthRequest(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/auth/')) return null;
 
+  const origin = request.headers.get('origin');
+  const originAllowed = isAllowedOrigin(request, url, env);
+  const corsHeaders: Record<string, string> =
+    origin && originAllowed
+      ? {
+          Vary: 'Origin',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        }
+      : { Vary: 'Origin' };
+
   const json = (value: unknown, status = 200) =>
     new Response(JSON.stringify(value), {
       status,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders }
     });
 
+  if (request.method === 'OPTIONS') {
+    if (!originAllowed) return json({ success: false, error: 'Origin tidak diizinkan.' }, 403);
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   if (request.method !== 'POST') return json({ success: false, error: 'Metode tidak diizinkan.' }, 405);
-  const origin = request.headers.get('origin');
-  if (origin && origin !== url.origin) return json({ success: false, error: 'Origin tidak diizinkan.' }, 403);
+  if (!originAllowed) return json({ success: false, error: 'Origin tidak diizinkan.' }, 403);
 
   const base = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
   const key = env.SUPABASE_SERVICE_ROLE_KEY;

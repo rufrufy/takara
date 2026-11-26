@@ -29,7 +29,9 @@ export default defineConfig(({ mode }) => {
         const url = req.url || '';
         if(url.startsWith('/api/auth/')){
           try{let body='';for await(const chunk of req){body+=chunk;if(body.length>8192){res.statusCode=413;res.end();return;}}
-          const result=await handleAuthRequest(new Request('http://'+req.headers.host+url,{method:req.method,headers:new Headers(Object.entries(req.headers).filter(([,v])=>v!==undefined).map(([k,v])=>[k,Array.isArray(v)?v.join(','):v!])),...(req.method!=='GET'&&req.method!=='HEAD'?{body}:{} )}),env);
+          const proto=(Array.isArray(req.headers['x-forwarded-proto'])?req.headers['x-forwarded-proto'][0]:req.headers['x-forwarded-proto'])?.split(',')[0]?.trim()||'http';
+          const host=(Array.isArray(req.headers['x-forwarded-host'])?req.headers['x-forwarded-host'][0]:req.headers['x-forwarded-host'])?.split(',')[0]?.trim()||req.headers.host||'localhost';
+          const result=await handleAuthRequest(new Request(`${proto}://${host}${url}`,{method:req.method,headers:new Headers(Object.entries(req.headers).filter(([,v])=>v!==undefined).map(([k,v])=>[k,Array.isArray(v)?v.join(','):v!])),...(req.method!=='GET'&&req.method!=='HEAD'?{body}:{} )}),env);
           if(result){res.statusCode=result.status;result.headers.forEach((v,k)=>res.setHeader(k,v));res.end(Buffer.from(await result.arrayBuffer()));return;}}
           catch{res.statusCode=500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:false,error:'Layanan akun belum tersedia.'}));return;}
         }
