@@ -4,6 +4,7 @@ import {CategorySettings} from '../CategorySettings';
 import { HouseholdDeleteControl } from '../HouseholdDeleteControl';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { getRequiredPinLength } from '../../lib/receiptAuth';
 import { formatIDR } from '../../lib/money';
 import {
   Shield,
@@ -16,7 +17,7 @@ import {
   Download,
   Lock,
   ChevronRight,
-  Sparkles,
+  House,
   Share2,
   Cpu,
   Database,
@@ -166,7 +167,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
             </p>
             <div className="settings-profile-badges flex flex-wrap items-center gap-2 pt-0.5">
               <span className="settings-role-badge">
-                {state.currentUser.username === 'admin' || state.currentUser.role === 'ADMIN'
+                {state.currentUser.username === 'adminmaruf99' || state.currentUser.username === 'admin' || state.currentUser.role === 'ADMIN'
                   ? 'Superadmin'
                   : state.currentUser.role === 'OWNER'
                   ? 'Kepala Keluarga'
@@ -174,8 +175,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
                   ? 'Anggota Keluarga'
                   : 'Pengguna'}
               </span>
-              <span className="settings-household-badge">
-                🏡 {activeHousehold.name}
+              <span className="settings-household-badge inline-flex items-center gap-1">
+                <House className="w-3 h-3 shrink-0" />
+                <span>{activeHousehold.name}</span>
               </span>
             </div>
           </div>
@@ -242,7 +244,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         <div className="p-4 bg-[#FFD166] rounded-2xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="text-xs font-extrabold text-[#073B4C] uppercase tracking-wide">🏡 Kode Undangan Household</div>
+              <div className="text-xs font-extrabold text-[#073B4C] uppercase tracking-wide flex items-center gap-1.5">
+                <House className="w-3.5 h-3.5 shrink-0" />
+                <span>Kode Undangan Household</span>
+              </div>
               <div className="inline-block bg-white px-3 py-1 rounded-xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-base font-mono font-extrabold text-[#073B4C] tracking-wider mt-1.5">
                 {inviteCode}
               </div>
@@ -403,34 +408,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
         </div>
       </div>
 
-      {/* SEKSI 3: KEAMANAN & KODE UNIK 5-DIGIT */}
+      {/* SEKSI 3: KEAMANAN & KODE UNIK */}
+      {(() => {
+        const pinLen = getRequiredPinLength(state.currentUser.username);
+        return (
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-teal-700" />
-          <h2 className="font-bold text-slate-900 text-sm">Keamanan & Kode Unik 5-Digit</h2>
+          <h2 className="font-bold text-slate-900 text-sm">Keamanan & Kode Unik {pinLen}-Digit</h2>
         </div>
 
         {!isChangingPin ? (
           <div className="flex items-center justify-between py-1">
             <div>
-              <div className="text-xs font-bold text-slate-800">Ubah 5-Digit Kode Unik Akun</div>
-              <div className="text-[11px] text-slate-500">Kode unik saat ini: •••••</div>
+              <div className="text-xs font-bold text-slate-800">Ubah {pinLen}-Digit Kode Unik Akun</div>
+              <div className="text-[11px] text-slate-500">Kode unik saat ini: {'•'.repeat(pinLen)}</div>
             </div>
             <button
               onClick={() => setIsChangingPin(true)}
               className="px-3 py-1.5 bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 rounded-xl text-xs font-semibold"
             >
-              Ubah Kode 5-Digit
+              Ubah Kode {pinLen}-Digit
             </button>
           </div>
         ) : (
           <form onSubmit={handleSavePin} className="space-y-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-            <label className="block text-xs font-semibold text-slate-700">PIN saat ini<input type="password" inputMode="numeric" maxLength={5} autoComplete="current-password" value={currentPin} disabled={pinSaving} onChange={e=>setCurrentPin(e.target.value.replace(/[^0-9]/g,''))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3" required/></label><div className="text-xs font-semibold text-slate-700">Masukkan 5-Digit Kode Baru:</div>{pinError&&<p role="alert" className="text-sm text-red-700">{pinError}</p>}
+            <label className="block text-xs font-semibold text-slate-700">PIN saat ini<input type="password" inputMode="numeric" maxLength={pinLen} autoComplete="current-password" value={currentPin} disabled={pinSaving} onChange={e=>setCurrentPin(e.target.value.replace(/[^0-9]/g,''))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3" required/></label><div className="text-xs font-semibold text-slate-700">Masukkan {pinLen}-Digit Kode Baru:</div>{pinError&&<p role="alert" className="text-sm text-red-700">{pinError}</p>}
             <input
               type="password"
-              maxLength={5}
+              maxLength={pinLen}
               inputMode="numeric"
-              placeholder="Contoh: 12345"
+              placeholder={pinLen === 8 ? '8 digit angka' : 'Contoh: 12345'}
               value={newPin}
               onChange={e => setNewPin(e.target.value.replace(/[^0-9]/g, ''))}
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-center text-lg tracking-widest font-bold focus:outline-none focus:ring-1 focus:ring-teal-600"
@@ -438,7 +446,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
             />
             {pinSuccess && (
               <div className="text-xs text-emerald-600 font-semibold text-center">
-                ✓ Kode 5-digit berhasil diperbarui!
+                ✓ Kode {pinLen}-digit berhasil diperbarui!
               </div>
             )}
             <div className="flex justify-end gap-2 pt-1">
@@ -451,7 +459,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
               </button>
               <button
                 type="submit"
-                disabled={newPin.length !== 5 || currentPin.length!==5 || pinSaving}
+                disabled={newPin.length !== pinLen || currentPin.length !== pinLen || pinSaving}
                 className="px-4 py-1.5 text-xs font-bold bg-teal-700 text-white rounded-lg disabled:opacity-50"
               >
                 {pinSaving?'Menyimpan…':'Simpan Kode'}
@@ -460,6 +468,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
           </form>
         )}
       </div>
+        );
+      })()}
 
       {/* SEKSI 4: SESI LOGIN AKTIF & RIWAYAT PERANGKAT */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
@@ -565,7 +575,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenImport, onOpen
       </div>
 
       {/* SEKSI 6: DASHBOARD ADMIN HANYA UNTUK SUPERADMIN */}
-      {(state.currentUser.role === 'ADMIN' || state.currentUser.username === 'admin') && (
+      {(state.currentUser.role === 'ADMIN' || state.currentUser.username === 'adminmaruf99' || state.currentUser.username === 'admin') && (
         <div className="soft-summary rounded-3xl p-5 shadow-lg space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2.5">

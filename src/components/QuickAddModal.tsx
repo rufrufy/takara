@@ -23,7 +23,8 @@ import {
   FolderOpen,
   Delete,
   Calculator,
-  RotateCcw
+  RotateCcw,
+  Mic
 } from 'lucide-react';
 import { CategoryIcon } from './CategoryIcon';
 import { MagicInputBar } from './MagicInputBar';
@@ -75,6 +76,17 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
   // Kalkulator / Numpad Keypad State (Default aktif)
   const [showKeypad, setShowKeypad] = useState(true);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const keyboardActionRef = useRef<(e: KeyboardEvent) => void>(() => {});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      keyboardActionRef.current(e);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   // Inisialisasi saat modal dibuka
   useEffect(() => {
@@ -122,6 +134,55 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   const [saving, setSaving] = useState(false);
 
   const [attachmentUploading,setAttachmentUploading] = useState(false);
+
+  keyboardActionRef.current = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (isLabelPickerOpen) {
+        setIsLabelPickerOpen(false);
+        return;
+      }
+      if (isCategoryPickerOpen) {
+        setIsCategoryPickerOpen(false);
+        return;
+      }
+      if (isWalletPickerOpen) {
+        setIsWalletPickerOpen(false);
+        return;
+      }
+      onClose();
+      return;
+    }
+
+    if (isLabelPickerOpen || isCategoryPickerOpen || isWalletPickerOpen) return;
+
+    const active = document.activeElement as HTMLElement | null;
+    const isEditable =
+      !!active &&
+      (active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        active.tagName === 'SELECT' ||
+        active.isContentEditable);
+
+    if (isEditable) return;
+
+    if (/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+      handleKeypadPress(e.key);
+    } else if (e.key === 'Backspace') {
+      e.preventDefault();
+      handleKeypadPress('backspace');
+    } else if (e.key === 'Delete') {
+      e.preventDefault();
+      handleKeypadPress('clear');
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      void executeSave(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const resetForm=()=>{
@@ -306,7 +367,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#073B4C]/45 animate-in fade-in duration-150">
       <div
         data-transaction-type={type}
         className="entry-sheet w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[96vh] animate-in slide-in-from-bottom duration-200 overflow-hidden"
@@ -415,7 +476,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
 
           {/* DISPLAY NOMINAL BESAR */}
           <div
-            onClick={() => setShowKeypad(true)}
+            onClick={() => {
+              setShowKeypad(true);
+              amountInputRef.current?.focus();
+            }}
             className="p-3.5 bg-slate-50 hover:bg-slate-100/80 cursor-pointer rounded-2xl border border-slate-200/90 transition-all text-center group"
           >
             <div className="flex items-center justify-between gap-1.5 text-[11px] font-semibold text-slate-500 mb-1 flex-wrap">
@@ -429,7 +493,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                   }}
                   className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#073B4C] bg-[#FFD166] px-2.5 py-0.5 text-[11px] font-extrabold text-[#073B4C]"
                 >
-                  ✨ Ketik/Suara
+                  <Mic className="w-3 h-3" />
+                  <span>Ketik / Suara</span>
                 </button>
                 <button type="button" disabled={saving||attachmentUploading} onClick={e=>{e.stopPropagation();resetForm();}} aria-label="Reset semua input transaksi" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-teal-700 hover:bg-teal-100 disabled:opacity-40"><RotateCcw className="w-3.5 h-3.5" />Reset</button>
               </div>
@@ -437,6 +502,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
             <div className="flex items-baseline justify-center gap-1.5">
               <span className="text-xl font-extrabold text-[#365664] shrink-0">Rp</span>
               <input
+                ref={amountInputRef}
                 id="modal-nominal-amount"
                 aria-label="Nominal transaksi"
                 type="text"
@@ -448,11 +514,20 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                 value={amountFocused ? amountStr : amountStr ? Number(amountStr).toLocaleString('id-ID') : ''}
                 onFocus={() => setAmountFocused(true)}
                 onBlur={() => setAmountFocused(false)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void executeSave(false);
+                  }
+                }}
                 onChange={e => {
                   setAmountStr(e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '').slice(0, 12));
                   setErrorMsg('');
                 }}
-                style={{width:`${Math.max((amountFocused ? amountStr : Number(amountStr || 0).toLocaleString('id-ID')).length,1)}ch`}}
+                style={{
+                  width: `${Math.max((amountFocused ? amountStr : Number(amountStr || 0).toLocaleString('id-ID')).length, 2)}ch`,
+                  minWidth: '2ch'
+                }}
                 className="entry-amount-input font-extrabold tracking-tight tabular-nums"
               />
             </div>
@@ -651,7 +726,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
                 }`}
               >
                 <span>
-                  {isOver ? '🔴 Lewat pagu' : isWarn ? '🟡 Mendekati pagu' : '🟢 Pagu'} {bgt.categoryName}
+                  {isOver ? 'Lewat pagu' : isWarn ? 'Mendekati pagu' : 'Pagu'} {bgt.categoryName}
                 </span>
                 <span className="tabular-nums">
                   {formatIDR(projected)} / {formatIDR(bgt.monthlyLimit)} ({pct}%)
@@ -963,7 +1038,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose, i
         {/* POP-UP MODAL 3: PICKER LABEL             */}
         {/* ========================================= */}
         {isLabelPickerOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex flex-col justify-end animate-in fade-in">
+          <div className="absolute inset-0 z-50 bg-[#073B4C]/40 flex flex-col justify-end animate-in fade-in">
             <div className="bg-white rounded-t-3xl p-4 space-y-3 max-h-[60vh] overflow-y-auto animate-in slide-in-from-bottom-5">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <div className="flex items-center gap-1.5">

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { getRequiredPinLength, isValidPinFormat } from '../lib/receiptAuth';
 import {
   User as UserIcon,
   Delete,
-  Shield,
   AlertCircle,
   ArrowRight,
   ArrowLeft,
@@ -14,7 +14,7 @@ import {
 
 interface LockScreenProps {
   onBackToLanding?: () => void;
-  initialTab?: 'login' | 'register' | 'admin';
+  initialTab?: 'login' | 'register';
 }
 
 export const LockScreen: React.FC<LockScreenProps> = ({
@@ -23,7 +23,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 }) => {
   const { loginUser, registerUser } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'login' | 'register' | 'admin'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>(initialTab);
 
   // Login form state
   const [username, setUsername] = useState('');
@@ -49,6 +49,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   }, [initialTab]);
 
 
+  const requiredPinLength = activeTab === 'login' ? getRequiredPinLength(username) : 5;
+
   // Global PC keyboard listener for PIN input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -64,7 +66,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             const targetUser = username.trim();
             if (!targetUser) {
               setErrorMsg('Username wajib diisi terlebih dahulu.');
-            } else if (code.length === 5) {
+            } else if (code.length === requiredPinLength) {
               handleExecuteLogin(targetUser, code);
             } else {
               (activeEl as HTMLElement)?.blur();
@@ -77,7 +79,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       }
 
       // PIN entry keyboard capture
-      if (activeTab === 'login' || activeTab === 'admin') {
+      if (activeTab === 'login') {
         if (e.key >= '0' && e.key <= '9') {
           e.preventDefault();
           handleKeyPress(e.key);
@@ -89,7 +91,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           handleClear();
         } else if (e.key === 'Enter') {
           e.preventDefault();
-          const targetUser = activeTab === 'admin' ? 'admin' : username.trim();
+          const targetUser = username.trim();
           if (!targetUser) {
             setErrorMsg('Username atau PIN salah. Masukkan username terlebih dahulu.');
             setCode('');
@@ -102,21 +104,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [code, username, activeTab, isLoading, regFullName, regUsername, regPin, regConfirmPin]);
+  }, [code, username, activeTab, requiredPinLength, isLoading, regFullName, regUsername, regPin, regConfirmPin]);
 
   const handleKeyPress = (digit: string) => {
     if (isLoading || loginInFlight.current) return;
-    if (code.length < 5) {
+    if (code.length < requiredPinLength) {
       const nextCode = code + digit;
       setCode(nextCode);
       setErrorMsg('');
 
-      // Auto submit on 5 digits
-      if (nextCode.length === 5) {
-        if (activeTab === 'admin') {
-          handleExecuteLogin('admin', nextCode);
-          return;
-        }
+      if (nextCode.length === requiredPinLength) {
         const targetUser = username.trim();
         if (!targetUser) {
           setErrorMsg('Username atau PIN salah. Masukkan username terlebih dahulu.');
@@ -143,13 +140,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     if (loginInFlight.current) return;
     const cleanUser = userToLogin.trim().toLowerCase();
     const cleanCode = codeToVerify.trim();
+    const expectedLen = getRequiredPinLength(cleanUser);
     if (!cleanUser) {
       setErrorMsg('Username atau PIN salah. Masukkan username terlebih dahulu.');
       setCode('');
       return;
     }
-    if (!/^\d{5}$/.test(cleanCode)) {
-      setErrorMsg('PIN harus terdiri dari 5 digit angka.');
+    if (!isValidPinFormat(cleanUser, cleanCode)) {
+      setErrorMsg(`PIN harus terdiri dari ${expectedLen} digit angka.`);
       return;
     }
     loginInFlight.current = true;
@@ -207,14 +205,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   };
 
   return (
-    <div className="auth-screen fixed inset-0 z-50 bg-gradient-to-b from-[#0F766E] via-[#115E59] to-[#042F2E] text-white flex flex-col justify-between items-center p-4 sm:p-6 select-none animate-in fade-in duration-200 overflow-y-auto">
+    <div className="auth-screen fixed inset-0 z-50 bg-[#FFFDF5] text-[#073B4C] flex flex-col justify-between items-center p-4 sm:p-6 select-none animate-in fade-in duration-200 overflow-y-auto">
       {/* Top Header Bar */}
       <div className="w-full max-w-md flex items-center justify-between pt-1">
         {onBackToLanding ? (
           <button
             type="button"
             onClick={onBackToLanding}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-900/60 hover:bg-teal-900 text-teal-200 hover:text-white border border-teal-700/50 text-xs font-semibold transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-[#FEF3C7] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] text-xs font-extrabold transition-all active:scale-95"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Beranda</span>
@@ -222,10 +220,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         ) : (
           <div />
         )}
-
-        <div className="text-[11px] text-teal-300 font-semibold px-2.5 py-1 rounded-full bg-teal-950/40 border border-teal-700/40">
-          Takara
-        </div>
       </div>
 
       {/* Main Container */}
@@ -241,8 +235,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           Akses Masuk & Pendaftaran Pengguna
         </p>
 
-        {/* 3 MODE TABS */}
-        <div className="auth-mode-tabs mt-3.5 w-full bg-teal-950/70 p-1 rounded-2xl border border-teal-700/60 grid grid-cols-3 gap-1">
+        {/* 2 MODE TABS (Masuk & Daftar Baru — admin masuk lewat form yang sama) */}
+        <div className="auth-mode-tabs mt-3.5 w-full bg-teal-950/70 p-1 rounded-2xl border border-teal-700/60 grid grid-cols-2 gap-1">
           <button
             type="button"
             onClick={() => {
@@ -281,28 +275,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             <span className="truncate sm:hidden">Daftar</span>
             <span className="hidden sm:inline truncate">Daftar Baru</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('admin');
-              setErrorMsg('');
-              setSuccessMsg('');
-              setCode('');
-            }}
-            aria-pressed={activeTab === 'admin'} data-mode="admin"
-            className={`auth-mode-tab py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 ${
-              activeTab === 'admin'
-                ? 'bg-amber-300 text-slate-950 shadow-md ring-2 ring-amber-200'
-                : 'text-amber-300/80 hover:text-amber-200'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-            <span className="truncate">Admin</span>
-          </button>
         </div>
 
-        {/* TAB 1: LOGIN PENGGUNA */}
+        {/* TAB 1: LOGIN PENGGUNA & ADMIN */}
         {activeTab === 'login' && (
           <div className="w-full mt-4 flex flex-col items-center">
             {/* Manual Username Field */}
@@ -320,7 +295,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   spellCheck={false}
                   value={username}
                   onChange={e => {
-                    setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''));
+                    const nextU = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                    setUsername(nextU);
+                    setCode(prev => prev.slice(0, getRequiredPinLength(nextU)));
                     setErrorMsg('');
                   }}
                   placeholder="Ketik username Anda..."
@@ -333,13 +310,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             {/* PIN Dots Display */}
             <div className="mb-2">
               <span className="text-[11px] font-semibold text-teal-200 uppercase tracking-wider block mb-2">
-                Masukkan PIN 5-Digit
+                Masukkan PIN {requiredPinLength}-Digit
               </span>
-              <div className="flex gap-3 justify-center mb-2">
-                {[0, 1, 2, 3, 4].map(idx => (
+              <div className={`flex ${requiredPinLength > 5 ? 'gap-2' : 'gap-3'} justify-center mb-2`}>
+                {Array.from({ length: requiredPinLength }, (_, idx) => (
                   <div
                     key={idx}
-                    className={`w-4 h-4 rounded-full border-2 border-[#073B4C] transition-all duration-150 ${
+                    className={`${requiredPinLength > 5 ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full border-2 border-[#073B4C] transition-all duration-150 ${
                       code.length > idx
                         ? 'bg-[#06D6A0] scale-125 shadow-[2px_2px_0_#073B4C]'
                         : 'bg-white'
@@ -390,7 +367,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               type="button"
               disabled={isLoading || !username.trim()}
               onClick={() => handleExecuteLogin(username.trim(), code)}
-              className="auth-submit mt-3 w-full max-w-[330px] py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-teal-950 font-extrabold text-sm rounded-xl shadow-lg shadow-teal-950/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
+              className="auth-submit mt-3 w-full max-w-[330px] py-2.5 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] font-extrabold text-sm rounded-full flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >
               {isLoading ? (
                 <span>Memuat akun dan saldo…</span>
@@ -481,8 +458,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   />
                   <Users className="w-4 h-4 text-teal-400 absolute right-3 top-2.5 pointer-events-none" />
                 </div>
-                <p className="text-[10px] text-teal-300/80 mt-1">
-                  💡 Masukkan kode jika diajak oleh keluarga. Kosongkan jika ingin buat keluarga baru.
+                <p className="text-[10px] text-[#365664] mt-1">
+                  Masukkan kode jika diajak oleh keluarga. Kosongkan jika ingin buat keluarga baru.
                 </p>
               </div>
 
@@ -490,87 +467,12 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 type="button"
                 disabled={isLoading}
                 onClick={handleExecuteRegister}
-                className="w-full mt-2 py-3 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2"
+                className="auth-submit w-full mt-2 py-3 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] font-extrabold text-sm rounded-full transition-all flex items-center justify-center gap-2"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>{isLoading ? 'Mendaftarkan...' : 'Daftar & Langsung Masuk'}</span>
               </button>
             </div>
-          </div>
-        )}
-
-        {/* TAB 3: ADMIN DASHBOARD */}
-        {activeTab === 'admin' && (
-          <div className="w-full mt-4 flex flex-col items-center">
-            <div className="w-full p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200 mb-3 text-left">
-              Kelola konfigurasi sistem, layanan AI, dan anggota.
-            </div>
-
-            {/* PIN Dots Display */}
-            <div className="mb-2">
-              <span className="text-[11px] font-semibold text-amber-200 uppercase tracking-wider block mb-2">
-                PIN Admin (5-Digit)
-              </span>
-              <div className="flex gap-3 justify-center mb-2">
-                {[0, 1, 2, 3, 4].map(idx => (
-                  <div
-                    key={idx}
-                    className={`w-4 h-4 rounded-full border-2 border-[#073B4C] transition-all duration-150 ${
-                      code.length > idx
-                        ? 'bg-[#FFD166] scale-125 shadow-[2px_2px_0_#073B4C]'
-                        : 'bg-white'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Numeric Keypad */}
-            <div className="w-full max-w-[330px] grid grid-cols-3 gap-2.5 my-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => handleKeyPress(String(num))}
-                  className="w-full aspect-square rounded-2xl bg-amber-950/50 hover:bg-amber-900/70 text-xl font-bold text-amber-100 border border-amber-600/40 flex items-center justify-center active:scale-95 transition-all shadow-xs"
-                >
-                  {num}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={handleClear}
-                className="w-full aspect-square rounded-2xl bg-amber-950/80 hover:bg-amber-900/80 text-xs font-semibold text-amber-300 border border-amber-700/40 flex items-center justify-center active:scale-95 transition-all"
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                onClick={() => handleKeyPress('0')}
-                className="w-full aspect-square rounded-2xl bg-amber-950/50 hover:bg-amber-900/70 text-xl font-bold text-amber-100 border border-amber-600/40 flex items-center justify-center active:scale-95 transition-all shadow-xs"
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="w-full aspect-square rounded-2xl bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 border border-amber-700/40 flex items-center justify-center active:scale-95 transition-all"
-                title="Hapus Digit"
-              >
-                <Delete className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Admin Login Button */}
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={() => handleExecuteLogin('admin', code)}
-              className="auth-submit mt-3 w-full max-w-[330px] py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-98"
-            >
-              <Shield className="w-4 h-4 text-slate-950" />
-              <span>Masuk Admin Dashboard</span>
-            </button>
           </div>
         )}
 

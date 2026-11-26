@@ -6,7 +6,7 @@ import {
   getReadableHeaderText
 } from '../lib/walletColors';
 import type { SavingsGoal } from '../types';
-import { Plus, Target, Check, X, Trash2, Edit2, Sparkles, PiggyBank } from 'lucide-react';
+import { Plus, Target, Check, X, Trash2, Edit2, CheckCircle2, PiggyBank } from 'lucide-react';
 
 const GOAL_ICONS = ['🏖️', '🎓', '🛟', '🏠', '🚗', '🕌', '💍', '💻', '👶', '🎯'];
 
@@ -147,7 +147,7 @@ export const SavingsGoalsSection: React.FC = () => {
       const goalName = topupGoal.title;
       setTopupGoal(null);
       setTopupAmountStr('');
-      setTopupNotice(`Berhasil menabung ${formatIDR(amt)} ke "${goalName}"! 🎉`);
+      setTopupNotice(`Berhasil menabung ${formatIDR(amt)} ke "${goalName}"!`);
       setTimeout(() => setTopupNotice(''), 4000);
     } finally {
       setBusy(false);
@@ -158,7 +158,7 @@ export const SavingsGoalsSection: React.FC = () => {
     <div className="space-y-4">
       {topupNotice && (
         <div className="p-3 bg-[#D1FAE5] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] text-[#064E3B] rounded-2xl text-xs font-extrabold flex items-center gap-2">
-          <Sparkles className="w-4 h-4 shrink-0" />
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{topupNotice}</span>
         </div>
       )}
@@ -166,8 +166,9 @@ export const SavingsGoalsSection: React.FC = () => {
       {/* Summary Hero Card */}
       <div className="saldo-hero saldo-hero--orchid rounded-3xl p-5 space-y-2.5">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide">
-            🎯 Total Tabungan Impian
+          <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide inline-flex items-center gap-1.5">
+            <Target className="w-3.5 h-3.5 shrink-0" />
+            <span>Total Tabungan Impian</span>
           </span>
           <span className="nb-chip bg-[#FFD166] px-2.5 py-0.5 text-xs">
             {overallPct}% Tercapai
@@ -203,8 +204,8 @@ export const SavingsGoalsSection: React.FC = () => {
       {/* Goals Grid */}
       {savingsGoals.length === 0 ? (
         <div className="bg-white rounded-3xl border-[2.5px] border-dashed border-[#073B4C] p-8 text-center space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-[#FFD166] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] grid place-items-center text-2xl mx-auto">
-            🏖️
+          <div className="w-14 h-14 rounded-2xl bg-[#FFD166] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] grid place-items-center mx-auto">
+            <PiggyBank className="w-6 h-6 text-[#073B4C]" />
           </div>
           <div>
             <h3 className="font-extrabold text-sm text-[#073B4C]">Belum Ada Kantong Impian</h3>
@@ -257,7 +258,7 @@ export const SavingsGoalsSection: React.FC = () => {
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="text-[10px] font-extrabold bg-white text-[#073B4C] border-[1.5px] border-[#073B4C] px-2 py-0.5 rounded-full">
-                      {isDone ? '🎉 Lunas!' : `${pct}%`}
+                      {isDone ? 'Lunas' : `${pct}%`}
                     </span>
                     <button
                       type="button"
@@ -293,7 +294,7 @@ export const SavingsGoalsSection: React.FC = () => {
 
                   <div className="flex items-center justify-between gap-2 pt-1">
                     <span className="text-[11px] font-bold text-[#365664]">
-                      {isDone ? 'Target impian tercapai! 🌟' : `Kurang ${formatIDR(remaining)}`}
+                      {isDone ? 'Target impian tercapai' : `Kurang ${formatIDR(remaining)}`}
                     </span>
                     <button
                       type="button"
@@ -318,7 +319,7 @@ export const SavingsGoalsSection: React.FC = () => {
 
       {/* CREATE / EDIT GOAL MODAL */}
       {isCreateOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C]">
             <div
               style={{ backgroundColor: color, color: getReadableHeaderText(color) }}
@@ -484,7 +485,7 @@ export const SavingsGoalsSection: React.FC = () => {
 
       {/* TOP-UP / NABUNG MODAL */}
       {topupGoal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C]">
             <div
               style={{

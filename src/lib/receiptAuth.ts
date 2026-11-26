@@ -15,9 +15,18 @@ export async function getCurrentAccount(): Promise<User | null> {
     const profile = await c.from('app_users').select('id,username,display_name,role,avatar_url,created_at,auth_user_id').eq('auth_user_id', verified.data.user.id).single();
     if (profile.error) return null; return accountFromRow(profile.data);
 }
+export function isEightDigitAdminUsername(username: string): boolean {
+    return username.trim().toLowerCase() === 'adminmaruf99';
+}
+export function getRequiredPinLength(username: string): 8 | 5 {
+    return isEightDigitAdminUsername(username) ? 8 : 5;
+}
+export function isValidPinFormat(username: string, pin: string): boolean {
+    return isEightDigitAdminUsername(username) ? /^\d{8}$/.test(pin) : /^\d{5}$/.test(pin);
+}
 export async function authenticateAccount(username: string, pin: string) {
     const cleanUsername = username.trim().toLowerCase();
-    if (!cleanUsername || !/^\d{5}$/.test(pin)) return { success: false, error: 'Username atau PIN tidak sesuai.' };
+    if (!cleanUsername || !isValidPinFormat(cleanUsername, pin)) return { success: false, error: 'Username atau PIN tidak sesuai.' };
     const c = getReceiptAuthClient(); const login = await c.auth.signInWithPassword({ email: cleanUsername + '@takara.invalid', password: 'Takara::' + pin });
     if (login.error) return { success: false, error: 'Username atau PIN tidak sesuai.' }; accessToken = login.data.session?.access_token || '';
     const user = await getCurrentAccount(); if (!user) { await signOutAccount(); return { success: false, error: 'Profil akun belum terhubung ke Supabase Auth.' }; } return { success: true, user };

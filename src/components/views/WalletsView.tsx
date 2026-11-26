@@ -176,7 +176,7 @@ export const WalletsView: React.FC = () => {
 
       {/* Add Wallet Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#073B4C]/45">
           <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-200 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-slate-900 text-base">Tambah Dompet Baru</h2>

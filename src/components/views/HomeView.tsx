@@ -8,7 +8,7 @@ import { CategoryIcon, categoryAppearance } from '../CategoryIcon';
 import { MagicInputBar } from '../MagicInputBar';
 import { FamilyGamificationModal } from '../FamilyGamificationModal';
 import { WalletStack } from '../WalletStack';
-import { GoalStack } from '../GoalStack';
+import { BudgetStack } from '../BudgetStack';
 import {
   Eye,
   EyeOff,
@@ -20,7 +20,9 @@ import {
   ScanLine,
   FileUp,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  Flame,
+  Trophy
 } from 'lucide-react';
 import type { ActiveTab } from '../BottomNav';
 import type { TransactionType } from '../../types';
@@ -47,7 +49,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
     transactions,
     categories,
     categoryBudgets,
-    savingsGoals,
     totalBalance,
     periodIncome,
     periodExpense,
@@ -137,14 +138,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       <section className="balance-panel" aria-label="Saldo household">
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-          <p className="balance-label !mb-0">🌴 Saldo tersedia</p>
+          <p className="balance-label !mb-0">Saldo tersedia</p>
           <button
             type="button"
             onClick={() => setIsGamificationOpen(true)}
             className="nb-chip bg-[#FFD166] hover:bg-[#FFE08A] text-[#073B4C] px-3 py-1 text-xs inline-flex items-center gap-1.5 transition-transform active:translate-y-0.5"
             title="Lihat Streak, Badge & Tantangan Keluarga"
           >
-            <span>🔥</span>
+            <Flame size={14} strokeWidth={2.4} />
             <span>{streak.currentStreak} Hari Streak</span>
           </button>
         </div>
@@ -192,13 +193,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
             onOpenProfileTab ? onOpenProfileTab('dompet') : onChangeTab('profil-keuangan')
           }
         />
-        <GoalStack
+        <BudgetStack
           compact
-          goals={savingsGoals}
+          budgets={categoryBudgets}
+          transactions={transactions}
+          categories={categories}
           showBalance={showBalance}
-          onManageGoals={() =>
-            onOpenProfileTab ? onOpenProfileTab('impian') : onChangeTab('profil-keuangan')
-          }
+          onManageBudgets={() => onChangeTab('laporan')}
         />
       </div>
 
@@ -349,7 +350,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
       </section>
 
       <div className="home-tools">
-        <button onClick={() => setIsGamificationOpen(true)}>🏆 Tantangan & Streak</button>
+        <button onClick={() => setIsGamificationOpen(true)}>
+          <Trophy size={16} strokeWidth={2.3} />
+          Tantangan & Streak
+        </button>
         <button onClick={onOpenAIScan}>
           <Camera size={18} />
           Scan struk

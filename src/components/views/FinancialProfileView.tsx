@@ -27,7 +27,6 @@ import {
   ArrowUpRight,
   Home,
   GraduationCap,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
   AlertCircle,
@@ -36,7 +35,9 @@ import {
   Clock,
   Coins,
   Edit2,
-  Camera
+  Camera,
+  Target,
+  MoreHorizontal
 } from 'lucide-react';
 
 interface FinancialProfileViewProps {
@@ -211,7 +212,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
     {
       name: 'Lainnya',
       desc: 'Utang yang tidak masuk daftar',
-      Icon: Sparkles,
+      Icon: MoreHorizontal,
     },
   ];
 
@@ -498,7 +499,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Sparkles className="w-4 h-4" />
+          <Target className="w-4 h-4" />
           <span className="wallet-tab-label">Impian<small className="wallet-tab-count">({savingsGoals.length})</small></span>
         </button>
 
@@ -535,7 +536,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
           <div className="saldo-hero saldo-hero--lagoon rounded-3xl p-5 space-y-2.5">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide text-[#073B4C]">
-                💎 Total Kekayaan Bersih
+                Total Kekayaan Bersih
               </span>
               <span className="nb-chip bg-[#FFD166] px-2.5 py-0.5 text-xs text-[#073B4C]">
                 {wallets.length} Dompet Aktif
@@ -657,8 +658,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
           {/* Summary Row (Keluarga Berutang vs Piutang Orang Lain) */}
           <div className="grid grid-cols-2 gap-3">
             <div className="saldo-mini-hero saldo-hero--coral rounded-3xl p-3.5 sm:p-4 space-y-1.5">
-              <span className="nb-chip inline-flex items-center gap-1 bg-white px-2.5 py-0.5 text-[11px] text-[#073B4C]">
-                <span>🔴</span>
+              <span className="nb-chip inline-flex items-center gap-1.5 bg-white px-2.5 py-0.5 text-[11px] text-[#073B4C]">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B6B] border border-[#073B4C] inline-block" />
                 <span>Berutang</span>
               </span>
               <div className="text-lg sm:text-2xl font-extrabold text-[#073B4C] tabular-nums break-words">
@@ -670,8 +671,8 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
             </div>
 
             <div className="saldo-mini-hero saldo-hero--mint-soft rounded-3xl p-3.5 sm:p-4 space-y-1.5">
-              <span className="nb-chip inline-flex items-center gap-1 bg-white px-2.5 py-0.5 text-[11px] text-[#073B4C]">
-                <span>🟢</span>
+              <span className="nb-chip inline-flex items-center gap-1.5 bg-white px-2.5 py-0.5 text-[11px] text-[#073B4C]">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#06D6A0] border border-[#073B4C] inline-block" />
                 <span>Piutang</span>
               </span>
               <div className="text-lg sm:text-2xl font-extrabold text-[#073B4C] tabular-nums break-words">
@@ -996,7 +997,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
           <div className="saldo-hero saldo-hero--mint rounded-3xl p-5 space-y-2.5">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide text-[#073B4C]">
-                💰 Total Pemasukan Bulan Berjalan
+                Total Pemasukan Bulan Berjalan
               </span>
               <span className="nb-chip bg-[#FFD166] px-2.5 py-0.5 text-xs text-[#073B4C]">
                 {incomeTransactions.length} Transaksi
@@ -1139,7 +1140,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
 
       {/* QUICK PAY INSTALLMENT MODAL */}
       {paymentModalDebt && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C]">
             <div className="px-5 py-4 bg-[#FFD166] border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1321,7 +1322,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
 
       {/* 3-STEP DEBT WIZARD MODAL */}
       {isDebtModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-md w-full border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C] overflow-hidden flex flex-col max-h-[92vh]">
             {/* Header: Utang Baru & Step Indicator */}
             <div
@@ -1696,7 +1697,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
 
       {/* ADD WALLET MODAL */}
       {isWalletModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-xl border-[3px] border-[#073B4C]">
             {/* Live Colored Card Header Preview */}
             <div
@@ -1831,7 +1832,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
       )}
       {/* EDIT WALLET MODAL */}
       {editingWallet && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-xl border-[3px] border-[#073B4C]">
             <div
               style={{ backgroundColor: editWalletColor, color: getReadableHeaderText(editWalletColor) }}
@@ -1981,7 +1982,7 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
       )}
       {/* EDIT DEBT / RECEIVABLE MODAL */}
       {editingDebt && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-md w-full border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C] overflow-hidden flex flex-col max-h-[92vh]">
             <div
               className={`px-5 py-4 border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 ${
@@ -2024,24 +2025,26 @@ export const FinancialProfileView: React.FC<FinancialProfileViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setEditType('debt')}
-                    className={`py-2.5 px-3 rounded-2xl text-xs font-extrabold border-2 border-[#073B4C] transition-all ${
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-extrabold border-2 border-[#073B4C] inline-flex items-center justify-center gap-1.5 transition-all ${
                       editType === 'debt'
                         ? 'bg-[#FECDD6] text-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C]'
                         : 'bg-white text-[#365664] hover:bg-[#FEF3C7]'
                     }`}
                   >
-                    🔴 Utang (Berutang)
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B6B] border border-[#073B4C] inline-block shrink-0" />
+                    <span>Utang (Berutang)</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditType('receivable')}
-                    className={`py-2.5 px-3 rounded-2xl text-xs font-extrabold border-2 border-[#073B4C] transition-all ${
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-extrabold border-2 border-[#073B4C] inline-flex items-center justify-center gap-1.5 transition-all ${
                       editType === 'receivable'
                         ? 'bg-[#06D6A0] text-[#073B4C] shadow-[2.5px_2.5px_0_#073B4C]'
                         : 'bg-white text-[#365664] hover:bg-[#FEF3C7]'
                     }`}
                   >
-                    🟢 Piutang (Orang Lain)
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#06D6A0] border border-[#073B4C] inline-block shrink-0" />
+                    <span>Piutang (Orang Lain)</span>
                   </button>
                 </div>
               </div>

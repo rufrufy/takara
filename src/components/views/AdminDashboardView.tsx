@@ -1,6 +1,7 @@
 import { HouseholdDeleteControl } from '../HouseholdDeleteControl';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { getRequiredPinLength, isValidPinFormat } from '../../lib/receiptAuth';
 import { DEFAULT_AI_CONFIG, testRealAIConnection, detectAIProvider, resolveGeminiEndpoint, normalizeAIEndpoint, getSystemAIConfig } from '../../lib/aiScanner';
 import { DEFAULT_SUPABASE_CONFIG, testSupabaseConnection, pullAllDataFromSupabase } from '../../lib/supabase';
 import {
@@ -12,7 +13,6 @@ import {
   Eye,
   EyeOff,
   Check,
-  Sparkles,
   ArrowLeft,
   RefreshCw,
   Server,
@@ -357,8 +357,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       setMemberError('Username minimal 3 karakter');
       return;
     }
-    if (!/^\d{5}$/.test(newMemberPin.trim())) {
-      setMemberError('Kode PIN harus tepat 5 digit angka');
+    const createPinLen = getRequiredPinLength(cleanUser);
+    if (!isValidPinFormat(cleanUser, newMemberPin.trim())) {
+      setMemberError(`Kode PIN harus tepat ${createPinLen} digit angka`);
       return;
     }
 
@@ -403,8 +404,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
       return;
     }
     const trimmedPin = editMemberPin.trim();
-    if (trimmedPin && !/^\d{5}$/.test(trimmedPin)) {
-      setEditMemberError('PIN harus tepat 5 digit angka');
+    const editPinLen = getRequiredPinLength(cleanEditUsername);
+    if (trimmedPin && !isValidPinFormat(cleanEditUsername, trimmedPin)) {
+      setEditMemberError(`PIN harus tepat ${editPinLen} digit angka`);
       return;
     }
 
@@ -957,8 +959,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                   </select>
                   <input
                     type="text"
-                    maxLength={5}
-                    placeholder="PIN 5-Digit"
+                    maxLength={getRequiredPinLength(newMemberUsername)}
+                    placeholder={`PIN ${getRequiredPinLength(newMemberUsername)}-Digit`}
                     value={newMemberPin}
                     onChange={e => setNewMemberPin(e.target.value.replace(/[^0-9]/g, ''))}
                     className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -1356,7 +1358,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                 disabled={isTestingAI}
                 className="px-4 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border border-teal-200"
               >
-                <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                <Cpu className="w-3.5 h-3.5 text-teal-700" />
                 <span>{isTestingAI ? 'Menghubungi Server AI...' : 'Uji Koneksi AI Asli'}</span>
               </button>
 
@@ -1485,7 +1487,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
                 </div>
                 {supabaseAnonKey.trim().startsWith('sb_secret_') && (
                   <div className="text-[11px] text-red-700 font-semibold bg-red-50 p-2.5 rounded-xl border border-red-200 space-y-1">
-                    <p>⚠️ Anda memasukkan Secret Key (<code className="font-mono">sb_secret_...</code>). Supabase melarang Secret Key di browser:</p>
+                    <p>Perhatian: Anda memasukkan Secret Key (<code className="font-mono">sb_secret_...</code>). Supabase melarang Secret Key di browser:</p>
                     <p className="text-[10px] text-red-600 font-normal italic">"Forbidden use of secret API key in browser"</p>
                     <p className="text-[10px]">Silakan buka <strong>Supabase Dashboard &gt; Project Settings &gt; API</strong> lalu salin <strong>Publishable key</strong> (<code className="font-mono">sb_publishable_...</code> atau <code className="font-mono">anon public</code>) ke kolom ini.</p>
                   </div>
@@ -1665,7 +1667,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
 
       {/* EDIT REGISTERED USER MODAL */}
       {editingRegisteredUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between">
               <div>
@@ -1725,10 +1727,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">PIN Baru 5-Digit (Opsional)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  PIN Baru {getRequiredPinLength(editMemberUsername)}-Digit (Opsional)
+                </label>
                 <input
                   type="text"
-                  maxLength={5}
+                  maxLength={getRequiredPinLength(editMemberUsername)}
                   placeholder="Kosongkan jika tidak ganti PIN"
                   value={editMemberPin}
                   onChange={e => setEditMemberPin(e.target.value.replace(/[^0-9]/g, ''))}
@@ -1759,7 +1763,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
 
       {/* DELETE USER CONFIRMATION MODAL */}
       {deletingUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-red-200">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -1808,7 +1812,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onBack }
         );
 
         return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
             <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-5 shadow-2xl border border-slate-200">
               {/* Modal Header */}
               <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">

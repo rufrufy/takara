@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { jakartaDateTime } from '../lib/dateTime';
 import {
@@ -9,7 +10,7 @@ import {
   CHALLENGE_TEMPLATES,
   type ChallengeTemplate
 } from '../lib/gamification';
-import { X, Flame, Trophy, Users, Plus, Trash2, Sparkles } from 'lucide-react';
+import { X, Flame, Trophy, Users, Plus, Trash2, Award, Clock, Crown, User } from 'lucide-react';
 
 interface FamilyGamificationModalProps {
   isOpen: boolean;
@@ -59,6 +60,18 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
       }),
     [streak, periodIncome, periodExpense, categoryBudgets, transactions, savingsGoals, contributions]
   );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -116,25 +129,25 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
 
   const unlockedCount = badges.filter(b => b.unlocked).length;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+      className="takara-modal-backdrop fixed inset-0 z-[70] bg-[#073B4C]/50 flex items-center justify-center p-2.5 sm:p-4"
       onClick={e => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-[#FFFDF5] rounded-3xl max-w-lg w-full max-h-[92vh] overflow-hidden border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C] flex flex-col">
+      <div className="bg-[#FFFDF5] rounded-[26px] sm:rounded-[30px] max-w-lg w-full max-h-[calc(100dvh-20px)] sm:max-h-[88dvh] overflow-hidden border-[3px] border-[#073B4C] shadow-[6px_6px_0_#073B4C] flex flex-col text-[#073B4C]">
         {/* Tropical Header */}
-        <div className="px-5 py-4 bg-[#FFD166] border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-xl">
-              🏆
+        <div className="px-4 py-3.5 sm:px-5 sm:py-4 bg-[#FFD166] border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-[#073B4C] shrink-0">
+              <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h2 className="font-extrabold text-base text-[#073B4C] leading-tight">
+            <div className="min-w-0">
+              <h2 className="font-extrabold text-sm sm:text-base text-[#073B4C] leading-tight truncate">
                 Arena & Streak Keluarga
               </h2>
-              <p className="text-xs font-bold text-[#365664]">
+              <p className="text-[11px] sm:text-xs font-bold text-[#365664] truncate">
                 Semangat disiplin bareng keluarga setiap hari!
               </p>
             </div>
@@ -144,26 +157,26 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
             type="button"
             onClick={onClose}
             aria-label="Tutup arena keluarga"
-            className="w-8 h-8 rounded-full bg-white border-2 border-[#073B4C] grid place-items-center text-[#073B4C] hover:bg-[#FFE0E5]"
+            className="w-9 h-9 rounded-full bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-[#073B4C] hover:bg-[#FFE0E5] shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-5">
+        <div className="p-3.5 sm:p-5 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 sm:space-y-5">
           {/* 1. STREAK HERO CARD */}
-          <section className="p-4 rounded-3xl bg-[#38BDF8] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] space-y-3">
+          <section className="p-3.5 sm:p-4 rounded-3xl bg-[#38BDF8] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <span className="w-12 h-12 rounded-2xl bg-[#FFD166] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-2xl">
-                  🔥
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#FFD166] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-[#073B4C] shrink-0">
+                  <Flame className="w-5 h-5 sm:w-6 sm:h-6" />
                 </span>
-                <div>
-                  <div className="text-2xl font-extrabold text-[#073B4C] tabular-nums">
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-extrabold text-[#073B4C] tabular-nums">
                     {streak.currentStreak} Hari Beruntun
                   </div>
-                  <div className="text-xs font-bold text-[#073B4C]/90">
+                  <div className="text-[11px] sm:text-xs font-bold text-[#073B4C]/90">
                     Rekor terbaik: {streak.bestStreak} hari · Aktif {streak.activeDaysThisMonth} hari bulan ini
                   </div>
                 </div>
@@ -179,16 +192,24 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
             </div>
 
             {/* 7-Day Activity Strip */}
-            <div className="grid grid-cols-7 gap-1.5 pt-1">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 pt-1">
               {streak.last7Days.map(d => (
                 <div
                   key={d.date}
-                  className={`py-2 rounded-2xl border-2 border-[#073B4C] text-center ${
-                    d.hasLog ? 'bg-[#BEF264] shadow-[2px_2px_0_#073B4C]' : 'bg-white/85'
+                  className={`min-w-0 px-0.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border-2 border-[#073B4C] text-center ${
+                    d.hasLog ? 'bg-[#BEF264] shadow-[2px_2px_0_#073B4C]' : 'bg-white/90'
                   }`}
                 >
-                  <div className="text-[10px] font-extrabold text-[#073B4C]">{d.dayShort}</div>
-                  <div className="text-sm mt-0.5">{d.hasLog ? '🔥' : d.isToday ? '⏳' : '·'}</div>
+                  <div className="text-[10px] font-extrabold text-[#073B4C] truncate">{d.dayShort}</div>
+                  <div className="mt-1 flex items-center justify-center h-4">
+                    {d.hasLog ? (
+                      <Flame className="w-3.5 h-3.5 text-[#073B4C]" />
+                    ) : d.isToday ? (
+                      <Clock className="w-3.5 h-3.5 text-[#365664]" />
+                    ) : (
+                      <span className="text-xs font-extrabold text-[#365664]">·</span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -227,20 +248,20 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
                     required
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="min-w-0">
                     <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Jenis Target</label>
                     <select
                       value={customType}
                       onChange={e => setCustomType(e.target.value as typeof customType)}
-                      className="w-full px-2.5 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-bold"
+                      className="w-full px-2.5 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-bold bg-white"
                     >
                       <option value="spending_cap">Batas Belanja (Rp)</option>
                       <option value="no_spend_category">Puasa Belanja Pos</option>
                       <option value="streak_days">Target Hari Streak</option>
                     </select>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Durasi (Hari)</label>
                     <input
                       type="number"
@@ -248,19 +269,19 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
                       max={60}
                       value={customDays}
                       onChange={e => setCustomDays(e.target.value)}
-                      className="w-full px-3 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-bold"
+                      className="w-full px-3 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-bold bg-white"
                     />
                   </div>
                 </div>
 
                 {customType !== 'streak_days' && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="min-w-0">
                       <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Pos / Kata Kunci</label>
                       <select
                         value={customCat}
                         onChange={e => setCustomCat(e.target.value)}
-                        className="w-full px-2.5 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-bold"
+                        className="w-full px-2.5 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-bold bg-white"
                       >
                         <option value="Semua">Semua Pengeluaran</option>
                         {categories
@@ -273,14 +294,14 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
                       </select>
                     </div>
                     {customType === 'spending_cap' && (
-                      <div>
+                      <div className="min-w-0">
                         <label className="block text-xs font-extrabold text-[#073B4C] mb-1">Maksimal (Rp)</label>
                         <input
                           type="text"
                           inputMode="numeric"
                           value={customMaxStr ? parseInt(customMaxStr, 10).toLocaleString('id-ID') : ''}
                           onChange={e => setCustomMaxStr(e.target.value.replace(/[^0-9]/g, ''))}
-                          className="w-full px-3 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-extrabold tabular-nums"
+                          className="w-full px-3 py-2 border-2 border-[#073B4C] rounded-xl text-xs font-extrabold tabular-nums bg-white"
                         />
                       </div>
                     )}
@@ -362,7 +383,7 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
             {/* Quick Start Templates */}
             <div className="space-y-1.5 pt-1">
               <div className="text-[11px] font-extrabold text-[#365664] uppercase tracking-wide">
-                ⚡ Mulai Cepat dari Template Seru:
+                Mulai Cepat dari Template:
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {CHALLENGE_TEMPLATES.map(tpl => (
@@ -385,7 +406,7 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
           <section className="space-y-2.5">
             <div className="flex items-center justify-between">
               <h3 className="font-extrabold text-sm text-[#073B4C] flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-[#05966F]" />
+                <Award className="w-4 h-4 text-[#073B4C]" />
                 <span>Koleksi Stiker Pencapaian ({unlockedCount}/{badges.length})</span>
               </h3>
             </div>
@@ -429,9 +450,13 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
                 {contributions.map((c, idx) => (
                   <div key={c.name} className="space-y-1">
                     <div className="flex items-center justify-between text-xs font-extrabold text-[#073B4C]">
-                      <span>
-                        {idx === 0 && c.txCount > 0 ? '👑 ' : '👤 '}
-                        {c.name}
+                      <span className="inline-flex items-center gap-1.5">
+                        {idx === 0 && c.txCount > 0 ? (
+                          <Crown className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <User className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>{c.name}</span>
                       </span>
                       <span className="tabular-nums">
                         {c.txCount} catatan ({c.percentage}%)
@@ -450,6 +475,7 @@ export const FamilyGamificationModal: React.FC<FamilyGamificationModalProps> = (
           </section>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

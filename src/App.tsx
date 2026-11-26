@@ -7,7 +7,6 @@ import { Header } from './components/Header';
 import { BottomNav, type ActiveTab } from './components/BottomNav';
 import { HouseholdNotificationToasts } from './components/HouseholdNotificationToasts';
 import { BrutalismAnimalBackdrop } from './components/BrutalismAnimalBackdrop';
-import { TouchSparkLayer } from './components/TouchSparkLayer';
 import { HomeView } from './components/views/HomeView';
 import { TransactionsView } from './components/views/TransactionsView';
 import { FinancialProfileView } from './components/views/FinancialProfileView';
@@ -20,7 +19,6 @@ import { LandingPage } from './components/LandingPage';
 import { AdminDashboardView } from './components/views/AdminDashboardView';
 import { PWAInstallModal } from './components/PWAInstallModal';
 import { AIScanModal } from './components/AIScanModal';
-import { Camera, Sparkles } from 'lucide-react';
 
 export const TakaraMainLayout: React.FC = () => {
   const { state, isAuthReady, isFinancialReady, supabaseSyncStatus, logoutUser } = useApp();
@@ -33,7 +31,7 @@ export const TakaraMainLayout: React.FC = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
-  const [loginInitialTab, setLoginInitialTab] = useState<'login' | 'register' | 'admin'>('login');
+  const [loginInitialTab, setLoginInitialTab] = useState<'login' | 'register'>('login');
   const [isPwaModalOpen, setIsPwaModalOpen] = useState(false);
   const [isAIScanOpen, setIsAIScanOpen] = useState(false);
   const [isUpdatingApp, setIsUpdatingApp] = useState(false);
@@ -69,8 +67,8 @@ export const TakaraMainLayout: React.FC = () => {
       return (
         <>
           <LandingPage
-            onGoToLogin={(defaultRole) => {
-              setLoginInitialTab(defaultRole === 'admin' ? 'admin' : 'login');
+            onGoToLogin={() => {
+              setLoginInitialTab('login');
               setAuthView('login');
             }}
             onGoToRegister={() => {
@@ -99,7 +97,11 @@ export const TakaraMainLayout: React.FC = () => {
     );
   }
   // ROLE 1: ADMIN DASHBOARD (Khusus Admin: kelola user, AI, Supabase, sesi - tidak ikut pencatatan)
-  if(!isFinancialReady && state.currentUser.role!=='ADMIN' && state.currentUser.username!=='admin') {
+  const isAdminSession =
+    state.currentUser?.role === 'ADMIN' ||
+    state.currentUser?.username === 'adminmaruf99' ||
+    state.currentUser?.username === 'admin';
+  if(!isFinancialReady && !isAdminSession) {
     return <main className="takara-app min-h-screen flex items-center justify-center p-6"><div className="nb-card max-w-sm w-full p-6 text-center space-y-4">
       <img src="/Takara-192.png" alt="Takara" className="w-16 h-16 mx-auto object-contain" />
       <h1 className="text-lg font-extrabold text-[#073B4C]">Menyiapkan household Anda</h1>
@@ -107,7 +109,7 @@ export const TakaraMainLayout: React.FC = () => {
     </div></main>;
   }
 
-  if (state.currentUser?.role === 'ADMIN' || state.currentUser?.username === 'admin') {
+  if (isAdminSession) {
     return <div className="takara-app"><AdminDashboardView onBack={isAdminOpen ? () => setIsAdminOpen(false) : undefined} /></div>;
   }
 
@@ -195,7 +197,6 @@ export const TakaraMainLayout: React.FC = () => {
 export default function App() {
   return (
     <AppProvider>
-      <TouchSparkLayer />
       <BrutalismAnimalBackdrop />
       <TakaraMainLayout />
     </AppProvider>

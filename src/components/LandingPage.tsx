@@ -1,8 +1,8 @@
 import React from 'react';
-import { ArrowRight, Download, Shield, Wallet, ReceiptText, Users, Sparkles } from 'lucide-react';
+import { ArrowRight, Download, Wallet, ReceiptText, Users } from 'lucide-react';
 
 interface LandingPageProps {
-  onGoToLogin: (defaultRole?: 'admin' | 'user') => void;
+  onGoToLogin: () => void;
   onGoToRegister: () => void;
   onOpenInstall?: () => void;
 }
@@ -23,10 +23,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToLogin, onGoToReg
     </header>
     <main>
       <div className="welcome-hero-card">
-        <span className="nb-chip inline-flex items-center gap-1.5 bg-[#FFD166] px-3.5 py-1 text-xs mb-4">
-          <Sparkles size={14} strokeWidth={2.5} />
-          <span>Keuangan Rumah Tangga Seru!</span>
-        </span>
         <div className="mb-4">
           <img
             src="/Takara.png"
@@ -40,10 +36,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToLogin, onGoToReg
           tercatat bersama.
         </h1>
         <p>
-          Satu tempat ceria & rapi untuk memantau saldo tiap dompet, scan struk belanja pakai AI, dan mengatur keuangan household Anda.
+          Catat pemasukan, pengeluaran, dan transfer antar dompet keluarga secara rapi — lengkap dengan scan struk dan laporan bulanan.
         </p>
         <div className="welcome-actions">
-          <button className="welcome-primary" onClick={() => onGoToLogin('user')}>
+          <button className="welcome-primary" onClick={onGoToLogin}>
             <span>Masuk ke Takara</span>
             <ArrowRight size={20} strokeWidth={2.5} />
           </button>
@@ -68,10 +64,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToLogin, onGoToReg
     </main>
     <footer>
       <span>Takara · {new Date().getFullYear()}</span>
-      <button className="nb-btn" onClick={() => onGoToLogin('admin')}>
-        <Shield size={15} strokeWidth={2.3} />
-        <span>Masuk admin</span>
-      </button>
     </footer>
   </div>
 );

@@ -27,7 +27,6 @@ import {
   ChevronRight,
   ChevronDown,
   CheckCircle2,
-  Sparkles,
   Wallet as WalletIcon,
   RotateCcw,
   Edit3,
@@ -57,7 +56,7 @@ const safeDisplayDate = (dateStr?: string, effectiveAt?: string): string => {
 };
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickAdd, initialTransactionId }) => {
-  const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, state, supabaseSyncStatus, syncFromSupabase } = useApp();
+  const { transactions, wallets, categories, labels, households, members, allMembers, voidTransaction, editTransaction, addCategory, addLabel, state, supabaseSyncStatus, syncFromSupabase } = useApp();
   const transactionCategory=(t:FinancialTransaction)=>categories.find(c=>c.householdId===t.householdId&&(c.id===t.categoryId||(c.type===t.type&&c.name.toLocaleLowerCase('id')===t.categoryName?.toLocaleLowerCase('id'))));
 
   // Search & Filter State (6 Kriteria: Tanggal, Tipe, Anggota, Aset, Kategori, Label)
@@ -145,6 +144,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
   const [editFeeStr, setEditFeeStr] = useState('');
   const [editHouseholdId, setEditHouseholdId] = useState('');
   const [editErrorMsg, setEditErrorMsg] = useState('');
+  const [isEditSourceWalletPickerOpen, setIsEditSourceWalletPickerOpen] = useState(false);
+  const [isEditDestWalletPickerOpen, setIsEditDestWalletPickerOpen] = useState(false);
+  const [isEditCategoryPickerOpen, setIsEditCategoryPickerOpen] = useState(false);
+  const [newEditCatName, setNewEditCatName] = useState('');
+  const [editCatSaving, setEditCatSaving] = useState(false);
+  const [isEditLabelPickerOpen, setIsEditLabelPickerOpen] = useState(false);
+  const [newEditLabelText, setNewEditLabelText] = useState('');
+  const [editLabelSaving, setEditLabelSaving] = useState(false);
   const editSavingRef = useRef(false);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -438,11 +445,80 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       setEditCategoryName(matchedCat ? matchedCat.name : (t.categoryName || typeCats[0]?.name || ''));
     }
     setEditLabel(t.label || '');
+    setIsEditSourceWalletPickerOpen(false);
+    setIsEditDestWalletPickerOpen(false);
+    setIsEditCategoryPickerOpen(false);
+    setNewEditCatName('');
+    setIsEditLabelPickerOpen(false);
+    setNewEditLabelText('');
     setEditDescription(t.description || '');
     const dateTime=jakartaDateTime(t.effectiveAt);
     setEditDateStr(dateTime.date);setEditTime(dateTime.time);
     setEditAddedBy(t.addedBy || 'Maruf H');
     setEditFeeStr(t.fee ? String(t.fee) : '');
+  };
+
+  const handleCreateEditLabel = async () => {
+    const clean = newEditLabelText.trim().replace(/^#/, '');
+    if (!clean || editLabelSaving) return;
+    setEditLabelSaving(true);
+    setEditErrorMsg('');
+    try {
+      const result = await addLabel(clean);
+      if (!result.success) {
+        setEditErrorMsg(result.error || 'Label belum tersimpan.');
+        return;
+      }
+      setEditLabel(clean);
+      setNewEditLabelText('');
+      setIsEditLabelPickerOpen(false);
+    } catch (error) {
+      setEditErrorMsg(error instanceof Error ? error.message : 'Label belum tersimpan.');
+    } finally {
+      setEditLabelSaving(false);
+    }
+  };
+
+  const handleCreateEditCategory = async () => {
+    const clean = newEditCatName.trim();
+    if (!clean || editCatSaving || editType === 'transfer') return;
+    const targetHouseholdId = editHouseholdId || state.activeHouseholdId;
+    const existing = categories.find(
+      c =>
+        c.householdId === targetHouseholdId &&
+        c.type === editType &&
+        c.name.toLowerCase() === clean.toLowerCase()
+    );
+    if (existing) {
+      setEditCategoryId(existing.id);
+      setEditCategoryName(existing.name);
+      setNewEditCatName('');
+      setIsEditCategoryPickerOpen(false);
+      return;
+    }
+
+    setEditCatSaving(true);
+    setEditErrorMsg('');
+    try {
+      const result = await addCategory(
+        clean,
+        editType === 'income' ? 'income' : 'expense',
+        'Tag',
+        editType === 'income' ? '#06D6A0' : '#FFD166'
+      );
+      if (!result.success || !result.category) {
+        setEditErrorMsg(result.error || 'Kategori belum tersimpan.');
+        return;
+      }
+      setEditCategoryId(result.category.id);
+      setEditCategoryName(result.category.name);
+      setNewEditCatName('');
+      setIsEditCategoryPickerOpen(false);
+    } catch (error) {
+      setEditErrorMsg(error instanceof Error ? error.message : 'Kategori belum tersimpan.');
+    } finally {
+      setEditCatSaving(false);
+    }
   };
 
   // Handle saving transaction edit
@@ -474,9 +550,19 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
     try{editedEffectiveAt=jakartaDateTimeToISO(editDateStr,editTime);}catch(error){setEditErrorMsg((error as Error).message);return;}
     const srcWallet = wallets.find(w => w.id === editSourceWalletId);
     const dstWallet = wallets.find(w => w.id === editDestWalletId);
+    const cleanLabel = editLabel.trim().replace(/^#/, '');
 
     if (editSavingRef.current) return;
     editSavingRef.current = true; setEditSaving(true);
+    if (cleanLabel && !labels.includes(cleanLabel)) {
+      const labelRes = await addLabel(cleanLabel);
+      if (!labelRes.success) {
+        editSavingRef.current = false;
+        setEditSaving(false);
+        setEditErrorMsg(labelRes.error || 'Label belum tersimpan.');
+        return;
+      }
+    }
     const res = await editTransaction(detailTransaction.id, {
       householdId: editHouseholdId || detailTransaction.householdId,
       effectiveAt:editedEffectiveAt,
@@ -489,7 +575,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       destinationAsset: editType === 'income' ? (dstWallet?.name || detailTransaction.destinationAsset) : (editType === 'transfer' ? dstWallet?.name : undefined),
       categoryId: editType === 'transfer' ? undefined : (editCategoryId || undefined),
       categoryName: editType === 'transfer' ? 'Transfer Antar Dompet' : (editCategoryName || (editType === 'income' ? 'Pemasukan Lainnya' : 'Pengeluaran Lainnya')),
-      label: editLabel.trim() || undefined,
+      label: cleanLabel || undefined,
       description: editDescription.trim() || undefined,
       addedBy: editAddedBy.trim() || state.currentUser?.displayName || 'Maruf H',
       time: editTime || undefined,
@@ -508,7 +594,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
         destinationAsset: dstWallet?.name,
         categoryId: editCategoryId,
         categoryName: editCategoryName,
-        label: editLabel.trim() || undefined,
+        label: cleanLabel || undefined,
         description: editDescription.trim() || undefined,
         addedBy: editAddedBy,
         time: editTime,
@@ -536,10 +622,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold shadow-2xs"
+            className="nb-chip flex items-center gap-1.5 px-3 py-1.5 bg-[#FFD166] hover:bg-[#FFE08A] text-[#073B4C] text-xs font-extrabold"
             title="Ekspor CSV"
           >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
+            <Download className="w-3.5 h-3.5 text-[#073B4C]" />
             <span className="hidden sm:inline">Ekspor CSV</span>
           </button>
         </div>
@@ -549,7 +635,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       <div className="transaction-summary saldo-hero saldo-hero--lavender rounded-3xl p-4 sm:p-5 space-y-3.5">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="nb-chip inline-flex items-center gap-2 bg-white px-3 py-1">
-            <div className={`w-2.5 h-2.5 rounded-full border border-[#073B4C] ${isFiltered ? 'bg-[#FFD166] animate-pulse' : 'bg-[#06D6A0]'}`} />
+            <div className={`w-2.5 h-2.5 rounded-full border border-[#073B4C] ${isFiltered ? 'bg-[#FFD166]' : 'bg-[#06D6A0]'}`} />
             <span className="text-xs font-extrabold text-[#073B4C]">
               {isFiltered ? (
                 <>
@@ -663,7 +749,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
           )}
         </div>
 
-        <button type="button" onClick={()=>setIsFilterOpen(open=>!open)} aria-label="Filter transaksi" aria-expanded={isFilterOpen} aria-controls="transaction-filter-panel" className={`relative shrink-0 rounded-xl border p-2.5 ${isFilterOpen||activeFilterCount?'border-teal-700 bg-teal-50 text-teal-700':'border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Filter className="w-4 h-4" />{activeFilterCount>0&&<span className="absolute -right-1 -top-1 rounded-full bg-teal-700 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}</button></div>
+        <button type="button" onClick={()=>setIsFilterOpen(open=>!open)} aria-label="Filter transaksi" aria-expanded={isFilterOpen} aria-controls="transaction-filter-panel" className={`relative shrink-0 rounded-xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] p-2.5 transition-colors ${isFilterOpen||activeFilterCount?'bg-[#06D6A0] text-[#073B4C]':'bg-white text-[#073B4C] hover:bg-[#FEF3C7]'}`}><Filter className="w-4 h-4 stroke-[2.5]" />{activeFilterCount>0&&<span className="absolute -right-1.5 -top-1.5 rounded-full bg-[#FF6B6B] border-[1.5px] border-[#073B4C] px-1.5 text-[10px] font-extrabold text-white">{activeFilterCount}</span>}</button></div>
 
         {/* BARIS CEPAT RENTANG TANGGAL (1-Klik Preset + Buka Kalender) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
@@ -1019,7 +1105,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       </div>
 
       {/* Main Cards List */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs divide-y divide-slate-100 overflow-hidden">
+      <div className="bg-white rounded-3xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] divide-y divide-[#073B4C]/15 overflow-hidden">
           {filteredTransactions.length === 0 ? (
             <div className="p-12 text-center text-slate-400 text-xs">
               Tidak ada transaksi yang cocok dengan filter pencarian.
@@ -1172,61 +1258,70 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       {detailTransaction &&
         createPortal(
           <div
-            className="takara-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+            className="takara-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#073B4C]/45 animate-in fade-in duration-150"
             onClick={() => setDetailTransaction(null)}
           >
             <div
-              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh] animate-in zoom-in-95 duration-150"
+              className="w-full max-w-lg bg-[#FFFDF5] rounded-3xl border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C] overflow-hidden flex flex-col max-h-[90dvh] animate-in zoom-in-95 duration-150"
               onClick={e => e.stopPropagation()}
             >
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
+            <div
+              className={`p-4 sm:p-5 border-b-[2.5px] border-[#073B4C] flex items-center justify-between gap-2 ${
+                isEditing
+                  ? 'bg-[#FFD166]'
+                  : detailTransaction.type === 'income'
+                  ? 'bg-[#D1FAE5]'
+                  : detailTransaction.type === 'transfer'
+                  ? 'bg-[#E0F2FE]'
+                  : 'bg-[#FFE0E5]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
                 <div
                   style={categoryAppearance(transactionCategory(detailTransaction)?.color)}
-                  className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-                    detailTransaction.type === 'income'
-                      ? 'bg-emerald-50 text-emerald-600'
-                      : detailTransaction.type === 'transfer'
-                      ? 'bg-blue-50 text-blue-600'
-                      : 'bg-red-50 text-red-600'
-                  }`}
+                  className="w-10 h-10 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0"
                 >
                   <CategoryIcon name={detailTransaction.categoryName} type={detailTransaction.type} icon={transactionCategory(detailTransaction)?.icon} className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base">
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-[#073B4C] text-base leading-tight truncate">
                     {isEditing ? 'Ubah Rincian Transaksi' : 'Rincian Transaksi'}
                   </h3>
-                  <p className="text-xs text-slate-500">ID: {detailTransaction.id} • No. #{detailTransaction.no || '1'}</p>
+                  <p className="text-[11px] font-bold text-[#365664] truncate">
+                    ID: {detailTransaction.id} • No. #{detailTransaction.no || '1'}
+                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {!isEditing && !isBalanceReset(detailTransaction) ? (
                   <button
+                    type="button"
                     onClick={() => setIsEditing(true)}
-                    className="px-3 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl flex items-center gap-1 transition-colors"
+                    className="nb-chip px-3 py-1.5 text-xs font-extrabold text-[#073B4C] bg-[#FFD166] hover:bg-[#FFE08A] flex items-center gap-1"
                     title="Ubah Data Transaksi"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
+                    <Edit3 className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Edit</span>
                   </button>
                 ) : isEditing ? (
                   <button
+                    type="button"
                     onClick={() => setIsEditing(false)}
-                    className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+                    className="nb-chip px-3 py-1.5 text-xs font-extrabold text-[#073B4C] bg-white hover:bg-[#FFFBEB]"
                   >
                     Batal Edit
                   </button>
                 ) : null}
 
                 <button
+                  type="button"
                   onClick={() => setDetailTransaction(null)}
                   aria-label="Tutup rincian transaksi"
-                  className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"
+                  className="w-8 h-8 rounded-full bg-white text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] hover:bg-[#FFE0E5] flex items-center justify-center shrink-0"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4 stroke-[2.6]" />
                 </button>
               </div>
             </div>
@@ -1234,17 +1329,33 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
             {/* Modal Content: View Mode vs Edit Mode */}
             {!isEditing ? (
               /* VIEW DETAIL MODE */
-              <div className="p-5 overflow-y-auto space-y-4">
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
                 {/* Big Amount Card */}
-                <div className="bg-slate-50 rounded-2xl p-4 text-center border border-slate-200/80">
-                  <div className="text-xs text-slate-500 uppercase font-semibold">Nominal Transaksi</div>
+                <div
+                  className={`rounded-2xl p-4 text-center border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] ${
+                    detailTransaction.type === 'income'
+                      ? 'bg-[#D1FAE5]'
+                      : detailTransaction.type === 'transfer'
+                      ? 'bg-[#E0F2FE]'
+                      : 'bg-[#FFF1F3]'
+                  }`}
+                >
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-white border-[1.5px] border-[#073B4C] text-[10px] text-[#073B4C] uppercase font-extrabold tracking-wider">
+                    {detailTransaction.type === 'income'
+                      ? 'Pemasukan'
+                      : detailTransaction.type === 'transfer'
+                      ? 'Transfer Antar Dompet'
+                      : detailTransaction.type === 'opening_balance'
+                      ? 'Saldo Awal / Reset'
+                      : 'Pengeluaran'}
+                  </span>
                   <div
-                    className={`text-2xl sm:text-3xl font-extrabold mt-1 tabular-nums ${
+                    className={`text-2xl sm:text-3xl font-extrabold mt-2 tabular-nums ${
                       detailTransaction.type === 'income'
-                        ? 'text-emerald-600'
+                        ? 'text-[#045D44]'
                         : detailTransaction.type === 'transfer'
-                        ? 'text-blue-600'
-                        : 'text-slate-900'
+                        ? 'text-[#074C75]'
+                        : 'text-[#911D35]'
                     }`}
                   >
                     {detailTransaction.type === 'income'
@@ -1253,107 +1364,115 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                       ? formatIDR(detailTransaction.amount)
                       : `-${formatIDR(detailTransaction.amount)}`}
                   </div>
-                  <div className="text-xs font-semibold text-slate-600 mt-1">
+                  <div className="text-xs font-extrabold text-[#073B4C] mt-1">
                     {detailTransaction.description || detailTransaction.label || 'Tanpa keterangan'}
                   </div>
                 </div>
                 {/* Receipt Photo Preview if available */}
                 {detailTransaction.imageUrl && (
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-1.5">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                      <Camera className="w-3.5 h-3.5 text-teal-700" />
+                  <div className="bg-white p-3 rounded-2xl border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] space-y-2">
+                    <div className="text-[10px] text-[#073B4C] font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-[#073B4C]" />
                       <span>Foto Struk / Nota Pembayaran</span>
                     </div>
-                    <div className="rounded-xl overflow-hidden border border-slate-200 max-h-56 bg-slate-900/5 flex items-center justify-center">
+                    <div className="rounded-xl overflow-hidden border-2 border-[#073B4C] max-h-56 bg-[#F7F4E8] flex items-center justify-center">
                       <ReceiptAttachment reference={detailTransaction.imageUrl} className="w-full h-auto max-h-56 object-contain" />
                     </div>
                   </div>
                 )}
 
                 {/* 21 Properties Grid */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Tipe Transaksi</div>
-                    <div className="font-bold text-slate-900 mt-0.5 capitalize">{detailTransaction.type}</div>
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Tipe Transaksi</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5 capitalize">{detailTransaction.type}</div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Kategori</div>
-                    <div className="font-bold text-slate-900 mt-0.5">{detailTransaction.categoryName}</div>
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Kategori</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">{detailTransaction.categoryName}</div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Label / Sub</div>
-                    <div className="font-bold text-teal-700 mt-0.5">
-                      {detailTransaction.label ? `#${detailTransaction.label}` : '-'}
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Label / Sub</div>
+                    <div className="mt-1">
+                      {detailTransaction.label ? (
+                        <span className="inline-block px-2 py-0.5 rounded-full bg-[#06D6A0] text-[#073B4C] border-[1.5px] border-[#073B4C] font-extrabold">
+                          #{detailTransaction.label}
+                        </span>
+                      ) : (
+                        <span className="font-extrabold text-[#365664]">-</span>
+                      )}
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Dicatat Oleh</div>
-                    <div className="font-bold text-slate-900 mt-0.5">{detailTransaction.addedBy}</div>
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Dicatat Oleh</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">{detailTransaction.addedBy}</div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Dompet Sumber</div>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Dompet Sumber</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">
                       {detailTransaction.sourceAsset || (wallets.find(w => w.id === detailTransaction.sourceWalletId)?.name || '-')}
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Dompet Tujuan / Penerima</div>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Dompet Tujuan / Penerima</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">
                       {detailTransaction.destinationAsset || (wallets.find(w => w.id === (detailTransaction.destinationWalletId || detailTransaction.sourceWalletId))?.name || detailTransaction.sourceAsset || '-')}
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Tanggal & Hari</div>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Tanggal & Hari</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">
                       {safeDisplayDate(detailTransaction.dateStr, detailTransaction.effectiveAt)}
                       {detailTransaction.day ? ` (${detailTransaction.day})` : ''}
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Waktu</div>
-                    <div className="font-bold text-slate-900 mt-0.5">{detailTransaction.time || jakartaDateTime(detailTransaction.effectiveAt).time} WIB</div>
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Waktu</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">{detailTransaction.time || jakartaDateTime(detailTransaction.effectiveAt).time} WIB</div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Biaya Admin</div>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Biaya Admin</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">
                       {detailTransaction.fee ? formatIDR(detailTransaction.fee) : 'Rp 0'}
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Auto Income / Savings</div>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                  <div className="bg-white p-2.5 rounded-2xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]">
+                    <div className="text-[10px] text-[#365664] font-extrabold uppercase">Auto Income / Savings</div>
+                    <div className="font-extrabold text-[#073B4C] mt-0.5">
                       {detailTransaction.autoIncome ? 'Auto Income' : 'Manual'} • {detailTransaction.fromSavings ? 'From Savings' : 'Normal'}
                     </div>
                   </div>
                 </div>
 
                 {/* Timestamps */}
-                <div className="text-[11px] text-slate-400 pt-1 space-y-0.5">
+                <div className="text-[11px] font-bold text-[#365664] pt-1 space-y-0.5 border-t-2 border-dashed border-[#073B4C]/20">
                   <div>Dibuat: {detailTransaction.createdAt}</div>
                   <div>Terakhir diperbarui: {detailTransaction.updatedAt}</div>
                 </div>
 
                 {/* Action Buttons */}
-                {!isBalanceReset(detailTransaction)&&<div className="flex gap-2 pt-2 border-t border-slate-100">
+                {!isBalanceReset(detailTransaction)&&<div className="flex gap-2.5 pt-2">
                   <button
+                    type="button"
                     onClick={() => setVoidConfirmId(detailTransaction.id)}
-                    className="flex-1 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    className="nb-btn flex-1 py-2.5 text-xs font-extrabold text-[#911D35] bg-[#FFE0E5] hover:bg-[#FF6B6B] hover:text-white flex items-center justify-center gap-1.5"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Batalkan / Void</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() => setIsEditing(true)}
-                    className="flex-1 py-2.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    className="nb-btn flex-1 py-2.5 text-xs font-extrabold text-[#073B4C] bg-[#06D6A0] hover:bg-[#34E4B4] flex items-center justify-center gap-1.5"
                   >
                     <Edit3 className="w-4 h-4" />
                     <span>Ubah / Edit</span>
@@ -1362,33 +1481,36 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
               </div>
             ) : (
               /* EDIT TRANSACTION FORM MODE */
-              <form onSubmit={handleSaveEdit} className="p-5 overflow-y-auto space-y-3.5 text-xs">
+              <form onSubmit={handleSaveEdit} className="p-4 sm:p-5 overflow-y-auto space-y-3.5 text-xs">
                 {editErrorMsg && (
-                  <div className="p-2.5 bg-red-50 text-red-700 rounded-xl font-medium border border-red-200 flex items-center gap-1.5">
+                  <div className="p-3 bg-[#FFE0E5] text-[#911D35] rounded-2xl font-extrabold border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{editErrorMsg}</span>
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="text-xs font-semibold text-slate-600">Tanggal<input type="date" required disabled={editSaving} value={editDateStr} onInput={e=>setEditDateStr(e.currentTarget.value)} onChange={e=>setEditDateStr(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm focus:ring-2 focus:ring-teal-600" /></label>
-                  <label className="text-xs font-semibold text-slate-600">Jam (WIB)<input type="time" required disabled={editSaving} value={editTime} onInput={e=>setEditTime(e.currentTarget.value)} onChange={e=>setEditTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm focus:ring-2 focus:ring-teal-600" /></label>
+                  <label className="text-xs font-extrabold text-[#073B4C]">Tanggal<input type="date" required disabled={editSaving} value={editDateStr} onInput={e=>setEditDateStr(e.currentTarget.value)} onChange={e=>setEditDateStr(e.target.value)} className="mt-1 w-full rounded-xl bg-white border-2 border-[#073B4C] p-2.5 text-sm font-bold text-[#073B4C]" /></label>
+                  <label className="text-xs font-extrabold text-[#073B4C]">Jam (WIB)<input type="time" required disabled={editSaving} value={editTime} onInput={e=>setEditTime(e.currentTarget.value)} onChange={e=>setEditTime(e.target.value)} className="mt-1 w-full rounded-xl bg-white border-2 border-[#073B4C] p-2.5 text-sm font-bold text-[#073B4C]" /></label>
                 </div>
                 {/* Tipe Selector */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Tipe Transaksi</label>
-                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <label className="block text-[11px] font-extrabold text-[#073B4C] uppercase mb-1">Tipe Transaksi</label>
+                  <div className="grid grid-cols-3 gap-1.5 bg-[#F7F4E8] p-1.5 rounded-2xl border-2 border-[#073B4C]">
                     {(['expense', 'income', 'transfer'] as TransactionType[]).map(t => (
                       <button
                         key={t}
                         type="button"
                         onClick={() => {
                           setEditType(t);
+                          setIsEditSourceWalletPickerOpen(false);
+                          setIsEditDestWalletPickerOpen(false);
+                          setIsEditCategoryPickerOpen(false);
                           if (t === 'transfer') {
                             setEditCategoryName('Transfer Antar Dompet');
                             setEditCategoryId('');
                           } else {
-                            const typeCats = categories.filter(c => c.type === t);
+                            const typeCats = categories.filter(c => c.type === t && c.householdId === (editHouseholdId || state.activeHouseholdId));
                             const currentMatch = typeCats.find(c => c.name === editCategoryName);
                             if (currentMatch) {
                               setEditCategoryId(currentMatch.id);
@@ -1398,159 +1520,451 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                             }
                           }
                         }}
-                        className={`flex-1 py-1.5 rounded-lg font-bold capitalize transition-all ${
+                        className={`py-2 px-1 rounded-xl font-extrabold text-xs transition-all ${
                           editType === t
                             ? t === 'expense'
-                              ? 'bg-red-600 text-white shadow-2xs'
+                              ? 'bg-[#FF6B6B] text-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
                               : t === 'income'
-                              ? 'bg-emerald-600 text-white shadow-2xs'
-                              : 'bg-blue-600 text-white shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                              ? 'bg-[#06D6A0] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                              : 'bg-[#38BDF8] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                            : 'text-[#365664] hover:text-[#073B4C]'
                         }`}
                       >
-                        {t === 'expense' ? 'Pengeluaran' : t === 'income' ? 'Pemasukan' : 'Transfer Antar Dompet'}
+                        {t === 'expense' ? 'Pengeluaran' : t === 'income' ? 'Pemasukan' : 'Transfer'}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* Nominal Input */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Nominal (Rp)</label>
+                <div className="p-3 rounded-2xl bg-[#FFFBEB] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C]">
+                  <label className="block text-[11px] font-extrabold text-[#073B4C] uppercase mb-1">Nominal (Rp)</label>
                   <input
                     type="text"
                     inputMode="numeric"
                     value={editAmountStr ? parseInt(editAmountStr, 10).toLocaleString('id-ID') : ''}
                     onChange={e => setEditAmountStr(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-extrabold text-base text-slate-900 tabular-nums focus:outline-none focus:ring-1 focus:ring-teal-600"
+                    className="w-full px-3 py-2 bg-white border-2 border-[#073B4C] rounded-xl font-extrabold text-lg text-[#073B4C] tabular-nums focus:outline-none"
                   />
                 </div>
 
-                {/* Wallets Selectors */}
+                {/* Wallets Selectors (Inline Neo-Brutalist Pickers matching Label) */}
                 {editType === 'transfer' ? (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Dari Dompet</label>
-                      <select
-                        value={editSourceWalletId}
-                        onChange={e => setEditSourceWalletId(e.target.value)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                      <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Dari Dompet</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditSourceWalletPickerOpen(v => !v);
+                          setIsEditDestWalletPickerOpen(false);
+                          setIsEditCategoryPickerOpen(false);
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl border-2 border-[#073B4C] text-xs font-extrabold flex items-center justify-between gap-2 bg-[#FFFDF5] hover:bg-[#FFFBEB] text-[#073B4C] transition-colors"
                       >
-                        {wallets.map(w => (
-                          <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
-                      </select>
+                        <span className="inline-flex items-center gap-1.5 truncate">
+                          <WalletIcon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">
+                            {wallets.find(w => w.id === editSourceWalletId)?.name || 'Pilih Dompet Asal'}
+                          </span>
+                        </span>
+                        <span className="text-[11px] shrink-0">{isEditSourceWalletPickerOpen ? '▲' : '▾'}</span>
+                      </button>
+
+                      {isEditSourceWalletPickerOpen && (
+                        <div className="mt-2 p-3 rounded-2xl border-2 border-[#073B4C] bg-white shadow-[3px_3px_0_#073B4C]">
+                          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                            {wallets.map(w => {
+                              const active = w.id === editSourceWalletId;
+                              return (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditSourceWalletId(w.id);
+                                    setIsEditSourceWalletPickerOpen(false);
+                                  }}
+                                  className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border-[1.5px] border-[#073B4C] inline-flex items-center gap-1.5 transition-all ${
+                                    active
+                                      ? 'bg-[#06D6A0] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                                      : 'bg-white text-[#073B4C] hover:bg-[#FFFBEB]'
+                                  }`}
+                                >
+                                  <WalletIcon className="w-3 h-3 shrink-0" />
+                                  <span>{w.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Ke Dompet</label>
-                      <select
-                        value={editDestWalletId}
-                        onChange={e => setEditDestWalletId(e.target.value)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                      <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Ke Dompet</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditDestWalletPickerOpen(v => !v);
+                          setIsEditSourceWalletPickerOpen(false);
+                          setIsEditCategoryPickerOpen(false);
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl border-2 border-[#073B4C] text-xs font-extrabold flex items-center justify-between gap-2 bg-[#FFFDF5] hover:bg-[#FFFBEB] text-[#073B4C] transition-colors"
                       >
-                        {wallets.map(w => (
-                          <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
-                      </select>
+                        <span className="inline-flex items-center gap-1.5 truncate">
+                          <WalletIcon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">
+                            {wallets.find(w => w.id === editDestWalletId)?.name || 'Pilih Dompet Tujuan'}
+                          </span>
+                        </span>
+                        <span className="text-[11px] shrink-0">{isEditDestWalletPickerOpen ? '▲' : '▾'}</span>
+                      </button>
+
+                      {isEditDestWalletPickerOpen && (
+                        <div className="mt-2 p-3 rounded-2xl border-2 border-[#073B4C] bg-white shadow-[3px_3px_0_#073B4C]">
+                          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                            {wallets.map(w => {
+                              const active = w.id === editDestWalletId;
+                              return (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditDestWalletId(w.id);
+                                    setIsEditDestWalletPickerOpen(false);
+                                  }}
+                                  className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border-[1.5px] border-[#073B4C] inline-flex items-center gap-1.5 transition-all ${
+                                    active
+                                      ? 'bg-[#38BDF8] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                                      : 'bg-white text-[#073B4C] hover:bg-[#FFFBEB]'
+                                  }`}
+                                >
+                                  <WalletIcon className="w-3 h-3 shrink-0" />
+                                  <span>{w.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">
                       {editType === 'expense' ? 'Dari Dompet' : 'Ke Dompet'}
                     </label>
-                    <select
-                      value={editType === 'expense' ? editSourceWalletId : editDestWalletId}
-                      onChange={e => {
-                        if (editType === 'expense') setEditSourceWalletId(e.target.value);
-                        else setEditDestWalletId(e.target.value);
-                      }}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
-                    >
-                      {wallets.map(w => (
-                        <option key={w.id} value={w.id}>{w.name}</option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const activeWalletId = editType === 'expense' ? editSourceWalletId : editDestWalletId;
+                      const activeWalletName = wallets.find(w => w.id === activeWalletId)?.name || 'Pilih Dompet';
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditSourceWalletPickerOpen(v => !v);
+                              setIsEditCategoryPickerOpen(false);
+                              setIsEditLabelPickerOpen(false);
+                            }}
+                            className={`w-full px-3 py-2.5 rounded-xl border-2 border-[#073B4C] text-xs font-extrabold flex items-center justify-between gap-2 transition-colors ${
+                              activeWalletId
+                                ? 'bg-[#E0F2FE] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                                : 'bg-white hover:bg-[#FFFBEB] text-[#073B4C]'
+                            }`}
+                          >
+                            <span className="inline-flex items-center gap-1.5 truncate">
+                              <WalletIcon className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{activeWalletName}</span>
+                            </span>
+                            <span className="text-[11px] shrink-0">{isEditSourceWalletPickerOpen ? '▲' : '▾'}</span>
+                          </button>
+
+                          {isEditSourceWalletPickerOpen && (
+                            <div className="mt-2 p-3 rounded-2xl border-2 border-[#073B4C] bg-white shadow-[3px_3px_0_#073B4C]">
+                              <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                                {wallets.map(w => {
+                                  const active = w.id === activeWalletId;
+                                  return (
+                                    <button
+                                      key={w.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (editType === 'expense') setEditSourceWalletId(w.id);
+                                        else setEditDestWalletId(w.id);
+                                        setIsEditSourceWalletPickerOpen(false);
+                                      }}
+                                      className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border-[1.5px] border-[#073B4C] inline-flex items-center gap-1.5 transition-all ${
+                                        active
+                                          ? 'bg-[#06D6A0] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                                          : 'bg-white text-[#073B4C] hover:bg-[#FFFBEB]'
+                                      }`}
+                                    >
+                                      <WalletIcon className="w-3 h-3 shrink-0" />
+                                      <span>{w.name}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 
-                {/* Category & Label (Dibedakan tegas per Tipe Transaksi) */}
+                {/* Category (Inline Neo-Brutalist Picker matching Label) or Transfer Details */}
                 {editType !== 'transfer' ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                        Kategori {editType === 'income' ? 'Pemasukan' : 'Pengeluaran'}
-                      </label>
-                      <select
-                        value={editCategoryName}
-                        onChange={e => {
-                          setEditCategoryName(e.target.value);
-                          const c = categories.find(cat => cat.name === e.target.value && cat.type === editType && cat.householdId === (editHouseholdId || state.activeHouseholdId));
-                          if (c) setEditCategoryId(c.id);
-                        }}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
-                      >
-                        {categories
-                          .filter(c => c.type === editType)
-                          .map(c => (
-                            <option key={c.id} value={c.name}>{c.name}</option>
-                          ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">
+                      Kategori {editType === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+                    </label>
+                    {(() => {
+                      const activeCatObj = categories.find(
+                        c => c.id === editCategoryId || (c.name === editCategoryName && c.type === editType)
+                      );
+                      const filteredCats = categories.filter(
+                        c =>
+                          c.type === editType &&
+                          c.householdId === (editHouseholdId || state.activeHouseholdId)
+                      );
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditCategoryPickerOpen(v => !v);
+                              setIsEditSourceWalletPickerOpen(false);
+                              setIsEditDestWalletPickerOpen(false);
+                              setIsEditLabelPickerOpen(false);
+                            }}
+                            className={`w-full px-3 py-2.5 rounded-xl border-2 border-[#073B4C] text-xs font-extrabold flex items-center justify-between gap-2 transition-colors ${
+                              editCategoryName
+                                ? 'bg-[#FEF3C7] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                                : 'bg-white hover:bg-[#FFFBEB] text-[#073B4C]'
+                            }`}
+                          >
+                            <span className="inline-flex items-center gap-1.5 truncate">
+                              {activeCatObj && (
+                                <span
+                                  className="w-4 h-4 rounded-md border border-[#073B4C] flex items-center justify-center shrink-0"
+                                  style={{ backgroundColor: activeCatObj.color || '#FFD166', color: '#073B4C' }}
+                                >
+                                  <CategoryIcon
+                                    icon={activeCatObj.icon}
+                                    name={activeCatObj.name}
+                                    type={activeCatObj.type}
+                                    className="w-2.5 h-2.5"
+                                  />
+                                </span>
+                              )}
+                              <span className="truncate">{editCategoryName || 'Pilih / Tambah Kategori'}</span>
+                            </span>
+                            <span className="text-[11px] shrink-0">{isEditCategoryPickerOpen ? '▲' : '▾'}</span>
+                          </button>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Label (Opsional)</label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: Sarapan, AI, Reina"
-                        value={editLabel}
-                        onChange={e => setEditLabel(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
-                      />
-                    </div>
+                          {isEditCategoryPickerOpen && (
+                            <div className="mt-2 p-3 rounded-2xl border-2 border-[#073B4C] bg-white shadow-[3px_3px_0_#073B4C] space-y-2.5">
+                              <div className="flex gap-1.5">
+                                <input
+                                  type="text"
+                                  placeholder="Buat kategori baru..."
+                                  value={newEditCatName}
+                                  onChange={e => setNewEditCatName(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      void handleCreateEditCategory();
+                                    }
+                                  }}
+                                  className="flex-1 px-3 py-1.5 bg-[#FFFDF5] border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C] focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={editCatSaving || !newEditCatName.trim()}
+                                  onClick={() => void handleCreateEditCategory()}
+                                  className="px-3 py-1.5 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] font-extrabold text-xs rounded-xl shrink-0 disabled:opacity-50"
+                                >
+                                  {editCatSaving ? 'Menyimpan…' : 'Tambah'}
+                                </button>
+                              </div>
+
+                              <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto">
+                                {filteredCats.map(c => {
+                                  const active =
+                                    c.id === editCategoryId ||
+                                    c.name.toLowerCase() === editCategoryName.toLowerCase();
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setEditCategoryId(c.id);
+                                        setEditCategoryName(c.name);
+                                        setIsEditCategoryPickerOpen(false);
+                                      }}
+                                      className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border-[1.5px] border-[#073B4C] inline-flex items-center gap-1.5 transition-all ${
+                                        active
+                                          ? 'bg-[#FFD166] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                                          : 'bg-white text-[#073B4C] hover:bg-[#FFFBEB]'
+                                      }`}
+                                    >
+                                      <CategoryIcon
+                                        icon={c.icon}
+                                        name={c.name}
+                                        type={c.type}
+                                        className="w-3 h-3 shrink-0"
+                                      />
+                                      <span>{c.name}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 ) : (
                   /* Form Khusus Transfer Antar Dompet */
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[11px] font-bold text-blue-900 mb-1">Tipe Mutasi</label>
-                      <div className="p-2 bg-blue-50 text-blue-800 rounded-xl font-bold border border-blue-200 text-xs">
+                      <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Tipe Mutasi</label>
+                      <div className="p-2.5 bg-[#E0F2FE] text-[#073B4C] rounded-xl font-extrabold border-2 border-[#073B4C] text-xs">
                         Transfer Antar Dompet
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Biaya Admin (Opsional)</label>
+                      <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Biaya Admin (Opsional)</label>
                       <input
                         type="text"
                         inputMode="numeric"
                         placeholder="0 (Gratis)"
                         value={editFeeStr ? parseInt(editFeeStr, 10).toLocaleString('id-ID') : ''}
                         onChange={e => setEditFeeStr(e.target.value.replace(/[^0-9]/g, ''))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl tabular-nums font-semibold focus:outline-none"
+                        className="w-full px-3 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl tabular-nums font-bold text-[#073B4C] focus:outline-none"
                       />
                     </div>
                   </div>
                 )}
+
+                {/* Label Selector + Tambah Label (Tersedia untuk semua tipe transaksi) */}
+                <div>
+                  <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Label (Opsional)</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditLabelPickerOpen(v => !v)}
+                      className={`flex-1 px-3 py-2.5 rounded-xl border-2 border-[#073B4C] text-xs font-extrabold flex items-center justify-between gap-2 transition-colors ${
+                        editLabel.trim()
+                          ? 'bg-[#D1FAE5] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                          : 'bg-white hover:bg-[#FFFBEB] text-[#073B4C]'
+                      }`}
+                    >
+                      <span className="inline-flex items-center gap-1.5 truncate">
+                        <TagIcon className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">
+                          {editLabel.trim() ? `#${editLabel.trim().replace(/^#/, '')}` : '+ Pilih / Tambah Label'}
+                        </span>
+                      </span>
+                      <span className="text-[11px] shrink-0">{isEditLabelPickerOpen ? '▲' : '▾'}</span>
+                    </button>
+                    {editLabel.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setEditLabel('')}
+                        aria-label="Hapus label terpilih"
+                        className="px-2.5 py-2.5 rounded-xl border-2 border-[#073B4C] bg-[#FFE0E5] text-[#911D35] text-xs font-extrabold shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {isEditLabelPickerOpen && (
+                    <div className="mt-2 p-3 rounded-2xl border-2 border-[#073B4C] bg-white shadow-[3px_3px_0_#073B4C] space-y-2.5">
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="Buat label baru..."
+                          value={newEditLabelText}
+                          onChange={e => setNewEditLabelText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void handleCreateEditLabel();
+                            }
+                          }}
+                          className="flex-1 px-3 py-1.5 bg-[#FFFDF5] border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={editLabelSaving || !newEditLabelText.trim()}
+                          onClick={() => void handleCreateEditLabel()}
+                          className="px-3 py-1.5 bg-[#06D6A0] hover:bg-[#34E4B4] text-[#073B4C] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] font-extrabold text-xs rounded-xl shrink-0 disabled:opacity-50"
+                        >
+                          {editLabelSaving ? 'Menyimpan…' : 'Tambah'}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditLabel('');
+                            setIsEditLabelPickerOpen(false);
+                          }}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border-[1.5px] border-[#073B4C] ${
+                            !editLabel.trim() ? 'bg-[#073B4C] text-white' : 'bg-[#F7F4E8] text-[#073B4C]'
+                          }`}
+                        >
+                          (Tanpa Label)
+                        </button>
+                        {labels.map(lbl => {
+                          const active = editLabel.trim().replace(/^#/, '') === lbl;
+                          return (
+                            <button
+                              key={lbl}
+                              type="button"
+                              onClick={() => {
+                                setEditLabel(lbl);
+                                setIsEditLabelPickerOpen(false);
+                              }}
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border-[1.5px] border-[#073B4C] transition-all ${
+                                active
+                                  ? 'bg-[#FFD166] text-[#073B4C] shadow-[2px_2px_0_#073B4C]'
+                                  : 'bg-white text-[#073B4C] hover:bg-[#FFFBEB]'
+                              }`}
+                            >
+                              #{lbl}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Description Input */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Keterangan / Deskripsi</label>
+                  <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Keterangan / Deskripsi</label>
                   <input
                     type="text"
                     value={editDescription}
                     onChange={e => setEditDescription(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                    className="w-full px-3 py-2.5 bg-white border-2 border-[#073B4C] rounded-xl font-bold text-[#073B4C] focus:outline-none"
                   />
                 </div>
 
                 {/* Pilihan Milik Household & Dicatat Oleh */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Milik Household</label>
+                    <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Milik Household</label>
                     <select
                       value={editHouseholdId}
                       onChange={e => setEditHouseholdId(e.target.value)}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                      className="w-full p-2.5 bg-white border-2 border-[#073B4C] rounded-xl font-bold text-[#073B4C] focus:outline-none"
                     >
                       {households.map(h => (
                         <option key={h.id} value={h.id}>{h.name}</option>
@@ -1559,7 +1973,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Dicatat Oleh / Milik Anggota</label>
+                    <label className="block text-[11px] font-extrabold text-[#073B4C] mb-1">Dicatat Oleh / Milik Anggota</label>
                     <div className="space-y-1">
                       <select
                         value={availableMemberNames.includes(editAddedBy) ? editAddedBy : '__custom__'}
@@ -1568,7 +1982,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                             setEditAddedBy(e.target.value);
                           }
                         }}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none"
+                        className="w-full p-2.5 bg-white border-2 border-[#073B4C] rounded-xl font-bold text-[#073B4C] focus:outline-none"
                       >
                         {availableMemberNames.map(name => (
                           <option key={name} value={name}>{name}</option>
@@ -1582,7 +1996,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                           value={editAddedBy}
                           onChange={e => setEditAddedBy(e.target.value)}
                           placeholder="Ketik nama anggota"
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none"
+                          className="w-full px-2.5 py-2 bg-white border-2 border-[#073B4C] rounded-xl text-xs font-bold text-[#073B4C] focus:outline-none"
                         />
                       )}
                     </div>
@@ -1590,19 +2004,19 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
                 </div>
 
                 {/* Submit & Cancel Buttons */}
-                <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <div className="flex gap-2.5 pt-2 border-t-2 border-dashed border-[#073B4C]/20">
                   <button
                     type="button"
                     onClick={() => setIsEditing(false)}
-                    className="flex-1 py-2.5 rounded-xl text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 transition-colors"
+                    className="nb-btn flex-1 py-2.5 text-[#073B4C] font-extrabold bg-white hover:bg-[#FFFBEB]"
                   >
                     Batal
                   </button>
                   <button
                     type="submit" disabled={editSaving}
-                    className="flex-1 py-2.5 rounded-xl text-white font-bold bg-teal-700 hover:bg-teal-800 transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+                    className="nb-btn flex-1 py-2.5 text-[#073B4C] font-extrabold bg-[#06D6A0] hover:bg-[#34E4B4] flex items-center justify-center gap-1.5"
                   >
-                    <Check className="w-4 h-4" />
+                    <Check className="w-4 h-4 stroke-[2.6]" />
                     <span>{editSaving ? 'Menyimpan ke Supabase…' : 'Simpan Perubahan'}</span>
                   </button>
                 </div>
@@ -1617,20 +2031,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
       {voidConfirmId &&
         createPortal(
           <div
-            className="takara-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+            className="takara-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#073B4C]/45"
             onClick={() => setVoidConfirmId(null)}
           >
             <div
-              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4"
+              className="bg-[#FFFDF5] rounded-3xl p-6 max-w-sm w-full border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C] space-y-4"
               onClick={e => e.stopPropagation()}
             >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFE0E5] text-[#911D35] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0">
                 <AlertCircle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Batalkan Transaksi?</h3>
-                <p className="text-xs text-slate-500">
+                <h3 className="font-extrabold text-[#073B4C] text-sm">Batalkan Transaksi?</h3>
+                <p className="text-xs font-bold text-[#365664]">
                   Saldo dompet terkait akan disesuaikan secara otomatis melalui pembalikan ledger.
                 </p>
               </div>
@@ -1638,14 +2052,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ onOpenQuickA
 
             <div className="flex justify-end gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => setVoidConfirmId(null)}
-                className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                className="nb-btn px-4 py-2 text-xs font-extrabold text-[#073B4C] bg-white hover:bg-[#FFFBEB]"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={() => handleConfirmVoid(voidConfirmId)}
-                className="px-4 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-xs"
+                className="nb-btn px-4 py-2 text-xs font-extrabold bg-[#FF6B6B] hover:bg-[#FB7185] text-white"
               >
                 Ya, Batalkan
               </button>

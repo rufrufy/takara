@@ -86,7 +86,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall, onN
       <div className="header-inner">
         <div className="brand-cluster">
           <img src="/Takara-192.png" alt="Takara" className="brand-logo-img" />
-          <span className="wordmark">Takara</span>
         </div>
         {/* Household Switcher */}
         <div className="relative">
@@ -266,26 +265,26 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall, onN
                   aria-label="Tutup panel notifikasi"
                 />
                 <div className="notif-menu" role="dialog" aria-label="Aktivitas Household">
-                  <div className="flex items-center justify-between gap-2 pb-2.5 mb-2 border-b-2 border-dashed border-[#073B4C]/20">
-                    <div>
-                      <strong className="text-sm font-extrabold text-[#073B4C] block">
+                  <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-[#073B4C]/15">
+                    <div className="min-w-0">
+                      <strong className="text-xs font-extrabold text-[#073B4C] block">
                         Aktivitas Household
                       </strong>
-                      <span className="text-[11px] font-bold text-[#365664] block">
+                      <span className="notif-item-time text-[#365664] block">
                         {unreadNotificationCount > 0
-                          ? `${unreadNotificationCount} pembaruan belum dibaca`
-                          : 'Semua pembaruan sudah dibaca'}
+                          ? `${unreadNotificationCount} belum dibaca`
+                          : 'Semua sudah dibaca'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {unreadNotificationCount > 0 && (
                         <button
                           type="button"
                           onClick={markAllNotificationsRead}
-                          className="px-2 py-1 text-[11px] font-extrabold bg-[#06D6A0]/25 hover:bg-[#06D6A0]/50 text-[#073B4C] border border-[#073B4C] rounded-lg inline-flex items-center gap-1"
+                          className="notif-action-link font-extrabold bg-[#06D6A0]/25 hover:bg-[#06D6A0]/50 text-[#073B4C] border border-[#073B4C] inline-flex items-center gap-1"
                           title="Tandai semua dibaca"
                         >
-                          <CheckCheck size={13} />
+                          <CheckCheck size={12} />
                           <span>Dibaca</span>
                         </button>
                       )}
@@ -293,22 +292,22 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall, onN
                         <button
                           type="button"
                           onClick={clearNotifications}
-                          className="p-1.5 bg-[#FFE0E5] hover:bg-[#FF6B6B] hover:text-white text-[#073B4C] border border-[#073B4C] rounded-lg"
+                          className="notif-action-link bg-[#FFE0E5] hover:bg-[#FF6B6B] hover:text-white text-[#073B4C] border border-[#073B4C]"
                           aria-label="Hapus semua notifikasi"
                           title="Bersihkan riwayat"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={12} />
                         </button>
                       )}
                     </div>
                   </div>
 
                   {notifications.length === 0 ? (
-                    <p className="text-xs font-bold text-[#365664] py-6 text-center">
+                    <p className="text-xs font-bold text-[#365664] py-5 text-center">
                       Belum ada aktivitas baru dari anggota household lain.
                     </p>
                   ) : (
-                    <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-0.5">
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto pr-0.5">
                       {notifications.map((n) => {
                         const { bg, color, Icon } = getNotificationVisual(n.kind);
                         return (
@@ -322,31 +321,31 @@ export const Header: React.FC<HeaderProps> = ({ onOpenImport, onOpenInstall, onN
                                 onNavigateFromNotification(n.targetTab || 'beranda', n.entityId);
                               }
                             }}
-                            className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl border-2 text-left transition-colors ${
+                            className={`notif-item-card w-full flex items-start gap-2.5 border text-left transition-colors ${
                               n.read
-                                ? 'bg-slate-50/80 border-slate-200 hover:border-[#073B4C]/40 hover:bg-[#FEF3C7]/50'
-                                : 'bg-[#FFFDF5] border-[#073B4C] shadow-[2px_2px_0_#073B4C] hover:bg-[#FEF3C7]'
+                                ? 'bg-white border-[#073B4C]/20 hover:border-[#073B4C]/50 hover:bg-[#FEF3C7]/40'
+                                : 'bg-[#FFFBEB] border-[#073B4C] shadow-[2px_2px_0_#073B4C] hover:bg-[#FEF3C7]'
                             }`}
                           >
                             <span
                               style={{ backgroundColor: bg, color }}
-                              className="w-8 h-8 rounded-xl border-[1.5px] border-[#073B4C] flex items-center justify-center shrink-0 mt-0.5"
+                              className="w-7 h-7 rounded-lg border-[1.5px] border-[#073B4C] flex items-center justify-center shrink-0 mt-0.5"
                             >
-                              <Icon size={15} strokeWidth={2.5} />
+                              <Icon size={13} strokeWidth={2.5} />
                             </span>
                             <span className="min-w-0 flex-1 block">
                               <span className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-extrabold text-[#073B4C] truncate">
+                                <span className="notif-item-title text-[#073B4C] truncate">
                                   {n.title}
                                 </span>
                                 {!n.read && (
                                   <span className="w-2 h-2 rounded-full bg-[#FF6B6B] border border-[#073B4C] shrink-0" />
                                 )}
                               </span>
-                              <span className="text-[11px] font-bold text-[#365664] block mt-0.5 line-clamp-2">
+                              <span className="notif-item-msg text-[#365664] block mt-0.5 line-clamp-2">
                                 {n.message}
                               </span>
-                              <span className="text-[10px] font-bold text-slate-400 block mt-0.5">
+                              <span className="notif-item-time text-slate-400 block mt-0.5">
                                 {formatRelativeTime(n.createdAt)}
                               </span>
                             </span>

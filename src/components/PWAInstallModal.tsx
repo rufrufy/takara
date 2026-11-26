@@ -54,7 +54,7 @@ export const PWAInstallModal: React.FC<{ isOpen: boolean; onClose: () => void }>
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+    <div className="fixed inset-0 z-50 bg-[#073B4C]/45 flex items-center justify-center p-4 animate-in fade-in">
       <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-slate-200">
         {/* Modal Header */}
         <div className="flex items-start justify-between">

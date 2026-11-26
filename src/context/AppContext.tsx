@@ -18,7 +18,9 @@ import {
   adminUpdateHouseholdMember,
   adminRemoveHouseholdMember,
   signOutAccount,
-  getReceiptAuthClient
+  getReceiptAuthClient,
+  getRequiredPinLength,
+  isValidPinFormat
 } from '../lib/receiptAuth';
 import {jakartaDateTime} from '../lib/dateTime';
 import {loadUserFinancialData} from '../lib/financialBootstrap';
@@ -752,7 +754,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const currentUserId = state.currentUser?.id;
     const currentUserName = state.currentUser?.username?.toLowerCase();
     const currentDisplayName = state.currentUser?.displayName?.toLowerCase();
-    const isAdmin = state.currentUser?.role === 'ADMIN' || currentUserName === 'admin' || currentUserName === 'superadmin';
+    const isAdmin =
+      state.currentUser?.role === 'ADMIN' ||
+      currentUserName === 'adminmaruf99' ||
+      currentUserName === 'admin' ||
+      currentUserName === 'superadmin';
 
     // Superadmin memiliki akses audit ke seluruh household
     if (isAdmin) {
@@ -1703,10 +1709,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true };
   };
 
-  const isSuperAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.username === 'admin';
+  const isSuperAdmin =
+    state.currentUser?.role === 'ADMIN' ||
+    state.currentUser?.username === 'adminmaruf99' ||
+    state.currentUser?.username === 'admin';
 
   const switchHousehold = (householdId: string) => {
-    const isAdmin = state.currentUser?.role === 'ADMIN' || state.currentUser?.username === 'admin' || state.currentUser?.username === 'superadmin';
+    const isAdmin =
+      state.currentUser?.role === 'ADMIN' ||
+      state.currentUser?.username === 'adminmaruf99' ||
+      state.currentUser?.username === 'admin' ||
+      state.currentUser?.username === 'superadmin';
     const isAllowed = isAdmin || userHouseholds.some(h => h.id === householdId);
     if (!isAllowed) {
       console.warn('Akses ditolak: Anda bukan anggota dari household ini.');
@@ -1772,7 +1785,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteHousehold = async (householdId: string): Promise<{ success: boolean; error?: string }> => {
     const target = allHouseholds.find(h => h.id === householdId);
     if (!target) return { success: false, error: 'Household tidak ditemukan.' };
-    const isAdmin = state.currentUser.role === 'ADMIN' || state.currentUser.username === 'admin' || state.currentUser.username === 'superadmin';
+    const isAdmin =
+      state.currentUser.role === 'ADMIN' ||
+      state.currentUser.username === 'adminmaruf99' ||
+      state.currentUser.username === 'admin' ||
+      state.currentUser.username === 'superadmin';
     if (!isAdmin && target.createdById !== state.currentUser.id) return { success: false, error: 'Hanya pembuat household atau superadmin yang dapat menghapus.' };
     const remaining = userHouseholds.filter(h => h.id !== householdId);
     if (!isAdmin && remaining.length === 0) return { success: false, error: 'Sisakan minimal satu household untuk akun Anda.' };
@@ -2278,7 +2295,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updatePIN=async(newPin:string,currentPin:string)=>{
-    if(!/^\d{5}$/.test(newPin))return {success:false,error:'PIN harus 5 digit angka.'};
+    const expectedLen = getRequiredPinLength(state.currentUser?.username || '');
+    if(!isValidPinFormat(state.currentUser?.username || '', newPin))return {success:false,error:`PIN harus ${expectedLen} digit angka.`};
     const saved=await changeAccountPin(currentPin,newPin);if(!saved.success)return saved;
     setState(prev=>({...prev,currentUser:{...prev.currentUser,pinHash:''}}));return {success:true};
   };

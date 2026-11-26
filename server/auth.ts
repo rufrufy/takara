@@ -35,6 +35,10 @@ const safeMember = (m: any) => ({
 });
 
 const attempts = new Map<string, { count: number; until: number }>();
+const isSuperAdminUsername = (u: string) => u.trim().toLowerCase() === 'adminmaruf99';
+const getRequiredPinLength = (u: string) => (isSuperAdminUsername(u) ? 8 : 5);
+const isValidPinForUser = (u: string, pin: string) =>
+  isSuperAdminUsername(u) ? /^\d{8}$/.test(String(pin || '')) : /^\d{5}$/.test(String(pin || ''));
 
 export async function handleAuthRequest(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
@@ -80,8 +84,9 @@ export async function handleAuthRequest(request: Request, env: Env): Promise<Res
     if (action.startsWith('admin-') && !isAdmin) return json({ success: false, error: 'Akses admin diperlukan.' }, 403);
 
     if (action === 'change-pin') {
-      if (!/^\d{5}$/.test(body.newPin) || !/^\d{5}$/.test(body.currentPin)) {
-        return json({ success: false, error: 'PIN harus 5 digit.' }, 400);
+      const reqLen = getRequiredPinLength(actor.username || '');
+      if (!isValidPinForUser(actor.username || '', body.newPin) || !isValidPinForUser(actor.username || '', body.currentPin)) {
+        return json({ success: false, error: `PIN harus ${reqLen} digit.` }, 400);
       }
       const verified = await auth.auth.signInWithPassword({
         email: actor.username + '@takara.invalid',
@@ -118,8 +123,12 @@ export async function handleAuthRequest(request: Request, env: Env): Promise<Res
     if (action === 'register' || action === 'admin-create' || action === 'invite') {
       const username = String(body.username || '').trim().toLowerCase();
       const displayName = String(body.displayName || '').trim();
-      if (!/^[a-z0-9_-]{3,40}$/.test(username) || !/^\d{5}$/.test(body.pin) || !displayName || displayName.length > 100) {
+      const pinValid = action === 'admin-create' ? isValidPinForUser(username, body.pin) : /^\d{5}$/.test(String(body.pin || ''));
+      if (!/^[a-z0-9_-]{3,40}$/.test(username) || !pinValid || !displayName || displayName.length > 100) {
         return json({ success: false, error: 'Nama, username, atau PIN tidak valid.' }, 400);
+      }
+      if (action === 'register' && isSuperAdminUsername(username)) {
+        return json({ success: false, error: 'Username tersebut tidak tersedia.' }, 400);
       }
 
       if (action === 'register') {
@@ -270,8 +279,12 @@ export async function handleAuthRequest(request: Request, env: Env): Promise<Res
       }
 
       const authChanges: any = {};
+      const effectiveUsername = changes.username || target.data.username;
       if (body.pin5Digit) {
-        if (!/^\d{5}$/.test(body.pin5Digit)) return json({ success: false, error: 'PIN harus 5 digit.' }, 400);
+        const reqLen = getRequiredPinLength(effectiveUsername);
+        if (!isValidPinForUser(effectiveUsername, body.pin5Digit)) {
+          return json({ success: false, error: `PIN harus ${reqLen} digit.` }, 400);
+        }
         authChanges.password = 'Takara::' + body.pin5Digit;
       }
       if (changes.username && changes.username !== target.data.username) {

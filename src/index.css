@@ -199,7 +199,7 @@ a {
   box-shadow: var(--nb-shadow-sm);
   border-radius: 999px;
   font-weight: 800;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease, background-color 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, background-color 0.15s ease;
 }
 .nb-btn:hover:not(:disabled) {
   transform: translate(-1.5px, -2px) scale(1.02);
@@ -214,7 +214,7 @@ a {
   box-shadow: var(--nb-shadow-xs);
   border-radius: 999px;
   font-weight: 800;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s ease;
 }
 .nb-chip:active {
   transform: translate(1.5px, 1.5px) scale(0.97);
@@ -240,9 +240,7 @@ a {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(255, 253, 245, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: #FFFDF5;
   border-bottom: 2.5px solid #073B4C;
 }
 .header-inner {
@@ -265,7 +263,7 @@ a {
   height: 42px;
   object-fit: contain;
   flex-shrink: 0;
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .brand-cluster:hover .brand-logo-img {
   transform: rotate(-8deg) scale(1.08);
@@ -309,7 +307,7 @@ a {
   font-size: 13px;
   font-weight: 800;
   color: #073B4C;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s ease, background-color 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease, background-color 0.15s ease;
 }
 .household-switch:hover {
   transform: translate(-1.5px, -1.5px) scale(1.02);
@@ -346,7 +344,7 @@ a {
   display: grid;
   place-items: center;
   color: #073B4C;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s ease, background-color 0.12s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease, background-color 0.12s ease;
 }
 .notif-button:hover {
   transform: translate(-1.5px, -1.5px) scale(1.04);
@@ -377,24 +375,20 @@ a {
 }
 .notif-menu {
   position: absolute;
-  right: -46px;
-  top: 52px;
+  right: -36px;
+  top: 50px;
   z-index: 40;
-  width: min(350px, calc(100vw - 24px));
-  padding: 14px;
+  width: min(312px, calc(100vw - 24px));
+  padding: 10px 11px;
   background: #FFFFFF;
-  border: 3px solid #073B4C;
-  border-radius: 26px;
-  box-shadow: 6px 6px 0px #073B4C;
+  border: 2.5px solid #073B4C;
+  border-radius: 18px;
+  box-shadow: 4px 4px 0px #073B4C;
 }
 @keyframes nbToastSlideIn {
   0% {
     opacity: 0;
-    transform: translate3d(28px, -8px, 0) scale(0.95);
-  }
-  70% {
-    opacity: 1;
-    transform: translate3d(-3px, 2px, 0) scale(1.01);
+    transform: translate3d(20px, -4px, 0) scale(0.97);
   }
   100% {
     opacity: 1;
@@ -402,7 +396,7 @@ a {
   }
 }
 .nb-toast-enter {
-  animation: nbToastSlideIn 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: nbToastSlideIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .profile-button {
   width: 42px;
@@ -614,7 +608,7 @@ a {
   font-size: 13.5px;
   font-weight: 800;
   flex-shrink: 0;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s ease, background-color 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease, background-color 0.15s ease;
 }
 .record-button:hover {
   background: #FFE08A;
@@ -645,7 +639,7 @@ a {
   font-weight: 700;
   color: #073B4C;
   min-height: 48px;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease;
 }
 .balance-flows button:first-child {
   background: #D9F99D;
@@ -721,22 +715,28 @@ a {
   min-width: 0;
 }
 .wallet-deck-wrapper.is-compact .wallet-deck-stage {
-  padding: 2px 5px 0 1px;
+  padding: 2px 5px 14px 1px;
 }
 .wallet-deck-wrapper.is-compact .wallet-deck-card {
   border-radius: 20px;
   box-shadow: 3px 3px 0px #073B4C;
 }
 .wallet-deck-wrapper.is-compact .wallet-deck-card-header {
-  padding: 8px 9px;
+  min-height: 46px;
+  padding: 9px 11px;
   gap: 6px;
 }
 .wallet-deck-wrapper.is-compact .wallet-deck-card-body {
-  padding: 9px 10px;
-  min-height: 92px;
+  padding: 10px 11px;
+  height: 94px;
+  min-height: 94px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+}
+.wallet-deck-wrapper.is-compact .wallet-deck-card.is-empty {
+  height: 140px;
+  min-height: 140px;
 }
 .wallet-deck-wrapper.is-compact .deck-title {
   font-size: 12.5px;
@@ -826,8 +826,8 @@ a {
   transform-origin: center bottom;
   will-change: transform, opacity;
   transition:
-    transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 0.28s ease,
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.22s ease,
     box-shadow 0.2s ease;
 }
 .wallet-deck-card[data-active="true"]:hover {
@@ -835,10 +835,7 @@ a {
 }
 @keyframes walletShuffleNext {
   0% {
-    transform: translate3d(26px, 8px, 0) scale(0.95) rotate(2.5deg);
-  }
-  65% {
-    transform: translate3d(-3px, -3px, 0) scale(1.01) rotate(-0.4deg);
+    transform: translate3d(24px, 6px, 0) scale(0.96) rotate(2deg);
   }
   100% {
     transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
@@ -846,20 +843,17 @@ a {
 }
 @keyframes walletShufflePrev {
   0% {
-    transform: translate3d(-26px, 8px, 0) scale(0.95) rotate(-2.5deg);
-  }
-  65% {
-    transform: translate3d(3px, -3px, 0) scale(1.01) rotate(0.4deg);
+    transform: translate3d(-24px, 6px, 0) scale(0.96) rotate(-2deg);
   }
   100% {
     transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
 }
 .wallet-deck-card.is-shuffling-next {
-  animation: walletShuffleNext 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: walletShuffleNext 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .wallet-deck-card.is-shuffling-prev {
-  animation: walletShufflePrev 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: walletShufflePrev 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .wallet-deck-card-header {
   display: flex;
@@ -1067,7 +1061,7 @@ a {
   box-shadow: 3.5px 3.5px 0px #073B4C;
   border-radius: 22px;
   text-align: left;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease, background-color 0.14s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, background-color 0.14s ease;
 }
 .daily-row:hover {
   background: #FFFBEB;
@@ -1089,7 +1083,7 @@ a {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .daily-row:hover .daily-icon {
   transform: rotate(-7deg) scale(1.06);
@@ -1208,21 +1202,31 @@ a {
 }
 .bottom-dock button {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  min-height: 50px;
-  padding: 5px 3px;
+  gap: 0;
+  min-height: 48px;
+  padding: 8px 6px;
   border-radius: 12px;
   color: #073B4C;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
   background: var(--nav-rest, #FFFFFF);
   border: 1.5px solid transparent;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  overflow: hidden;
+  transition: flex-grow 0.24s cubic-bezier(0.22, 1, 0.36, 1), padding 0.22s cubic-bezier(0.22, 1, 0.36, 1), gap 0.22s cubic-bezier(0.22, 1, 0.36, 1), transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.bottom-dock button .nav-label {
+  display: inline-block;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transform: translateX(-6px) scale(0.92);
+  transition: max-width 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), margin-left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .bottom-dock button[data-nav-tab="beranda"] {
   --nav-rest: #E0F2FE;
@@ -1259,6 +1263,9 @@ a {
   transform: scale(0.92);
 }
 .bottom-dock button[aria-current="page"] {
+  flex: 2.2 1 auto;
+  padding: 8px 14px;
+  gap: 6px;
   background: var(--nav-active, #FFD166);
   color: #073B4C;
   border: 2px solid #073B4C;
@@ -1266,7 +1273,16 @@ a {
   transform: translateY(-1px);
 }
 .bottom-dock button[aria-current="page"] svg {
-  animation: nbIconJelly 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+  animation: nbIconJelly 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bottom-dock button[aria-current="page"] .nav-label {
+  max-width: 110px;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  margin-left: 2px;
+  font-size: 12.5px;
+  font-weight: 800;
 }
 
 .page-record-action {
@@ -1287,13 +1303,11 @@ a {
   color: #073B4C !important;
   border: 3px solid #073B4C !important;
   box-shadow: 4px 4px 0px #073B4C !important;
-  animation: nbFabFloat 3.6s ease-in-out infinite;
-  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease, background-color 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, background-color 0.15s ease;
 }
 .page-record-action button:hover {
   background: #34E4B4 !important;
-  animation-play-state: paused;
-  transform: translate(-2px, -3px) rotate(12deg) scale(1.07);
+  transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0px #073B4C !important;
 }
 .page-record-action button:active {
@@ -1811,7 +1825,7 @@ a {
   background: var(--wt-rest, #FFFFFF);
   border: 1.5px solid rgba(7, 59, 76, 0.2);
   overflow: hidden;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .wallet-tabs > button[data-wallet-tab="dompet"] {
   --wt-rest: #ECFDF5;
@@ -1879,7 +1893,7 @@ a {
 .takara-app .wallet-account-card {
   background: #FFFFFF !important;
   overflow: hidden;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, margin-top 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease, margin-top 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .takara-app .wallet-account-card:hover {
   transform: translate(-1.5px, -1.5px);
@@ -2001,6 +2015,45 @@ a {
 .auth-screen :is(.text-\[10px\], .text-\[11px\]) {
   font-size: 0.8125rem;
   line-height: 1.45;
+}
+.takara-app button.notif-item-card {
+  border-radius: 13px !important;
+  min-height: 0 !important;
+  padding: 8px 10px !important;
+  font-weight: 600;
+}
+.takara-app button.notif-action-link {
+  border-radius: 8px !important;
+  min-height: 0 !important;
+  padding: 3px 7px !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+}
+.takara-app .notif-item-title,
+.takara-app .nb-toast-title {
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  font-weight: 800 !important;
+}
+.takara-app .notif-item-msg,
+.takara-app .nb-toast-msg {
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+  font-weight: 600 !important;
+}
+.takara-app .notif-item-time,
+.takara-app .nb-toast-time {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+}
+.takara-app button.nb-toast-close,
+button.nb-toast-close {
+  border-radius: 8px !important;
+  min-height: 0 !important;
+  width: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
 }
 .takara-app :is(th, thead) {
   color: #073B4C;
@@ -2195,10 +2248,6 @@ a {
 /* ==========================================================================
    MODALS, QUICK ADD SHEET & PICKERS
    ========================================================================== */
-.takara-app .fixed.inset-0,
-.takara-modal-backdrop {
-  backdrop-filter: blur(4px);
-}
 .takara-app .fixed.inset-0 > div,
 .takara-modal-backdrop > div {
   border-radius: 30px;
@@ -2324,8 +2373,7 @@ a {
   flex-direction: column;
   justify-content: flex-end;
   padding: 8px;
-  background: rgba(7, 59, 76, 0.38) !important;
-  backdrop-filter: blur(3px);
+  background: rgba(7, 59, 76, 0.42) !important;
   border-radius: inherit !important;
 }
 .entry-picker {
@@ -2546,11 +2594,13 @@ a {
     padding: 13px 14px;
   }
   .wallet-deck-wrapper.is-compact .wallet-deck-card-header {
-    padding: 8px 9px;
+    min-height: 46px;
+    padding: 9px 11px;
   }
   .wallet-deck-wrapper.is-compact .wallet-deck-card-body {
-    padding: 9px 10px;
-    min-height: 88px;
+    padding: 10px 11px;
+    height: 94px;
+    min-height: 94px;
   }
   .wallet-tabs > button {
     min-height: 60px;
@@ -2608,10 +2658,18 @@ a {
     bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
   .bottom-dock button {
-    min-height: 54px;
+    min-height: 48px;
     border-radius: 11px;
-    font-size: 11px;
-    gap: 3px;
+    padding: 7px 6px;
+    gap: 0;
+  }
+  .bottom-dock button[aria-current="page"] {
+    flex: 2.2 1 auto;
+    padding: 7px 12px;
+    gap: 5px;
+  }
+  .bottom-dock button[aria-current="page"] .nav-label {
+    font-size: 12px;
   }
   .page-record-action {
     right: 14px;
@@ -2730,18 +2788,15 @@ a {
     animation: none !important;
     transition: none !important;
   }
-  .touch-spark-layer {
-    display: none !important;
-  }
 }
 
 /* ==========================================================================
-   FULL MICRO-INTERACTION ANIMATIONS, TOUCH SPARKS & BRUTALIST ANIMAL BACKDROP
+   MICRO-INTERACTIONS & VIEW TRANSITIONS
    ========================================================================== */
 @keyframes nbViewEnter {
   0% {
     opacity: 0;
-    transform: translate3d(0, 12px, 0) scale(0.99);
+    transform: translate3d(0, 10px, 0);
   }
   100% {
     opacity: 1;
@@ -2749,13 +2804,13 @@ a {
   }
 }
 .view-stage-enter {
-  animation: nbViewEnter 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation: nbViewEnter 0.2s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 @keyframes nbModalPop {
   0% {
     opacity: 0;
-    transform: translate3d(0, 18px, 0) scale(0.93);
+    transform: translate3d(0, 14px, 0) scale(0.96);
   }
   100% {
     opacity: 1;
@@ -2764,19 +2819,12 @@ a {
 }
 .takara-app .fixed.inset-0 > div,
 .takara-modal-backdrop > div {
-  animation: nbModalPop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: nbModalPop 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes nbIconJelly {
-  0% { transform: scale(1); }
-  35% { transform: scale(1.24, 0.82) rotate(-6deg); }
-  65% { transform: scale(0.92, 1.12) rotate(4deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-
-@keyframes nbFabFloat {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  50% { transform: translate3d(0, -5px, 0); }
+  0% { transform: scale(0.94); }
+  100% { transform: scale(1); }
 }
 
 @keyframes heroOrbDrift {
@@ -2797,73 +2845,6 @@ a {
 .auth-screen button:active:not(:disabled),
 .welcome-page button:active:not(:disabled) {
   transition-duration: 0.08s;
-}
-
-/* Touch Spark Layer (Every Touch / Tap / Click) */
-.touch-spark-layer {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 9999;
-}
-.touch-spark-burst {
-  position: fixed;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-.touch-spark-ring {
-  position: absolute;
-  left: -18px;
-  top: -18px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 2.5px solid #073B4C;
-  box-shadow: 2px 2px 0px #FFD166;
-  animation: nbSparkRing 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-@keyframes nbSparkRing {
-  0% {
-    opacity: 0.95;
-    transform: scale(0.25);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.45);
-  }
-}
-.touch-spark-dot {
-  position: absolute;
-  left: -5px;
-  top: -5px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1.8px solid #073B4C;
-  animation: nbSparkFly 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-.touch-spark-dot.is-square {
-  border-radius: 3px;
-}
-.touch-spark-dot.is-diamond {
-  border-radius: 2px;
-  width: 9px;
-  height: 9px;
-}
-@keyframes nbSparkFly {
-  0% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(0.75) rotate(0deg);
-  }
-  70% {
-    opacity: 0.95;
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(var(--tx, 24px), var(--ty, -24px), 0) scale(0.35) rotate(var(--rot, 90deg));
-  }
 }
 
 /* Neo-Brutalist Animal Backdrop Flanking Left & Right */

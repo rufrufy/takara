@@ -6,7 +6,7 @@ import {
   enhanceMagicInputWithAI,
   type ParsedMagicInput
 } from '../lib/magicInputParser';
-import { Sparkles, Mic, MicOff, Check, Loader2, Wand2, X } from 'lucide-react';
+import { MessageSquareText, Mic, MicOff, Check, Loader2, SlidersHorizontal, Wallet, X } from 'lucide-react';
 
 interface SpeechRecognitionAlternativeLike {
   transcript: string;
@@ -163,7 +163,7 @@ export const MagicInputBar: React.FC<MagicInputBarProps> = ({
       } else {
         setText('');
         setAiOverride(null);
-        setToastMsg(`Tersimpan: ${parsed.description} (${formatIDR(parsed.amount)}) ✨`);
+        setToastMsg(`Tersimpan: ${parsed.description} (${formatIDR(parsed.amount)})`);
         setTimeout(() => setToastMsg(''), 3500);
       }
     } finally {
@@ -186,7 +186,7 @@ export const MagicInputBar: React.FC<MagicInputBarProps> = ({
       <form onSubmit={handleDirectAction} className="space-y-2">
         <div className="flex items-center justify-between gap-2 px-0.5">
           <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#073B4C]">
-            <Sparkles className="w-3.5 h-3.5 text-[#05966F] stroke-[2.6]" />
+            <MessageSquareText className="w-3.5 h-3.5 text-[#073B4C] stroke-[2.4]" />
             <span>Catat Kilat Ketik / Suara</span>
           </span>
           {text.trim() && (
@@ -197,7 +197,7 @@ export const MagicInputBar: React.FC<MagicInputBarProps> = ({
               className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-[#DDD6FE] text-[#073B4C] border-[1.5px] border-[#073B4C] px-2.5 py-0.5 rounded-full hover:bg-[#C4B5FD]"
               title="Rapikan deteksi kalimat dengan AI"
             >
-              {isAiRefining ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+              {isAiRefining ? <Loader2 className="w-3 h-3 animate-spin" /> : <SlidersHorizontal className="w-3 h-3" />}
               <span>AI Perjelas</span>
             </button>
           )}
@@ -240,7 +240,7 @@ export const MagicInputBar: React.FC<MagicInputBarProps> = ({
               aria-label={isListening ? 'Hentikan dikte suara' : 'Dikte suara transaksi'}
               title={isListening ? 'Sedang mendengarkan… Klik untuk berhenti' : 'Bicara dengan mikrofon (Bahasa Indonesia)'}
               className={`nb-btn w-11 h-11 grid place-items-center shrink-0 ${
-                isListening ? 'bg-[#FF6B6B] text-white animate-pulse' : 'bg-white text-[#073B4C]'
+                isListening ? 'bg-[#FF6B6B] text-white' : 'bg-white text-[#073B4C]'
               }`}
             >
               {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -274,8 +274,9 @@ export const MagicInputBar: React.FC<MagicInputBarProps> = ({
                 </span>
               )}
 
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C] bg-[#E0F2FE] text-[#073B4C] truncate max-w-[140px]">
-                👛 {walletLabel}
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border-[1.5px] border-[#073B4C] bg-[#E0F2FE] text-[#073B4C] truncate max-w-[140px]">
+                <Wallet className="w-3 h-3 shrink-0" />
+                <span className="truncate">{walletLabel}</span>
               </span>
 
               {parsed.label && (
@@ -298,8 +299,9 @@ export const MagicInputBar: React.FC<MagicInputBarProps> = ({
       </form>
 
       {isListening && (
-        <p className="text-[11px] font-extrabold text-[#B42340] px-1">
-          🎙️ Silakan ucapkan transaksi Anda (contoh: "Makan siang ayam bakar 45 ribu pakai BCA")…
+        <p className="text-[11px] font-extrabold text-[#B42340] px-1 flex items-center gap-1">
+          <Mic className="w-3.5 h-3.5 shrink-0 inline" />
+          <span>Silakan ucapkan transaksi Anda (contoh: "Makan siang ayam bakar 45 ribu pakai BCA")…</span>
         </p>
       )}
 

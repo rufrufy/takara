@@ -17,12 +17,14 @@ import {
   Tag as TagIcon,
   BarChart3,
   Percent,
-  Sparkles,
   Brain,
   AlertTriangle,
   CheckCircle2,
   RefreshCw,
-  Lightbulb
+  Lightbulb,
+  Flame,
+  Trophy,
+  Wallet
 } from 'lucide-react';
 
 const CHART_COLORS = ['#06D6A0', '#1B9AAA', '#EF476F', '#FFD166', '#073B4C'];
@@ -211,14 +213,14 @@ export const ReportsView: React.FC = () => {
       >
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <span className="nb-chip bg-white px-3 py-0.5 text-xs uppercase tracking-wide text-[#073B4C]">
-            📊 Arus Kas Bersih
+            Arus Kas Bersih
           </span>
           <span
             className={`nb-chip text-xs px-3 py-0.5 ${
               netCashFlow >= 0 ? 'bg-[#06D6A0] text-[#073B4C]' : 'bg-[#FF6B6B] text-white'
             }`}
           >
-            {netCashFlow >= 0 ? '✓ Surplus (Hemat)' : '⚠️ Defisit'}
+            {netCashFlow >= 0 ? 'Surplus' : 'Defisit'}
           </span>
         </div>
 
@@ -267,8 +269,8 @@ export const ReportsView: React.FC = () => {
       {/* Arena Streak & Tantangan Hemat Keluarga */}
       <div className="p-4 sm:p-5 rounded-3xl bg-[#FFD166] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-12 h-12 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-2xl shrink-0">
-            🏆
+          <div className="w-12 h-12 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] grid place-items-center text-[#073B4C] shrink-0">
+            <Trophy className="w-6 h-6" />
           </div>
           <div className="min-w-0">
             <div className="font-extrabold text-sm sm:text-base text-[#073B4C]">
@@ -282,9 +284,10 @@ export const ReportsView: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsGamificationOpen(true)}
-          className="nb-btn bg-[#06D6A0] text-[#073B4C] px-4 py-2.5 text-xs shrink-0"
+          className="nb-btn bg-[#06D6A0] text-[#073B4C] px-4 py-2.5 text-xs shrink-0 inline-flex items-center gap-1.5"
         >
-          🔥 Buka Arena Keluarga
+          <Flame className="w-3.5 h-3.5 shrink-0" />
+          <span>Buka Arena Keluarga</span>
         </button>
       </div>
 
@@ -611,8 +614,8 @@ export const ReportsView: React.FC = () => {
               {/* Bar 3: Surplus / Net */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-teal-800 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                  <span className="font-bold text-[#073B4C] flex items-center gap-1">
+                    <Wallet className="w-3.5 h-3.5 text-[#073B4C]" />
                     <span>Saldo Bersih (Net Surplus)</span>
                   </span>
                   <span className="font-extrabold text-slate-900 tabular-nums">
@@ -734,15 +737,15 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* 4. AI Expense Deep Analysis Card */}
-      <div className="soft-summary !bg-[#DDD6FE] rounded-3xl p-5 sm:p-6 space-y-5">
+      <div className="bg-[#DDD6FE] rounded-3xl border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] p-5 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-[#FFD166] border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center text-[#073B4C] shrink-0">
-              <Sparkles className="w-5 h-5 stroke-[2.4]" />
+              <Brain className="w-5 h-5 stroke-[2.4]" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-extrabold text-base text-[#073B4C]">🤖 Skor & Tinjauan AI</h2>
+                <h2 className="font-extrabold text-base text-[#073B4C]">Skor & Tinjauan AI</h2>
                 <span className="nb-chip text-[10px] px-2.5 py-0.5 bg-white text-[#073B4C]">
                   Analisis Pengeluaran
                 </span>
@@ -833,21 +836,21 @@ export const ReportsView: React.FC = () => {
               }
             }}
             disabled={isAnalyzing||transactions.length===0}
-            className="px-4 py-2.5 rounded-2xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-teal-900/40 cursor-pointer shrink-0"
+            className="nb-btn px-4 py-2.5 bg-[#06D6A0] hover:bg-[#34E4B4] disabled:opacity-50 text-[#073B4C] text-xs flex items-center justify-center gap-2 shrink-0"
           >
             {isAnalyzing ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin text-teal-200" />
+                <RefreshCw className="w-4 h-4 animate-spin text-[#073B4C]" />
                 <span>Menganalisis...</span>
               </>
             ) : aiAnalysis ? (
               <>
-                <RefreshCw className="w-4 h-4 text-teal-200" />
+                <RefreshCw className="w-4 h-4 text-[#073B4C]" />
                 <span>Perbarui Analisis</span>
               </>
             ) : (
               <>
-                <Brain className="w-4 h-4 text-teal-200" />
+                <Brain className="w-4 h-4 text-[#073B4C]" />
                 <span>Mulai Analisa AI</span>
               </>
             )}
@@ -856,24 +859,24 @@ export const ReportsView: React.FC = () => {
 
         {/* Not Yet Analyzed State */}
         {!aiAnalysis && !isAnalyzing && (
-          <div className="p-5 rounded-2xl bg-white/5 border border-white/10 text-center space-y-2">
-            <p className="text-xs text-slate-300">
-              Klik tombol di atas untuk menjalankan audit cerdas AI atas {transactions.filter(t => t.type === 'expense').length} transaksi pengeluaran periode terpilih.
+          <div className="p-5 rounded-2xl bg-white border-2 border-dashed border-[#073B4C] text-center space-y-2">
+            <p className="text-xs font-extrabold text-[#073B4C]">
+              Klik tombol di atas untuk menjalankan tinjauan AI atas {transactions.filter(t => t.type === 'expense').length} transaksi pengeluaran periode terpilih.
             </p>
-            <div className="text-[11px] text-teal-300/80">
+            <div className="text-[11px] font-bold text-[#365664]">
               Mencakup: Evaluasi Arus Kas • Deteksi Pos Bocor Halus • 3 Rencana Aksi Nyata
             </div>
           </div>
         )}
 
-        {/* Loading State Skeleton */}
+        {/* Loading State */}
         {isAnalyzing && (
-          <div className="p-6 rounded-2xl bg-white/5 border border-white/10 text-center space-y-3 animate-pulse">
-            <div className="w-8 h-8 rounded-full bg-teal-500/30 mx-auto flex items-center justify-center">
-              <RefreshCw className="w-4 h-4 animate-spin text-teal-300" />
+          <div className="p-6 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] text-center space-y-3">
+            <div className="w-9 h-9 rounded-full bg-[#FEF3C7] border-2 border-[#073B4C] mx-auto flex items-center justify-center">
+              <RefreshCw className="w-4 h-4 animate-spin text-[#073B4C]" />
             </div>
-            <p className="text-xs font-semibold text-teal-200">
-              AI sedang mengaudit seluruh pos pengeluaran dan menghitung rasio tabungan keluarga...
+            <p className="text-xs font-extrabold text-[#073B4C]">
+              AI sedang menganalisis pos pengeluaran dan menghitung rasio tabungan keluarga…
             </p>
           </div>
         )}
@@ -883,65 +886,65 @@ export const ReportsView: React.FC = () => {
           <div className="space-y-4 pt-1 text-xs">
             {/* Skor & Status Pills */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="p-3.5 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-[10px] text-slate-300 uppercase font-semibold">Skor Finansial</div>
-                  <div className="text-xl font-extrabold text-white mt-0.5 tabular-nums">
-                    {aiAnalysis.financialScore} <span className="text-xs text-slate-400 font-normal">/ 100</span>
+                  <div className="text-[10px] text-[#365664] uppercase font-extrabold">Skor Finansial</div>
+                  <div className="text-xl font-extrabold text-[#073B4C] mt-0.5 tabular-nums">
+                    {aiAnalysis.financialScore} <span className="text-xs text-[#365664] font-bold">/ 100</span>
                   </div>
                 </div>
-                <div className={`px-2.5 py-1 rounded-xl text-[11px] font-bold ${
+                <div className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border-[1.5px] border-[#073B4C] ${
                   aiAnalysis.financialScore >= 75
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    ? 'bg-[#D1FAE5] text-[#064E3B]'
                     : aiAnalysis.financialScore >= 50
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    ? 'bg-[#FEF3C7] text-[#784D05]'
+                    : 'bg-[#FFE0E5] text-[#911D35]'
                 }`}>
                   {aiAnalysis.healthStatus}
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-white/10 border border-white/10">
-                <div className="text-[10px] text-slate-300 uppercase font-semibold">Rasio Tabungan</div>
-                <div className="text-xl font-extrabold text-teal-300 mt-0.5 tabular-nums">
+              <div className="p-3.5 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C]">
+                <div className="text-[10px] text-[#365664] uppercase font-extrabold">Rasio Tabungan</div>
+                <div className="text-xl font-extrabold text-[#045D44] mt-0.5 tabular-nums">
                   {aiAnalysis.savingsRate}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Target sehat: &gt; 20% pemasukan</div>
+                <div className="text-[10px] font-bold text-[#365664] mt-0.5">Target sehat: &gt; 20% pemasukan</div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-white/10 border border-white/10">
-                <div className="text-[10px] text-slate-300 uppercase font-semibold">Net Cash Flow</div>
-                <div className={`text-xl font-extrabold mt-0.5 tabular-nums ${netCashFlow >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>
+              <div className="p-3.5 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C]">
+                <div className="text-[10px] text-[#365664] uppercase font-extrabold">Net Cash Flow</div>
+                <div className={`text-xl font-extrabold mt-0.5 tabular-nums ${netCashFlow >= 0 ? 'text-[#045D44]' : 'text-[#911D35]'}`}>
                   {netCashFlow >= 0 ? `+${formatIDR(netCashFlow)}` : formatIDR(netCashFlow)}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
+                <div className="text-[10px] font-bold text-[#365664] mt-0.5">
                   {netCashFlow >= 0 ? 'Surplus terjaga' : 'Defisit perlu ditekan'}
                 </div>
               </div>
             </div>
 
             {/* Evaluasi Arus Kas */}
-            <div className="p-4 rounded-2xl bg-white/10 border border-white/10 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-teal-300 font-bold text-xs">
-                <TrendingUp className="w-4 h-4" />
+            <div className="p-4 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[#073B4C] font-extrabold text-xs">
+                <TrendingUp className="w-4 h-4 shrink-0" />
                 <span>Evaluasi Arus Kas & Kondisi Finansial</span>
               </div>
-              <p className="text-slate-200 leading-relaxed text-xs">
+              <p className="text-[#365664] font-semibold leading-relaxed text-xs">
                 {aiAnalysis.cashFlowEvaluation}
               </p>
             </div>
 
             {/* Indikasi Kebocoran Pos Pengeluaran */}
             {aiAnalysis.spendingLeaks && aiAnalysis.spendingLeaks.length > 0 && (
-              <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/30 space-y-2">
-                <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
-                  <AlertTriangle className="w-4 h-4" />
+              <div className="p-4 rounded-2xl bg-[#FEF3C7] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] space-y-2">
+                <div className="flex items-center gap-1.5 text-[#073B4C] font-extrabold text-xs">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>Sorotan Pos Terbesar & Potensi Kebocoran Halus</span>
                 </div>
                 <ul className="space-y-1.5">
                   {aiAnalysis.spendingLeaks.map((leak, idx) => (
-                    <li key={idx} className="flex items-start gap-2 text-amber-100 text-xs leading-normal">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                    <li key={idx} className="flex items-start gap-2 text-[#073B4C] font-semibold text-xs leading-normal">
+                      <span className="w-2 h-2 rounded-full bg-[#FF6B6B] border border-[#073B4C] mt-1.5 shrink-0" />
                       <span>{leak}</span>
                     </li>
                   ))}
@@ -951,18 +954,18 @@ export const ReportsView: React.FC = () => {
 
             {/* 3 Rekomendasi Aksi Nyata */}
             {aiAnalysis.actionPlan && aiAnalysis.actionPlan.length > 0 && (
-              <div className="p-4 rounded-2xl bg-white/10 border border-white/10 space-y-2.5">
-                <div className="flex items-center gap-1.5 text-emerald-300 font-bold text-xs">
-                  <CheckCircle2 className="w-4 h-4" />
+              <div className="p-4 rounded-2xl bg-white border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] space-y-2.5">
+                <div className="flex items-center gap-1.5 text-[#073B4C] font-extrabold text-xs">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <span>Rencana Aksi Penghematan 30 Hari ke Depan</span>
                 </div>
                 <div className="space-y-2">
                   {aiAnalysis.actionPlan.map((action, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-black/20 border border-white/5">
-                      <span className="w-5 h-5 rounded-lg bg-teal-500/30 text-teal-300 text-xs font-bold flex items-center justify-center shrink-0">
+                    <div key={idx} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[#FFFDF5] border-2 border-[#073B4C]">
+                      <span className="w-5 h-5 rounded-lg bg-[#FFD166] border border-[#073B4C] text-[#073B4C] text-xs font-extrabold flex items-center justify-center shrink-0">
                         {idx + 1}
                       </span>
-                      <span className="text-slate-200 text-xs leading-normal">{action}</span>
+                      <span className="text-[#073B4C] font-semibold text-xs leading-normal">{action}</span>
                     </div>
                   ))}
                 </div>
@@ -971,16 +974,16 @@ export const ReportsView: React.FC = () => {
 
             {/* Monthly Budget Tip */}
             {aiAnalysis.monthlyBudgetTip && (
-              <div className="p-3.5 rounded-2xl bg-teal-900/40 border border-teal-500/30 flex items-start gap-2.5">
-                <Lightbulb className="w-4 h-4 text-teal-300 shrink-0 mt-0.5" />
-                <div className="text-xs text-teal-100 leading-normal">
-                  <strong className="text-teal-200">Tips Alokasi Budget: </strong>
+              <div className="p-3.5 rounded-2xl bg-[#D1FAE5] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] flex items-start gap-2.5">
+                <Lightbulb className="w-4 h-4 text-[#073B4C] shrink-0 mt-0.5" />
+                <div className="text-xs font-semibold text-[#073B4C] leading-normal">
+                  <strong className="font-extrabold">Tips Alokasi Budget: </strong>
                   {aiAnalysis.monthlyBudgetTip}
                 </div>
               </div>
             )}
 
-            <div className="text-[10px] text-slate-400 text-right pt-1">
+            <div className="text-[10px] font-bold text-[#365664] text-right pt-1">
               Dianalisis pada: {aiAnalysis.analyzedAt}
             </div>
           </div>

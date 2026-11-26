@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { formatIDR } from '../lib/money';
 import { CategoryIcon, categoryAppearance } from './CategoryIcon';
 import type { FinancialTransaction } from '../types';
-import { Plus, Trash2, X, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, X, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
 
 interface CategoryBudgetSectionProps {
   periodTransactions: FinancialTransaction[];
@@ -110,7 +110,8 @@ export const CategoryBudgetSection: React.FC<CategoryBudgetSectionProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="font-extrabold text-[#073B4C] text-base flex items-center gap-1.5">
-            <span>🚦 Pagu Anggaran Kategori</span>
+            <Gauge className="w-4 h-4 shrink-0" />
+            <span>Pagu Anggaran Kategori</span>
           </h2>
           <p className="text-xs font-semibold text-[#365664]">
             Pantauan batas belanja bulanan · {periodLabel}
@@ -166,7 +167,7 @@ export const CategoryBudgetSection: React.FC<CategoryBudgetSectionProps> = ({
           {budgetRows.map(({ budget, cat, spent, pct, status, remaining, safePerDay }) => {
             const barColor = status === 'over' ? '#FF6B6B' : status === 'warn' ? '#FFD166' : '#06D6A0';
             const badgeBg = status === 'over' ? 'bg-[#FFE0E5] text-[#911D35]' : status === 'warn' ? 'bg-[#FEF3C7] text-[#784D05]' : 'bg-[#D1FAE5] text-[#064E3B]';
-            const badgeText = status === 'over' ? '🔴 Lewat Pagu!' : status === 'warn' ? '🟡 Hampir Penuh' : '🟢 Aman';
+            const badgeText = status === 'over' ? 'Lewat Pagu' : status === 'warn' ? 'Hampir Penuh' : 'Aman';
 
             return (
               <div
@@ -238,10 +239,13 @@ export const CategoryBudgetSection: React.FC<CategoryBudgetSectionProps> = ({
 
       {/* MODAL ATUR PAGU KATEGORI */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-[#073B4C]/45 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden border-[3px] border-[#073B4C] shadow-[7px_7px_0_#073B4C]">
             <div className="px-5 py-4 bg-[#FFD166] border-b-[2.5px] border-[#073B4C] flex items-center justify-between">
-              <h3 className="font-extrabold text-sm text-[#073B4C]">🚦 Setel Pagu Bulanan Kategori</h3>
+              <h3 className="font-extrabold text-sm text-[#073B4C] flex items-center gap-1.5">
+                <Gauge className="w-4 h-4 shrink-0" />
+                <span>Setel Pagu Bulanan Kategori</span>
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}

@@ -92,8 +92,8 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
     if (compact) {
       return (
         <section className="wallet-deck-wrapper is-compact" aria-label="Kartu dompet">
-          <div className="wallet-deck-stage">
-            <div className="wallet-deck-card" data-active="true" onClick={onManageWallets} role="button" tabIndex={0}>
+          <div className="wallet-deck-stage" style={{ paddingBottom: '14px' }}>
+            <div className="wallet-deck-card is-empty" data-active="true" onClick={onManageWallets} role="button" tabIndex={0}>
               <div
                 style={{ backgroundColor: '#06D6A0', color: '#073B4C' }}
                 className="wallet-deck-card-header"
@@ -168,7 +168,7 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
     >
       <div
         className="wallet-deck-stage"
-        style={{ paddingBottom: `${Math.max(0, visibleLayers - 1) * layerStepY}px` }}
+        style={{ paddingBottom: compact ? '14px' : `${Math.max(0, visibleLayers - 1) * layerStepY}px` }}
         onTouchStart={(e) => {
           touchStartX.current = e.touches[0]?.clientX ?? null;
         }}
@@ -315,7 +315,7 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
 
                     <div className="flex items-center justify-between gap-1.5 pt-0.5">
                       <span className="deck-sub text-[#365664] truncate">
-                        {count > 1 ? 'Ketuk ↻' : 'Aktif'}
+                        {getWalletTypeLabel(w.type)}
                       </span>
                       <button
                         type="button"
@@ -364,63 +364,57 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
         })}
       </div>
 
-      {/* Deck Controls & Indicator Dots */}
-      <div className="wallet-deck-controls">
-        {count > 1 ? (
-          <div className={`flex items-center ${compact ? 'justify-between gap-1.5 w-full' : 'gap-2'} min-w-0`}>
-            <button
-              type="button"
-              onClick={() => triggerShuffle('prev')}
-              aria-label="Dompet sebelumnya"
-              className="wallet-deck-nav-btn"
-            >
-              <ChevronLeft className={compact ? 'w-3.5 h-3.5 stroke-[2.8]' : 'w-4 h-4 stroke-[2.8]'} />
-            </button>
+      {/* Deck Controls & Indicator Dots (hidden on compact Beranda for tap-direct symmetry) */}
+      {!compact && (
+        <div className="wallet-deck-controls">
+          {count > 1 ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => triggerShuffle('prev')}
+                aria-label="Dompet sebelumnya"
+                className="wallet-deck-nav-btn"
+              >
+                <ChevronLeft className="w-4 h-4 stroke-[2.8]" />
+              </button>
 
-            <div className={`flex items-center ${compact ? 'gap-1' : 'gap-1.5'} overflow-x-auto no-scrollbar py-0.5`}>
-              {sortedWallets.map((w, idx) => {
-                const isSelected = idx === safeIndex;
-                const hc = resolveWalletHeaderColor(w);
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => triggerShuffle(idx > safeIndex ? 'next' : 'prev', idx)}
-                    aria-label={`Pilih dompet ${w.name}`}
-                    title={w.name}
-                    style={{ backgroundColor: isSelected ? hc : '#FFFFFF' }}
-                    className={`${
-                      compact ? 'h-2' : 'h-2.5'
-                    } rounded-full border border-[#073B4C] transition-all shrink-0 ${
-                      isSelected
-                        ? compact
-                          ? 'w-5'
-                          : 'w-7 shadow-[1.5px_1.5px_0_#073B4C]'
-                        : compact
-                        ? 'w-2 opacity-65'
-                        : 'w-2.5 opacity-60 hover:opacity-100'
-                    }`}
-                  />
-                );
-              })}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {sortedWallets.map((w, idx) => {
+                  const isSelected = idx === safeIndex;
+                  const hc = resolveWalletHeaderColor(w);
+                  return (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => triggerShuffle(idx > safeIndex ? 'next' : 'prev', idx)}
+                      aria-label={`Pilih dompet ${w.name}`}
+                      title={w.name}
+                      style={{ backgroundColor: isSelected ? hc : '#FFFFFF' }}
+                      className={`h-2.5 rounded-full border border-[#073B4C] transition-all shrink-0 ${
+                        isSelected
+                          ? 'w-7 shadow-[1.5px_1.5px_0_#073B4C]'
+                          : 'w-2.5 opacity-60 hover:opacity-100'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => triggerShuffle('next')}
+                aria-label="Dompet berikutnya"
+                className="wallet-deck-nav-btn"
+              >
+                <ChevronRight className="w-4 h-4 stroke-[2.8]" />
+              </button>
             </div>
+          ) : (
+            <span className="text-[11px] font-bold text-[#365664]">
+              1 dompet aktif
+            </span>
+          )}
 
-            <button
-              type="button"
-              onClick={() => triggerShuffle('next')}
-              aria-label="Dompet berikutnya"
-              className="wallet-deck-nav-btn"
-            >
-              <ChevronRight className={compact ? 'w-3.5 h-3.5 stroke-[2.8]' : 'w-4 h-4 stroke-[2.8]'} />
-            </button>
-          </div>
-        ) : (
-          <span className={compact ? 'deck-sub text-[#365664] truncate' : 'text-[11px] font-bold text-[#365664]'}>
-            1 dompet aktif
-          </span>
-        )}
-
-        {!compact && (
           <button
             type="button"
             onClick={onManageWallets}
@@ -429,8 +423,8 @@ const HomeWalletDeck: React.FC<HomeWalletStackProps> = ({
             <WalletIcon className="w-3.5 h-3.5" />
             <span>{count > 1 ? `Semua Dompet (${count})` : 'Detail Dompet'}</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 };

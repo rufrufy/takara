@@ -5,7 +5,7 @@ import {
   ArrowRightLeft,
   Wallet,
   CreditCard,
-  Sparkles,
+  Target,
   PieChart,
   Trophy,
   Users,
@@ -37,7 +37,7 @@ export const getNotificationVisual = (kind: HouseholdNotificationKind): Notifica
     case 'debt':
       return { bg: '#FECDD6', color: '#073B4C', Icon: CreditCard };
     case 'savings_goal':
-      return { bg: '#C4B5FD', color: '#073B4C', Icon: Sparkles };
+      return { bg: '#C4B5FD', color: '#073B4C', Icon: Target };
     case 'budget':
       return { bg: '#FDBA74', color: '#073B4C', Icon: PieChart };
     case 'challenge':
@@ -75,21 +75,21 @@ export const HouseholdNotificationToasts: React.FC<HouseholdNotificationToastsPr
 
   return (
     <div
-      className="fixed top-4 right-4 z-[90] flex flex-col gap-2.5 w-[min(360px,calc(100vw-24px))] pointer-events-none"
+      className="fixed top-[66px] right-3 sm:right-5 z-[90] flex flex-col gap-2 w-[min(296px,calc(100vw-24px))] pointer-events-none"
       aria-live="polite"
       aria-label="Notifikasi aktivitas household"
     >
       {isUpdatingApp && (
         <div
           role="status"
-          className="pointer-events-auto nb-toast-enter flex items-center gap-3 p-3.5 rounded-2xl bg-[#FFD166] text-[#073B4C] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C]"
+          className="pointer-events-auto nb-toast-enter flex items-center gap-2.5 px-2.5 py-2 rounded-2xl bg-[#FFD166] text-[#073B4C] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C]"
         >
-          <div className="w-9 h-9 rounded-xl bg-white border-2 border-[#073B4C] flex items-center justify-center shrink-0">
-            <RefreshCw className="w-4 h-4 text-[#073B4C] animate-spin" />
+          <div className="w-7 h-7 rounded-lg bg-white border-2 border-[#073B4C] flex items-center justify-center shrink-0">
+            <RefreshCw className="w-3.5 h-3.5 text-[#073B4C] animate-spin" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-extrabold leading-tight">Versi baru Takara tersedia</p>
-            <p className="text-[11px] font-bold text-[#365664] mt-0.5">
+            <p className="nb-toast-title leading-tight">Versi baru Takara tersedia</p>
+            <p className="nb-toast-msg text-[#365664] mt-0.5">
               Memuat pembaruan otomatis…
             </p>
           </div>
@@ -107,25 +107,25 @@ export const HouseholdNotificationToasts: React.FC<HouseholdNotificationToastsPr
               dismissToast(toast.id);
               onNavigate(toast.targetTab || 'beranda', toast.entityId);
             }}
-            className="pointer-events-auto nb-toast-enter group flex items-start gap-3 p-3 rounded-2xl bg-white text-[#073B4C] border-[2.5px] border-[#073B4C] shadow-[4px_4px_0_#073B4C] hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform cursor-pointer"
+            className="pointer-events-auto nb-toast-enter group flex items-start gap-2.5 px-2.5 py-2 rounded-2xl bg-white text-[#073B4C] border-2 border-[#073B4C] shadow-[3px_3px_0_#073B4C] hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform cursor-pointer"
           >
             <div
               style={{ backgroundColor: bg, color }}
-              className="w-9 h-9 rounded-xl border-2 border-[#073B4C] shadow-[2px_2px_0_#073B4C] flex items-center justify-center shrink-0 mt-0.5"
+              className="w-7 h-7 rounded-lg border-2 border-[#073B4C] shadow-[1.5px_1.5px_0_#073B4C] flex items-center justify-center shrink-0 mt-0.5"
             >
-              <Icon className="w-4 h-4 stroke-[2.6]" />
+              <Icon className="w-3.5 h-3.5 stroke-[2.5]" />
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-extrabold text-[#073B4C] leading-tight truncate">
+              <div className="flex items-center justify-between gap-1.5">
+                <p className="nb-toast-title text-[#073B4C] truncate">
                   {toast.title}
                 </p>
-                <span className="text-[10px] font-extrabold bg-[#FEF3C7] text-[#073B4C] border border-[#073B4C] px-1.5 py-0.5 rounded-full shrink-0">
+                <span className="nb-toast-time bg-[#FEF3C7] text-[#073B4C] border border-[#073B4C] px-1.5 py-0.5 rounded-full shrink-0">
                   {formatRelativeTime(toast.createdAt)}
                 </span>
               </div>
-              <p className="text-xs font-bold text-[#365664] mt-1 leading-snug line-clamp-2">
+              <p className="nb-toast-msg text-[#365664] mt-0.5 line-clamp-1">
                 {toast.message}
               </p>
             </div>
@@ -137,9 +137,9 @@ export const HouseholdNotificationToasts: React.FC<HouseholdNotificationToastsPr
                 e.stopPropagation();
                 dismissToast(toast.id);
               }}
-              className="w-6 h-6 rounded-full border-[1.5px] border-[#073B4C] bg-[#FFE0E5] hover:bg-[#FF6B6B] hover:text-white text-[#073B4C] flex items-center justify-center shrink-0 transition-colors"
+              className="nb-toast-close border border-[#073B4C]/35 bg-[#FFE0E5] hover:bg-[#FF6B6B] hover:text-white text-[#073B4C] flex items-center justify-center shrink-0 transition-colors"
             >
-              <X className="w-3.5 h-3.5 stroke-[2.8]" />
+              <X className="w-3 h-3 stroke-[2.8]" />
             </button>
           </div>
         );
