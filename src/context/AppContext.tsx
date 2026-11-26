@@ -50,7 +50,7 @@ import type {
   UserSession,
   User
 } from '../types';
-import { initialData, createFreshUserData } from '../lib/initialData';
+import { initialData, createFreshUserData, DEFAULT_CATEGORIES } from '../lib/initialData';
 import { DEFAULT_AI_CONFIG, getSystemAIConfig, saveSystemAIConfig } from '../lib/aiScanner';
 import {
   DEFAULT_SUPABASE_CONFIG,
@@ -1749,7 +1749,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const household: Household = { id: crypto.randomUUID(), name: cleanName, baseCurrency: 'IDR', createdById: state.currentUser.id, inviteCode: 'TK-' + crypto.randomUUID().slice(0, 12).toUpperCase(), createdAt: now };
     const { error } = await getReceiptAuthClient().from('households').insert({ id: household.id, name: household.name, base_currency: 'IDR', created_by_id: household.createdById, invite_code: household.inviteCode, created_at: now });
     if (error) return { success: false, error: error.message };
-    setState(prev => ({ ...prev, households: [...prev.households, household], activeHouseholdId: household.id }));
+    const seededCategories: Category[] = DEFAULT_CATEGORIES.map((c) => ({
+      ...c,
+      id: `${c.id}-${household.id}`,
+      householdId: household.id,
+      isArchived: false
+    }));
+    const catSeedResult = await getReceiptAuthClient()
+      .from('categories')
+      .upsert(
+        seededCategories.map((c) => ({
+          id: c.id,
+          household_id: c.householdId,
+          name: c.name,
+          type: c.type,
+          icon: c.icon,
+          color: c.color,
+          is_archived: false
+        })),
+        { onConflict: 'id', ignoreDuplicates: true }
+      );
+    if (catSeedResult.error) {
+      console.warn('Gagal menambahkan kategori default household:', catSeedResult.error.message);
+    }
+    setState(prev => ({
+      ...prev,
+      households: [...prev.households, household],
+      categories: [...prev.categories, ...seededCategories],
+      activeHouseholdId: household.id
+    }));
     return { success: true };
   };
   const updateHousehold = async (

@@ -6,6 +6,61 @@ const householdCols = 'id,name,base_currency,created_by_id,invite_code,created_a
 const memberCols = 'id,household_id,user_id,display_name,role,joined_at';
 const validRoles = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'] as const;
 
+const DEFAULT_HOUSEHOLD_CATEGORIES = [
+  { slug: 'makan-minum', name: 'Makanan & Minuman', type: 'expense', icon: 'Utensils', color: '#FFD166' },
+  { slug: 'belanja-harian', name: 'Belanja Harian', type: 'expense', icon: 'ShoppingCart', color: '#FF6B6B' },
+  { slug: 'transportasi', name: 'Transportasi', type: 'expense', icon: 'Car', color: '#38BDF8' },
+  { slug: 'tagihan-utilitas', name: 'Tagihan & Utilitas', type: 'expense', icon: 'Zap', color: '#FDBA74' },
+  { slug: 'kesehatan', name: 'Kesehatan & Medis', type: 'expense', icon: 'HeartPulse', color: '#FECDD6' },
+  { slug: 'hiburan', name: 'Hiburan & Liburan', type: 'expense', icon: 'Tv', color: '#C4B5FD' },
+  { slug: 'pendidikan', name: 'Pendidikan', type: 'expense', icon: 'GraduationCap', color: '#A5F3FC' },
+  { slug: 'sosial-sedekah', name: 'Amal & Sedekah', type: 'expense', icon: 'Gift', color: '#06D6A0' },
+  { slug: 'rumah-tangga', name: 'Keperluan Rumah Tangga', type: 'expense', icon: 'Home', color: '#BEF264' },
+  { slug: 'pengeluaran-lain', name: 'Pengeluaran Lainnya', type: 'expense', icon: 'Tag', color: '#E2E8F0' },
+  { slug: 'gaji-utama', name: 'Gaji Pokok', type: 'income', icon: 'Briefcase', color: '#06D6A0' },
+  { slug: 'bonus-thr', name: 'Bonus & THR', type: 'income', icon: 'Award', color: '#FFD166' },
+  { slug: 'usaha-bisnis', name: 'Usaha & Bisnis', type: 'income', icon: 'TrendingUp', color: '#38BDF8' },
+  { slug: 'investasi-dividen', name: 'Investasi & Dividen', type: 'income', icon: 'Coins', color: '#C4B5FD' },
+  { slug: 'pemasukan-lain', name: 'Pemasukan Lainnya', type: 'income', icon: 'Wallet', color: '#BEF264' },
+  { slug: 'transfer-antar-akun', name: 'Transfer Antar Dompet', type: 'transfer', icon: 'ArrowLeftRight', color: '#BAE6FD' }
+] as const;
+
+async function seedDefaultCategoriesForHousehold(admin: any, householdId: string) {
+  if (!householdId) return;
+  const existingRes = await admin
+    .from('categories')
+    .select('name,type')
+    .eq('household_id', householdId);
+  if (existingRes.error) throw existingRes.error;
+
+  const existingKeys = new Set(
+    (existingRes.data || []).map(
+      (c: { type?: string; name?: string }) =>
+        `${String(c.type || '').trim().toLowerCase()}:${String(c.name || '').trim().toLowerCase()}`
+    )
+  );
+
+  const missingRows = DEFAULT_HOUSEHOLD_CATEGORIES.filter(
+    (item) => !existingKeys.has(`${item.type}:${item.name.toLowerCase()}`)
+  ).map((item) => ({
+    id: `cat-${item.slug}-${householdId}`,
+    household_id: householdId,
+    name: item.name,
+    type: item.type,
+    icon: item.icon,
+    color: item.color,
+    is_archived: false
+  }));
+
+  if (missingRows.length > 0) {
+    const inserted = await admin.from('categories').upsert(missingRows, {
+      onConflict: 'id',
+      ignoreDuplicates: true
+    });
+    if (inserted.error) throw inserted.error;
+  }
+}
+
 const safe = (r: any) => ({
   id: r.id,
   username: r.username,
@@ -287,6 +342,18 @@ export async function handleAuthRequest(request: Request, env: Env): Promise<Res
       }
 
       const row = saved.data;
+      if (!household?.id && profileRole !== 'ADMIN') {
+        const createdH = await admin
+          .from('households')
+          .select('id')
+          .eq('created_by_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (createdH.data?.id) {
+          await seedDefaultCategoriesForHousehold(admin, createdH.data.id);
+        }
+      }
       if (action === 'register') {
         const login = await auth.auth.signInWithPassword({
           email: username + '@takara.invalid',
@@ -474,25 +541,7 @@ export async function handleAuthRequest(request: Request, env: Env): Promise<Res
       });
       if (wSaved.error) throw wSaved.error;
 
-      const cSaved = await admin.from('categories').insert([
-        {
-          id: 'category-income-' + householdId,
-          household_id: householdId,
-          name: 'Pemasukan lainnya',
-          type: 'income',
-          icon: 'Wallet',
-          color: '#06D6A0'
-        },
-        {
-          id: 'category-expense-' + householdId,
-          household_id: householdId,
-          name: 'Pengeluaran lainnya',
-          type: 'expense',
-          icon: 'Tag',
-          color: '#1B9AAA'
-        }
-      ]);
-      if (cSaved.error) throw cSaved.error;
+      await seedDefaultCategoriesForHousehold(admin, householdId);
 
       if (explicitOwnerId || owner.role !== 'ADMIN') {
         const mSaved = await admin
